@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sgen.com/schemas/report-summary-1.0.json",
+  "title": "SGEN Auditor Report Summary",
+  "description": "Top-level result contract emitted by runAudit. Frozen; downstream (export, history, dashboard) builds on this.",
+  "type": "object",
+  "required": ["target", "host", "generated", "versions", "verdict", "ready", "quality", "tally", "suites"],
+  "additionalProperties": true,
+  "properties": {
+    "target": { "type": "string" },
+    "host": { "type": "string" },
+    "generated": { "type": "string" },
+    "versions": {
+      "type": "object",
+      "required": ["engine", "report", "registry"],
+      "properties": {
+        "engine": { "type": "string" },
+        "report": { "type": "string" },
+        "registry": { "type": "string" }
+      }
+    },
+    "verdict": { "type": "string" },
+    "ready": { "type": "boolean" },
+    "score": { "type": "number" },
+    "quality": {
+      "type": "object",
+      "required": ["overall", "categories", "model"],
+      "properties": {
+        "overall": { "type": "number", "minimum": 0, "maximum": 100 },
+        "model": { "type": "string" },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "name", "weight", "score", "deductions"],
+            "properties": {
+              "key": { "type": "string" },
+              "name": { "type": "string" },
+              "weight": { "type": "number" },
+              "score": { "type": "number", "minimum": 0, "maximum": 100 },
+              "deductions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["label", "points"],
+                  "properties": {
+                    "label": { "type": "string" },
+                    "points": { "type": "number" },
+                    "ruleId": { "type": ["string", "null"] },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "tally": {
+      "type": "object",
+      "required": ["pass", "warn", "fail", "manual"],
+      "properties": {
+        "pass": { "type": "integer" },
+        "warn": { "type": "integer" },
+        "fail": { "type": "integer" },
+        "manual": { "type": "integer" }
+      }
+    },
+    "suites": { "type": "array" }
+  }
+}

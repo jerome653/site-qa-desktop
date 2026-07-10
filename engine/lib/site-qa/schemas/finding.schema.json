@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sgen.com/schemas/finding-1.0.json",
+  "title": "SGEN Auditor Finding",
+  "description": "Canonical, immutable finding. All rule metadata is stamped from the Rule Registry and never reconstructed.",
+  "type": "object",
+  "required": ["ruleId", "ruleSlug", "suite", "severity", "status", "deduction", "method", "manual"],
+  "additionalProperties": true,
+  "properties": {
+    "findingId": { "type": "string", "description": "assigned by the Finding DB (Phase 4)" },
+    "scanId": { "type": "string" },
+    "ruleId": { "type": ["string", "null"], "pattern": "^[A-Z0-9]+-[0-9]{3}$" },
+    "ruleSlug": { "type": ["string", "null"] },
+    "suite": { "type": "string", "enum": ["functional", "links", "forms", "responsive", "a11y", "seo", "performance", "security", "crossbrowser", "console"] },
+    "severity": { "type": ["string", "null"], "enum": ["critical", "high", "medium", "low", "manual", null] },
+    "status": { "type": "string", "enum": ["pass", "warn", "fail", "manual"] },
+    "deduction": { "type": "number", "minimum": 0, "maximum": 100 },
+    "method": { "type": ["string", "null"], "enum": ["static", "render", "network", "cert", "engine", "manual", null] },
+    "manual": { "type": "boolean" },
+    "docs": { "type": ["string", "null"] },
+    "name": { "type": "string", "description": "canonical rule title (lookup key)" },
+    "target": { "type": "string" },
+    "detail": { "type": "string" },
+    "items": { "type": "array", "description": "per-occurrence drill-down (page/section/identifier/value)" }
+  }
+}

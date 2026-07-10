@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sgen.com/schemas/rule-1.0.json",
+  "title": "SGEN Auditor Rule",
+  "description": "A registry rule. Permanent id, never reused. The single source of truth for all rule metadata.",
+  "type": "object",
+  "required": ["id", "slug", "title", "suite", "category", "severity", "deduction", "method", "deterministic", "manual", "autofix", "introduced", "docs"],
+  "additionalProperties": true,
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Z0-9]+-[0-9]{3}$" },
+    "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "suite": { "type": "string", "enum": ["functional", "links", "forms", "responsive", "a11y", "seo", "performance", "security", "crossbrowser", "console"] },
+    "category": { "type": "string", "minLength": 1 },
+    "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "manual"] },
+    "deduction": { "type": "number", "minimum": 0, "maximum": 100 },
+    "method": { "type": "string", "enum": ["static", "render", "network", "cert", "engine", "manual"] },
+    "deterministic": { "type": "boolean", "const": true },
+    "manual": { "type": "boolean" },
+    "autofix": { "type": "boolean" },
+    "introduced": { "type": "string" },
+    "docs": { "type": "string", "pattern": "^/docs/rules/" }
+  }
+}

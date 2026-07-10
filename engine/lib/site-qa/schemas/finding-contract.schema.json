@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sgen.com/schemas/finding-contract-1.0.json",
+  "title": "SGEN Site QA — Finding Contract v1",
+  "description": "Frozen canonical finding shape (ADR-0003). Every rule emits exactly this. Superset of finding-1.0; additive + backward-compatible. No rule invents its own format.",
+  "type": "object",
+  "required": ["id", "ruleId", "category", "severity", "evidenceQuality", "fingerprint", "evidence", "relationships", "impacts", "fix", "metadata", "timestamps", "contractVersion"],
+  "additionalProperties": true,
+  "properties": {
+    "id": { "type": "string", "description": "deterministic finding-instance id (= fingerprint)" },
+    "ruleId": { "type": ["string", "null"], "pattern": "^[A-Z0-9]+-[0-9]{3}$" },
+    "ruleVersion": { "type": ["string", "null"] },
+    "inspector": { "type": ["string", "null"], "enum": ["seo", "security", "stability", null] },
+    "category": { "type": ["string", "null"] },
+    "interaction": { "type": "boolean" },
+    "severity": { "type": ["string", "null"], "enum": ["critical", "high", "medium", "low", "manual", null] },
+    "tier": { "type": ["integer", "null"], "enum": [1, 2, 3, null] },
+    "evidenceQuality": { "type": "string", "enum": ["verified", "derived", "heuristic"] },
+    "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "locator": {
+      "type": ["object", "null"],
+      "required": ["type", "target", "strategies"],
+      "properties": {
+        "type": { "type": "string", "enum": ["dom", "build-artifact", "manifest", "route", "configuration", "page"] },
+        "target": { "type": "string" },
+        "strategies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "value"],
+            "properties": {
+              "kind": { "type": "string" },
+              "value": { "type": "string" },
+              "stability": { "type": "string", "enum": ["high", "medium", "low", "unknown"] }
+            }
+          }
+        },
+        "url": { "type": ["string", "null"] },
+        "boundingBox": { "type": ["object", "null"] },
+        "copyAs": { "type": ["object", "null"] },
+        "source": { "type": ["object", "null"] },
+        "sourceAvailability": { "type": "string", "enum": ["available", "requires-build-provenance"] }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["observed", "detail", "value"],
+      "properties": {
+        "observed": { "type": "string" },
+        "expected": { "type": "string" },
+        "detail": { "type": "string" },
+        "value": { "type": "string" },
+        "screenshot": { "type": ["string", "null"] }
+      }
+    },
+    "relationships": {
+      "type": "object",
+      "required": ["rootCause", "relatesTo"],
+      "properties": {
+        "rootCause": { "type": ["string", "null"] },
+        "relatesTo": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "impacts": {
+      "type": "object",
+      "required": ["seo", "a11y", "security", "devEffort"],
+      "description": "rule-declared classifications; deliberately NO 'affected users' (not measurable offline)",
+      "properties": {
+        "seo": { "type": ["string", "null"], "enum": ["low", "med", "high", null] },
+        "a11y": { "type": ["string", "null"], "enum": ["low", "med", "high", null] },
+        "security": { "type": ["string", "null"], "enum": ["low", "med", "high", null] },
+        "devEffort": { "type": ["string", "null"], "enum": ["low", "med", "high", null] }
+      }
+    },
+    "fix": {
+      "type": "object",
+      "required": ["fixability", "actions"],
+      "properties": {
+        "fixability": { "type": "string", "enum": ["none", "manual", "guided", "automatic"] },
+        "recommendation": { "type": "string" },
+        "actions": { "type": "object" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "status": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "deduction": { "type": "number" },
+        "method": { "type": ["string", "null"] },
+        "cost": { "type": ["string", "null"], "enum": ["cheap", "moderate", "expensive", null] },
+        "docs": { "type": ["string", "null"] }
+      }
+    },
+    "timestamps": {
+      "type": "object",
+      "properties": { "observedAt": { "type": ["string", "null"] } }
+    },
+    "contractVersion": { "type": "string" }
+  }
+}

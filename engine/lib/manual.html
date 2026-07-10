@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SGEN Site QA — User Manual</title>
+<style>
+  :root{
+    --ground:#000000; --page:#0B0A09; --surface:#131110; --surface-2:#1a1714;
+    --line:#221F1B; --line-strong:#332E27;
+    --ink:#F3EEE6; --ink-soft:#B0A796; --ink-faint:#726A5D;
+    --brand:#E01F26; --brand-solid:#C8181C; --brand-tint:#1C0908; --brand-line:#3E1512;
+    --sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"Cascadia Code","SFMono-Regular",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  /* hide scrollbars everywhere, keep scrolling functional */
+  html{scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth}
+  html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{display:none;width:0;height:0}
+  html,body{margin:0}
+  body{font-family:var(--sans);color:var(--ink);background:var(--page);line-height:1.65;font-size:16px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:820px;margin:0 auto;padding:0 22px 90px}
+  a{color:var(--brand)}
+  /* header */
+  header{position:relative;background:radial-gradient(1200px 380px at 15% -40%,rgba(224,31,38,.16),transparent 60%),var(--ground);border-bottom:1px solid var(--line);padding:46px 0 42px;overflow:hidden}
+  header .wm{position:absolute;right:-30px;top:-40px;font-weight:900;font-size:230px;letter-spacing:-.04em;color:rgba(224,31,38,.05);pointer-events:none;user-select:none;line-height:1}
+  .badge{display:inline-flex;align-items:center;gap:11px;margin-bottom:18px;position:relative}
+  .badge .mk{width:36px;height:36px;border-radius:10px;background:var(--brand-solid);display:grid;place-items:center;box-shadow:0 6px 18px -6px rgba(224,31,38,.55)}
+  .badge .mk svg{width:20px;height:20px}
+  .badge b{font-size:14px;letter-spacing:.02em;color:var(--ink)}.badge span{color:var(--ink-faint);font-size:12px;display:block;margin-top:1px}
+  header h1{font-size:35px;line-height:1.13;margin:0 0 12px;letter-spacing:-.022em;text-wrap:balance;position:relative}
+  header p{font-size:16px;color:var(--ink-soft);margin:0;max-width:60ch;position:relative}
+  /* toc */
+  .toc{background:var(--surface);border:1px solid var(--line-strong);border-radius:14px;padding:19px 22px;margin:-26px 0 34px;box-shadow:0 18px 40px -22px rgba(0,0,0,.8);position:relative}
+  .toc h2{font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-faint);margin:0 0 12px;font-family:var(--mono);font-weight:700}
+  .toc ol{margin:0;padding:0;list-style:none;columns:2;column-gap:28px}
+  .toc li{margin:6px 0;break-inside:avoid}
+  .toc a{color:var(--ink);text-decoration:none;font-size:14.5px;display:inline-flex;gap:10px;align-items:baseline}
+  .toc a:hover{color:var(--brand)}
+  .toc a .n{color:var(--brand);font-family:var(--mono);font-size:12.5px;font-weight:700;min-width:16px}
+  /* sections */
+  section{margin:0 0 42px;scroll-margin-top:20px}
+  h2.s{font-size:24px;letter-spacing:-.015em;margin:0 0 6px;display:flex;align-items:baseline;gap:13px}
+  h2.s .n{font-family:var(--mono);font-size:15px;color:var(--brand);font-weight:700}
+  .lead{color:var(--ink-soft);margin:0 0 18px;font-size:16px}
+  h3{font-size:16.5px;margin:24px 0 8px;letter-spacing:-.01em;color:var(--ink)}
+  p{margin:0 0 13px}
+  ul,ol{margin:0 0 14px;padding-left:22px}
+  li{margin:6px 0}
+  strong{font-weight:650;color:var(--ink)}
+  em{color:var(--ink-soft)}
+  .mono{font-family:var(--mono);font-size:13.5px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:6px;padding:1px 6px;color:var(--ink)}
+  /* callouts */
+  .note{background:var(--brand-tint);border:1px solid var(--brand-line);border-left:4px solid var(--brand-solid);border-radius:10px;padding:14px 17px;margin:16px 0;font-size:15px;color:var(--ink-soft)}
+  .note b{color:var(--brand)}
+  .tip{background:var(--surface);border:1px solid var(--line-strong);border-left:4px solid var(--ink-faint);border-radius:10px;padding:14px 17px;margin:16px 0;font-size:15px;color:var(--ink-soft)}
+  .tip strong{color:var(--ink)}
+  /* steps */
+  .steps{counter-reset:st;list-style:none;padding:0;margin:14px 0}
+  .steps li{counter-increment:st;position:relative;padding:13px 0 13px 46px;border-top:1px solid var(--line)}
+  .steps li:first-child{border-top:0}
+  .steps li::before{content:counter(st);position:absolute;left:0;top:13px;width:30px;height:30px;border-radius:50%;background:var(--brand-solid);color:#fff;font-weight:700;font-size:14px;display:grid;place-items:center;font-family:var(--mono);box-shadow:0 4px 12px -4px rgba(224,31,38,.5)}
+  /* tool cards */
+  .tools{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}
+  .tool{background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;padding:16px 18px}
+  .tool .t{font-weight:700;font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:9px}
+  .tool .t .no{width:22px;height:22px;border-radius:6px;background:var(--brand-solid);color:#fff;font-size:12px;font-family:var(--mono);display:grid;place-items:center;flex:none}
+  .tool p{font-size:14px;color:var(--ink-soft);margin:0}
+  /* colour key */
+  .key{display:flex;flex-wrap:wrap;gap:11px 20px;background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;padding:15px 18px;margin:14px 0}
+  .key .k{display:inline-flex;align-items:center;gap:9px;font-size:14.5px;color:var(--ink-soft)}
+  .key .k i{width:15px;height:15px;border-radius:4px;flex:none;border:1px solid rgba(255,255,255,.14)}
+  .sw-red{background:var(--brand-solid)} .sw-warn{background:#6E6E6E} .sw-fail{background:#B9BBBE} .sw-man{background:#4A4A4A}
+  /* faq */
+  details{background:var(--surface);border:1px solid var(--line-strong);border-radius:10px;padding:0 17px;margin:9px 0}
+  details summary{cursor:pointer;font-weight:600;padding:13px 0;list-style:none;font-size:15px;color:var(--ink)}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"+";color:var(--brand);font-weight:700;margin-right:11px;font-family:var(--mono)}
+  details[open] summary::before{content:"\2013"}
+  details .a{padding:0 0 14px;color:var(--ink-soft);font-size:14.5px}
+  footer{border-top:1px solid var(--line);margin-top:42px;padding-top:22px;color:var(--ink-faint);font-size:13px;font-family:var(--mono)}
+  @media(max-width:640px){.tools{grid-template-columns:1fr}.toc ol{columns:1}header h1{font-size:27px}header .wm{font-size:150px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wm" aria-hidden="true">QA</div>
+  <div class="wrap">
+    <div class="badge"><span class="mk"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.2 4.2L19 7" stroke="#fff" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>SGEN Site QA</b><span>Website quality checker · User Manual</span></div></div>
+    <h1>Check any website's quality — in a few clicks.</h1>
+    <p>SGEN Site QA is a desktop app that inspects a website and tells you, in plain terms, whether it's in good shape. No accounts, no setup, nothing leaves your computer. This guide walks you through everything.</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Contents">
+    <h2>What's inside</h2>
+    <ol>
+      <li><a href="#install"><span class="n">1</span> Installing the app</a></li>
+      <li><a href="#screen"><span class="n">2</span> The main screen</a></li>
+      <li><a href="#tools"><span class="n">3</span> The four tools</a></li>
+      <li><a href="#run"><span class="n">4</span> Running your first check</a></li>
+      <li><a href="#report"><span class="n">5</span> Reading your results</a></li>
+      <li><a href="#reports"><span class="n">6</span> Finding past reports</a></li>
+      <li><a href="#updates"><span class="n">7</span> Keeping it up to date</a></li>
+      <li><a href="#help"><span class="n">8</span> If something looks off</a></li>
+      <li><a href="#faq"><span class="n">9</span> Quick answers</a></li>
+    </ol>
+  </nav>
+
+  <section id="install">
+    <h2 class="s"><span class="n">1</span> Installing the app</h2>
+    <p class="lead">A one-time setup. Everything the app needs is inside the installer — nothing else to download. After this, it keeps itself up to date on its own.</p>
+    <ol class="steps">
+      <li>If you already have an older "SGEN Site QA", uninstall it first: <strong>Start menu → Settings → Apps → SGEN Site QA → Uninstall</strong>. (Only needed the first time.)</li>
+      <li>Double-click <span class="mono">SGEN Site QA Setup.exe</span> (in this folder).</li>
+      <li>It installs and opens on its own — no options to fiddle with. That's it.</li>
+    </ol>
+    <div class="note"><b>Windows SmartScreen?</b> If Windows shows a blue "Windows protected your PC" box, click <strong>More info → Run anyway</strong>. This happens because the app isn't signed by a big vendor — it's safe; everything runs on your machine.</div>
+  </section>
+
+  <section id="screen">
+    <h2 class="s"><span class="n">2</span> The main screen</h2>
+    <p class="lead">Everything lives in one window. Here's what you're looking at.</p>
+    <ul>
+      <li><strong>The top bar</strong> stays put as you scroll. On the right you'll find <strong>Logs</strong> (version history + support), <strong>Manual</strong> (this guide), and <strong>? Help</strong> (the walkthrough, any time).</li>
+      <li><strong>The four tabs</strong> below it are the four tools. Click a tab to switch.</li>
+      <li><strong>The big area</strong> is where you type a website address and see the results.</li>
+    </ul>
+    <div class="tip"><strong>First time?</strong> A short guided tour pops up automatically and points at each part of the screen. You can reopen it any time from <strong>? Help</strong>.</div>
+  </section>
+
+  <section id="tools">
+    <h2 class="s"><span class="n">3</span> The four tools</h2>
+    <p class="lead">Pick the one that matches what you want to know.</p>
+    <div class="tools">
+      <div class="tool"><div class="t"><span class="no">1</span> Site Audit</div><p>Checks one website for problems — broken links, forms, mobile layout, accessibility, speed, security, and more. Start here.</p></div>
+      <div class="tool"><div class="t"><span class="no">2</span> Visual Comparison</div><p>Puts two websites (an old one and a new one) side by side and highlights what looks different, at every screen size.</p></div>
+      <div class="tool"><div class="t"><span class="no">3</span> Post-Deployment Check</div><p>After moving a site to a new build, confirms every page, image, menu and form actually made it across.</p></div>
+      <div class="tool"><div class="t"><span class="no">4</span> Reports</div><p>Every check you've run, kept and grouped by website. Reopen one, or save it as a PDF to share.</p></div>
+    </div>
+  </section>
+
+  <section id="run">
+    <h2 class="s"><span class="n">4</span> Running your first check</h2>
+    <p class="lead">Let's do a Site Audit — the most common one.</p>
+    <ol class="steps">
+      <li>Make sure you're on the <strong>Site Audit</strong> tab.</li>
+      <li>Type a website address in <strong>Site URL</strong> — for example <span class="mono">sgen.com</span>. You don't need to type "https://".</li>
+      <li>Leave the settings as they are (they're already sensible), then click the red <strong>Run audit</strong> button.</li>
+      <li>Wait a few seconds while it works. When it's done, the full report appears right below.</li>
+    </ol>
+    <div class="tip"><strong>Your settings are remembered.</strong> Anything you change here — the address, the options, which screen sizes to check — is saved automatically, so you don't set it up again next time.</div>
+    <p>The other tools work the same way: fill in the box(es) at the top, then click the red button. If a check is taking too long you can <strong>Cancel</strong> it, and <strong>Retry</strong> if it fails.</p>
+  </section>
+
+  <section id="report">
+    <h2 class="s"><span class="n">5</span> Reading your results</h2>
+    <p class="lead">The report is built to answer one question first: <strong>is this site OK or not?</strong></p>
+    <h3>Start at the top — the bottom line</h3>
+    <p>The big circle shows the share of checks that passed. Next to it, an <strong>Overall result</strong> tells you plainly whether the site is ready or needs attention, and how many checks are failing. <strong>This is the pass/fail answer.</strong></p>
+    <h3>The numbers below are quality scores, not pass/fail</h3>
+    <p>Under the top result you'll see scores from 0 to 100 (by dimension and by section). These are <em>quality reads</em> to help you dig in — they are not separate verdicts. So a "100" in one place and a "58" in another aren't contradicting each other; they're measuring different things.</p>
+    <h3>What the colours mean</h3>
+    <div class="key">
+      <span class="k"><i class="sw-red"></i> Red = passing / good</span>
+      <span class="k"><i class="sw-warn"></i> Grey = warning</span>
+      <span class="k"><i class="sw-fail"></i> Silver = failed</span>
+      <span class="k"><i class="sw-man"></i> Dark = needs a human to check</span>
+    </div>
+    <div class="note"><b>Tip:</b> In this app, <b>red is good</b> — it's the SGEN brand colour for "passing". The lighter and greyer a score is, the more attention it needs.</div>
+    <h3>Jump straight to problems</h3>
+    <p>The summary cards near the top (Passed, Warnings, Failed, and so on) are <strong>clickable</strong> — click <strong>Failed</strong> and the report scrolls to exactly those items. Every issue has a <strong>Copy for dev</strong> button that copies a ready-to-paste ticket for whoever fixes it.</p>
+    <p>You can also <strong>Save as PDF</strong> to hand the whole report to someone else.</p>
+  </section>
+
+  <section id="reports">
+    <h2 class="s"><span class="n">6</span> Finding past reports</h2>
+    <p class="lead">Every check is saved automatically. The <strong>Reports</strong> tab keeps them tidy.</p>
+    <ul>
+      <li>Reports are <strong>grouped by website</strong>, newest first.</li>
+      <li>Use the <strong>search box</strong> to find a site by name, and the <strong>date filter</strong> (Any time / Today / Last 7 days / Last 30 days) to narrow things down.</li>
+      <li>Click any run to preview it, open the full <strong>HTML</strong>, or <strong>Save as PDF</strong>.</li>
+    </ul>
+    <p>Everything stays on your computer — nothing is uploaded anywhere.</p>
+  </section>
+
+  <section id="updates">
+    <h2 class="s"><span class="n">7</span> Keeping it up to date</h2>
+    <p class="lead">Updates are tiny and take about a second. You're always in control.</p>
+    <ul>
+      <li>The app quietly checks for updates on its own. When one is ready, the <strong>Check for updates</strong> button turns <strong style="color:var(--brand)">red</strong> and a small message pops up.</li>
+      <li>Click the red button to download it (a small file — about a second).</li>
+      <li>Then click <strong>Restart to update</strong>. The app blinks once and comes back on the new version.</li>
+    </ul>
+    <div class="note"><b>No big reinstalls.</b> After the first install, you never run an installer again — updates happen right inside the app.</div>
+  </section>
+
+  <section id="help">
+    <h2 class="s"><span class="n">8</span> If something looks off</h2>
+    <p class="lead">There's a one-click way to send us exactly what's happening.</p>
+    <ol class="steps">
+      <li>Click <strong>Logs</strong> in the top-right.</li>
+      <li>Click <strong>Generate diagnostics</strong>.</li>
+      <li>Click <strong>Download .md</strong> (or <strong>Copy to clipboard</strong>) and send that file to your contact for review.</li>
+    </ol>
+    <p>The diagnostics file lists your version, your computer's setup, your update history, recent runs, and the app's recent activity log — enough to pinpoint almost anything. It contains no personal data beyond that.</p>
+  </section>
+
+  <section id="faq">
+    <h2 class="s"><span class="n">9</span> Quick answers</h2>
+    <details><summary>Does the installer include everything, or does it download more?</summary><div class="a">Everything is inside the installer — the app, its browser engine, and all its libraries. Once it's installed you can run checks straight away, even offline. The only time it uses the internet is to reach the website you're checking, and to see if a newer version of the app is available.</div></details>
+    <details><summary>Does this send my data anywhere?</summary><div class="a">No. All checks run on your own computer. The only thing the app contacts the internet for is (a) the website you ask it to check, and (b) checking whether a new version of the app is available.</div></details>
+    <details><summary>Why is a passing score shown in red?</summary><div class="a">Red is SGEN's brand colour, and here it means "good / passing". Greyer, lighter colours mean warnings or failures. There's a colour key on every report.</div></details>
+    <details><summary>The address box says the site can't be reached.</summary><div class="a">Double-check the address is spelled correctly and the site is online. You don't need to type "https://" — just the domain, like <span class="mono">example.com</span>.</div></details>
+    <details><summary>A check is taking a long time.</summary><div class="a">Larger sites take longer, especially with "Browser render" on. You can click <strong>Cancel</strong> at any time, or lower <strong>Max pages</strong> to 1 for a quick single-page check.</div></details>
+    <details><summary>Do I need to install updates manually?</summary><div class="a">No. The app tells you when one is ready (the button turns red). You just click it, then Restart. No installer, no admin rights.</div></details>
+    <details><summary>Where are my reports saved?</summary><div class="a">On your computer, inside the app's own data folder. Use the <strong>Reports</strong> tab to find them, or save any of them as a PDF to keep or share.</div></details>
+  </section>
+
+  <footer>
+    SGEN Site QA — User Manual · Everything runs locally on your machine · Reopen the in-app tour any time from <strong>? Help</strong>.
+  </footer>
+</div>
+</body>
+</html>
