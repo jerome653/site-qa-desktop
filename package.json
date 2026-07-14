@@ -11,6 +11,7 @@
     "start": "electron .",
     "smoke": "node smoke.js",
     "dist": "electron-builder --win nsis --x64",
+    "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg --arm64",
     "publish": "electron-builder --win nsis --x64 --publish always"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
       "output": "release",
       "buildResources": "build"
     },
+    "afterPack": "build/after-pack.js",
     "files": [
       "main.js",
       "preload.js",
@@ -69,6 +71,37 @@
       "perMachine": false,
       "createDesktopShortcut": true,
       "installerIcon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": "arm64"
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "${productName} ${version} (arm64).${ext}",
+      "darkModeSupport": true,
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "${productName} ${version}",
+      "artifactName": "${productName} ${version} (arm64).${ext}",
+      "contents": [
+        {
+          "x": 140,
+          "y": 200
+        },
+        {
+          "x": 400,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     }
   }
 }

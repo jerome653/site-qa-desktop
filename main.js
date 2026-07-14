@@ -163,12 +163,20 @@ function sha256File(p) {
   });
 }
 function extractZip(zip, destDir) {
-  // Windows-only app → PowerShell Expand-Archive, no extra runtime dependency.
+  // Cross-platform, no extra runtime dependency: PowerShell Expand-Archive on Windows; ditto (falls back
+  // to unzip) on macOS/Linux. All ship with their respective OS, so a hot engine update needs no bundled unzip.
+  fs.mkdirSync(destDir, { recursive: true });
   return new Promise((resolve, reject) => {
-    fs.mkdirSync(destDir, { recursive: true });
-    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command',
-      "Expand-Archive -LiteralPath '" + zip.replace(/'/g, "''") + "' -DestinationPath '" + destDir.replace(/'/g, "''") + "' -Force"],
-      { windowsHide: true }, err => err ? reject(err) : resolve(destDir));
+    if (process.platform === 'win32') {
+      execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command',
+        "Expand-Archive -LiteralPath '" + zip.replace(/'/g, "''") + "' -DestinationPath '" + destDir.replace(/'/g, "''") + "' -Force"],
+        { windowsHide: true }, err => err ? reject(err) : resolve(destDir));
+    } else {
+      execFile('/usr/bin/ditto', ['-x', '-k', zip, destDir], err => {
+        if (!err) return resolve(destDir);
+        execFile('unzip', ['-o', '-q', zip, '-d', destDir], err2 => err2 ? reject(err2) : resolve(destDir));
+      });
+    }
   });
 }
 
