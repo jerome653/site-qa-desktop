@@ -35,6 +35,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            engine/package-lock.json
+
+      # Cache the Playwright browser download (~150MB) — the biggest recurring
+      # minute-sink. Keyed on the pinned playwright version in engine/package.json.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ hashFiles('engine/package.json') }}
 
       - name: Read app version
         id: ver
