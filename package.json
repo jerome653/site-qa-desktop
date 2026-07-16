@@ -1,7 +1,7 @@
 {
   "name": "sgen-site-qa-desktop",
   "productName": "SGEN Site QA",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "description": "SGEN Site QA — developer-first website quality auditing, as a desktop app.",
   "main": "main.js",
   "author": "SGEN",
@@ -42,12 +42,17 @@
     ],
     "extraResources": [
       {
+        "from": "README.html",
+        "to": "README.html"
+      },
+      {
         "from": "engine",
         "to": "engine",
         "filter": [
           "**/*",
           "!**/*.test.js",
-          "!**/_ui-runs/**"
+          "!**/_ui-runs/**",
+          "!**/.github/**"
         ]
       },
       {

@@ -66,6 +66,11 @@ const UPDATE_LOG = path.join(NOTES_DIR, 'update-log.json');
 // wall of data the panel became when 3.0.0–4.0.0 shipped with the changelog frozen at 2.5.13.
 // Write for the person reading the report, not for the commit log: what changed FOR THEM.
 const CHANGELOG = [
+  { version: '4.1.0', date: '2026-07-16', notes: [
+    'Report colours now follow the convention everyone already expects: GREEN = passing, AMBER = warning, RED = failed, GREY = manual review.',
+    'Previously the palette was inverted — red meant PASSING — and the report had to print a legend teaching you to read it backwards, while the progress band right below used green for good. Two opposite colour systems on one page. Now there is one.',
+    'Reports generated before 4.1.0 keep their original colours: a report is written to disk when the scan runs, so old files are unchanged.'
+  ] },
   { version: '4.0.1', date: '2026-07-16', notes: [
     'Release notes are back. Versions 3.0.0 through 4.0.0 shipped with no notes at all, so Logs → Versions showed a bare list of update timestamps with no explanation of what any of them changed. Every version you have installed now has a summary.',
     'Five older versions (2.5.5–2.5.10) are listed as unrecorded: they shipped during a period when builds were published without being committed, and what changed was genuinely never written down. Saying so beats inventing it.'

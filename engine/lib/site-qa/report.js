@@ -12,7 +12,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').repla
 function rel(from, f) { try { return path.relative(from, f).replace(/\\/g, '/'); } catch (e) { return f; } }
 
 const STYLE = `
-:root,:root[data-theme="light"],:root[data-theme="dark"]{color-scheme:dark;--ground:#000000;--surface:#0B0A09;--surface-2:#131110;--line:#221F1B;--line-strong:#332E27;--ink:#F3EEE6;--ink-soft:#B0A796;--ink-faint:#726A5D;--brand:#E01F26;--brand-ink:#E01F26;--brand-solid:#C8181C;--pass:#C8181C;--pass-bg:#1C0908;--pass-line:#3E1512;--warn:#6E6E6E;--warn-bg:#141414;--warn-line:#262626;--fail:#B9BBBE;--fail-bg:#141414;--fail-line:#2A2A2A;--man:#4A4A4A;--man-bg:#131110;--man-line:#242424;--shadow:0 1px 2px rgba(0,0,0,.55),0 12px 34px rgba(0,0,0,.5);--shadow-sm:0 1px 2px rgba(0,0,0,.4);--radius:14px;--sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code","SFMono-Regular",Menlo,Consolas,monospace;--good:#3fb950;--good-bg:rgba(63,185,80,.12);--good-line:rgba(63,185,80,.35);--bad:#e5484d;--bad-bg:rgba(229,72,77,.12);--bad-line:rgba(229,72,77,.35);--amber:#d29922;--amber-bg:rgba(210,153,34,.12);--amber-line:rgba(210,153,34,.35);}
+:root,:root[data-theme="light"],:root[data-theme="dark"]{color-scheme:dark;--ground:#000000;--surface:#0B0A09;--surface-2:#131110;--line:#221F1B;--line-strong:#332E27;--ink:#F3EEE6;--ink-soft:#B0A796;--ink-faint:#726A5D;--brand:#E01F26;--brand-ink:#E01F26;--brand-solid:#C8181C;--pass:#2FA968;--pass-bg:#07160E;--pass-line:#12351F;--warn:#D89B26;--warn-bg:#1A1305;--warn-line:#3D2E0C;--fail:#E5484D;--fail-bg:#1C0A0B;--fail-line:#3F1416;--man:#4A4A4A;--man-bg:#131110;--man-line:#242424;--shadow:0 1px 2px rgba(0,0,0,.55),0 12px 34px rgba(0,0,0,.5);--shadow-sm:0 1px 2px rgba(0,0,0,.4);--radius:14px;--sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code","SFMono-Regular",Menlo,Consolas,monospace;--good:#3fb950;--good-bg:rgba(63,185,80,.12);--good-line:rgba(63,185,80,.35);--bad:#e5484d;--bad-bg:rgba(229,72,77,.12);--bad-line:rgba(229,72,77,.35);--amber:#d29922;--amber-bg:rgba(210,153,34,.12);--amber-line:rgba(210,153,34,.35);}
 *{box-sizing:border-box;scrollbar-width:none;-ms-overflow-style:none}::-webkit-scrollbar{display:none;width:0;height:0}body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
 .brand-wm{position:fixed;inset:0;z-index:0;pointer-events:none;user-select:none;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .brand-wm b{font:800 clamp(160px,34vw,440px)/1 var(--sans);letter-spacing:-.02em;white-space:nowrap;color:rgba(255,255,255,.045)}
@@ -806,10 +806,10 @@ function renderReport(data, outDir, opts = {}) {
     </div>
     <div class="legend" aria-label="Colour key">
       <span class="lg-t">What the colours mean</span>
-      <span class="lg"><i style="background:var(--pass)"></i> Red = passing / good</span>
-      <span class="lg"><i style="background:var(--warn)"></i> Grey = warning</span>
-      <span class="lg"><i style="background:var(--fail)"></i> Silver = failed</span>
-      <span class="lg"><i style="background:var(--man)"></i> Dark = manual review</span>
+      <span class="lg"><i style="background:var(--pass)"></i> Green = passing</span>
+      <span class="lg"><i style="background:var(--warn)"></i> Amber = warning</span>
+      <span class="lg"><i style="background:var(--fail)"></i> Red = failed</span>
+      <span class="lg"><i style="background:var(--man)"></i> Grey = manual review</span>
     </div>
   </section>
   ${opts.comparePanel || ''}
