@@ -60,7 +60,59 @@ const SELF_VER = (path.basename(__dirname).match(/^\d+\.\d+\.\d+$/) || ['3.1.0']
 const NOTES_DIR = path.join(process.env.APPDATA || process.env.HOME || __dirname, 'SGEN Site QA');
 const UPDATE_LOG = path.join(NOTES_DIR, 'update-log.json');
 // Newest first. Each shipped engine carries its own notes; older entries are kept for the in-app log.
+// Every shipped version MUST have an entry here. The Logs → Versions panel renders two lists: the raw
+// "updated at" history from this machine, and these notes. A version with no entry shows up in the
+// history as a bare "v3.0.4 updated <date>" row with no explanation — which is exactly the useless
+// wall of data the panel became when 3.0.0–4.0.0 shipped with the changelog frozen at 2.5.13.
+// Write for the person reading the report, not for the commit log: what changed FOR THEM.
 const CHANGELOG = [
+  { version: '4.0.1', date: '2026-07-16', notes: [
+    'Release notes are back. Versions 3.0.0 through 4.0.0 shipped with no notes at all, so Logs → Versions showed a bare list of update timestamps with no explanation of what any of them changed. Every version you have installed now has a summary.',
+    'Five older versions (2.5.5–2.5.10) are listed as unrecorded: they shipped during a period when builds were published without being committed, and what changed was genuinely never written down. Saying so beats inventing it.'
+  ] },
+  { version: '4.0.0', date: '2026-07-16', notes: [
+    'Your scores will change, and this is why: three sets of checks — content artifacts, spelling, and the whole Best Practices section — were built and shipped but never actually ran. They run now. Sites generally score slightly higher because those checks mostly pass.',
+    'Scores from 4.0.0 are NOT comparable to earlier scans. Re-baseline before comparing a site to its own history.',
+    'New Copy Review card: flags assistant boilerplate, unfilled [INSERT X] placeholders, and AI-tell phrasing for a human to read. Advisory only — it can never move your score, and it never claims copy is AI-written.',
+    'Fixed a black/white gap at the bottom of short pages: the window is now painted properly instead of relying on the background bleeding through.',
+    'Rendered screenshots now appear only under the All filter — they are per page, not per failure, so showing them under "Failed" implied they were the failures.'
+  ] },
+  { version: '3.1.0', date: '2026-07-16', notes: [
+    'The tool stops crediting checks it never ran — a check that did not execute no longer reads as a pass or pays out as score.',
+    'Global back-to-top control on long reports.',
+    'Fixed the annotated PDF putting a pen mark on a different page from the thing it marked.'
+  ] },
+  { version: '3.0.4', date: '2026-07-16', notes: [
+    'Stopped three things the report was telling every client that were not true.'
+  ] },
+  { version: '3.0.3', date: '2026-07-16', notes: [
+    'Save-as-reference is now one-shot. Previously a saved name stayed in the field and silently re-pointed your reference at the NEXT site you scanned — so Visual Comparison could diff a site against itself and report a clean match.',
+    'Annotate opens in-page instead of a new tab; Reports reuses the same view so the two can no longer drift apart.',
+    'Font verdict now says match, mismatch, or not measured — previously "not measured" rendered as silence, and silence reads as a pass.'
+  ] },
+  { version: '3.0.2', date: '2026-07-15', notes: [
+    'Dashboard cleanup: every tool is now URL + settings gear + run button.',
+    'Report restructured around a dashboard, a flat issues list, and collapsed detail. Report file size cut from 136 MB to 18 MB — it is sendable again.'
+  ] },
+  { version: '3.0.1', date: '2026-07-15', notes: [
+    'Per-tool settings popup; scoring is honest about scope when you exclude checks — a de-scoped run no longer reads as a whole one.'
+  ] },
+  { version: '3.0.0', date: '2026-07-15', notes: [
+    'New quality score. The old one had a floor: a site failing EVERY check still scored 39/100, and a section score meant something different in each section. Now 0–100 means the same thing everywhere — all-pass is 100, all-fail is 0, and 50 always means half that section’s weighted risk is unresolved.',
+    'Scores from 3.0.0 are NOT comparable to 2.x scores.',
+    'Real device emulation across the viewport matrix, plus font and icon integrity checks.',
+    'Fixed: "sgen update" always reported failure and advised rollback, even on a healthy install.'
+  ] },
+  // 2.5.5–2.5.10: NO NOTES EXIST. Not a gap I can fill — verified 2026-07-16: zero git commits mention
+  // them (they shipped during the 2.4.2→2.5.13 zip-only period when nothing was committed), and the
+  // shipped 2.5.13 engine's own changelog jumps 2.5.4 → 2.5.11. Rather than invent plausible summaries
+  // for versions that reached real installs, the panel says so. An honest "unrecorded" is a true
+  // summary; a fabricated one is the exact failure this tool exists to catch.
+  { version: '2.5.10', date: '2026-07-13', notes: ['Released without release notes. What changed was never recorded — this version shipped during a period when engine builds were published without being committed to source control.'] },
+  { version: '2.5.9', date: '2026-07-12', notes: ['Released without release notes (same unrecorded period as 2.5.5–2.5.10).'] },
+  { version: '2.5.7', date: '2026-07-11', notes: ['Released without release notes (same unrecorded period as 2.5.5–2.5.10).'] },
+  { version: '2.5.6', date: '2026-07-11', notes: ['Released without release notes (same unrecorded period as 2.5.5–2.5.10).'] },
+  { version: '2.5.5', date: '2026-07-10', notes: ['Released without release notes (same unrecorded period as 2.5.5–2.5.10).'] },
   { version: '2.5.13', date: '2026-07-14', notes: [
     'Audit criteria re-prioritization: fewer false launch-blockers, real security risks now gate. Bundles 2.5.11 developer-centric element context + 2.5.12 one-click Inspect.'
   ] },
