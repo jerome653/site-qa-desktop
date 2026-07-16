@@ -187,6 +187,11 @@ function scopedTotalRisk(suiteKey, excluded, evaluated, seen) {
 function compute(suitesOut, opts = {}) {
   const excluded = new Set((opts && Array.isArray(opts.excludeRules)) ? opts.excludeRules : []);
   const evaluated = evaluatedSetFrom(opts);
+  // Per-tool weight override. Site Audit passes nothing -> the global registry WEIGHTS, so its score
+  // is byte-identical (proven by golden parity). Visual Comparison and Post-Deployment pass their own
+  // weight map so the SAME compute() gives each tool a real 0-100 Quality Score over ITS suites,
+  // without touching the registry's "weights sum to 100" invariant (that governs Site Audit only).
+  const weights = (opts && opts.weights && typeof opts.weights === 'object') ? opts.weights : WEIGHTS;
   const categories = suitesOut.map(s => {
     const deductions = [];
 
@@ -252,7 +257,7 @@ function compute(suitesOut, opts = {}) {
     return {
       key: s.key,
       name: s.name,
-      weight: WEIGHTS[s.key] || 0,
+      weight: weights[s.key] || 0,
       score,
       deductions,
       openRisk,

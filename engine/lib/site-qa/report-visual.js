@@ -252,7 +252,10 @@ function render(data, outDir) {
         <h1 style="font-size:26px;margin:6px 0 0">${esc(data.candidate)}</h1>
         <p class="vm-sub">Reference: ${esc(data.reference)} · ${data.pairs} page(s) paired · ${data.viewports.length} viewports · ${redesign ? 'structural only (redesign mode)' : (data.sharp ? 'pixel + structural' : 'structural only (sharp missing)')}</p>
         <p class="vm-sub" style="margin-top:4px">${esc(verdictLine(data.overall, redesign))} Any issue below has a <b>Copy MD</b> button — it copies a ready-to-forward ticket (page, exact element, what differs, evidence screenshots) for the dev team.</p></div>
-      <div style="text-align:right"><div class="vm-score">${data.overall}%</div><div class="vm-sub">${redesign ? 'structural match' : 'overall match'}</div></div>
+      <div style="text-align:right;display:flex;gap:22px;align-items:flex-start">
+        ${data.quality != null ? `<div><div class="vm-score" style="color:${data.quality >= 90 ? 'var(--pass)' : data.quality >= 75 ? 'var(--warn)' : 'var(--fail)'}">${data.quality}</div><div class="vm-sub">quality score</div></div>` : ''}
+        <div><div class="vm-score">${data.overall}%</div><div class="vm-sub">${redesign ? 'structural match' : 'overall match'}</div></div>
+      </div>
     </div>
     <div class="vm-mode ${redesign ? 'redesign' : 'l4l'}">
       <b>${redesign ? 'Redesign' : 'Like-for-like'}</b>
