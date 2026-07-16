@@ -33,7 +33,17 @@ Copy-Item "$app\engine\lib"              $stage -Recurse
 
 # --- zip (contents at archive root), sha256, version.txt ---
 $zip = Join-Path $env:TEMP 'engine.zip'; Remove-Item $zip -ErrorAction SilentlyContinue
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+# DO NOT use Compress-Archive here. It writes BACKSLASH entry names ("lib\site-qa\audit.js"), which
+# violates APPNOTE 4.4.17.1 (entry paths use forward slashes). A spec-following extractor then emits
+# ONE flat file literally named "lib\site-qa\audit.js" instead of a lib/ tree, so sgen-qa-serve.js
+# cannot resolve ./lib/... and EVERY install that updates is broken. The sha256 still matches
+# perfectly — a valid checksum over a corrupt archive, which is the worst failure this tool can ship.
+# Re-verified 2026-07-16 on this machine: Compress-Archive -> 'lib\site-qa\audit.js';
+# build-zip.js -> 'lib/site-qa/audit.js'. This is why 3.0.2/3.0.3/3.1.0 were published with the
+# hand-written builder and NOT with this script — build-zip.js used to live only in a temp scratchpad;
+# it is now adopted into this repo beside this script so the working path cannot be lost again.
+& node (Join-Path $app 'build-zip.js') $stage $zip
+if ($LASTEXITCODE -ne 0) { throw "build-zip.js failed (exit $LASTEXITCODE) — refusing to publish a bad payload" }
 $sha = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
 $shaFile = Join-Path $env:TEMP 'engine.zip.sha256'; Set-Content $shaFile "$sha  engine.zip" -NoNewline
 $verFile = Join-Path $env:TEMP 'version.txt';       Set-Content $verFile $Version -NoNewline

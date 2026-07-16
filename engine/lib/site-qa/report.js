@@ -639,7 +639,11 @@ window.lensGo=function(name,btn){
 
 document.querySelectorAll('[data-count]').forEach(function(el){var target=+el.getAttribute('data-count');if(matchMedia('(prefers-reduced-motion:reduce)').matches){el.textContent=target;return;}var n=0,step=Math.max(1,Math.round(target/26));var iv=setInterval(function(){n+=step;if(n>=target){n=target;clearInterval(iv);}el.textContent=n;},24);});
 
-window.filt=function(mode,btn){document.querySelectorAll('.tab').forEach(function(t){t.setAttribute('aria-pressed',t===btn?'true':'false');});document.querySelectorAll('.suite').forEach(function(su){var any=false;su.querySelectorAll('.row').forEach(function(r){var show=mode==='all'||r.getAttribute('data-status')===mode;r.classList.toggle('hidden',!show);if(show)any=true;});su.classList.toggle('hidden',!any);if(mode!=='all'&&any)su.open=true;if(mode==='all')su.open=false;});};
+window.filt=function(mode,btn){document.querySelectorAll('.tab').forEach(function(t){t.setAttribute('aria-pressed',t===btn?'true':'false');});document.querySelectorAll('.suite').forEach(function(su){var any=false;su.querySelectorAll('.row').forEach(function(r){var show=mode==='all'||r.getAttribute('data-status')===mode;r.classList.toggle('hidden',!show);if(show)any=true;});su.classList.toggle('hidden',!any);if(mode!=='all'&&any)su.open=true;if(mode==='all')su.open=false;});
+  /* Evidence belongs to the WHOLE scan, not to a filtered slice. The screenshot gallery is per
+     page+viewport — it is not filtered by finding status, so leaving it on screen under "Failed"
+     implies those shots ARE the failures. They are not. Show it only under All. */
+  var ev=document.querySelector('.shotsec');if(ev)ev.classList.toggle('hidden',mode!=='all');};
 // Score-summary tiles (beside the ring) are clickable: filter the detailed results to that status + scroll there.
 window.gotoStatus=function(mode){var sel={all:'.tab.all',fail:'.tab.fail',warn:'.tab.warn',pass:'.tab.pass',manual:'.tab.manual'}[mode]||'.tab.all';var tab=document.querySelector(sel);if(tab)filt(mode,tab);var bar=document.querySelector('.tabs');if(bar)window.scrollTo({top:bar.getBoundingClientRect().top+window.scrollY-80,behavior:'smooth'});};
 window.gotoShots=function(){var s=document.querySelector('.shotsec');if(s){window.scrollTo({top:s.getBoundingClientRect().top+window.scrollY-80,behavior:'smooth'});}else{gotoStatus('all');}};
@@ -779,6 +783,26 @@ function renderReport(data, outDir, opts = {}) {
       <div class="tile man" onclick="gotoStatus('manual')" role="button" tabindex="0" title="Show items needing manual review"><div class="v num" data-count="${data.tally.manual}">0</div><div class="l"><span class="dot"></span>Manual</div></div>
       <div class="tile meta" onclick="gotoStatus('all')" role="button" tabindex="0" title="Show all checks"><div class="v mono">${data.crawl.pages}</div><div class="l"><span class="dot"></span>Pages crawled</div></div>
       <div class="tile meta" onclick="gotoShots()" role="button" tabindex="0" title="Jump to rendered screenshots"><div class="v mono">${data.render.rendered}</div><div class="l"><span class="dot"></span>Rendered</div></div>
+      ${(() => {
+        // COPY REVIEW card (Suite 13). Advisory: WEIGHTS.copy = 0 and every row is status 'manual',
+        // so this number can never move the score — it is a READ, not a verdict. Counts flagged rules
+        // (of 4), not "AI-ness": the tool cannot know who wrote the copy and must never imply it.
+        // Rendered only when the copy suite actually ran, so an older scan's report is unchanged.
+        const cs = (data.suites || []).find(s => s.key === 'copy');
+        if (!cs) return '';
+        const flagged = (cs.checks || []).filter(c => (c.items || []).length > 0).length;
+        const total = (cs.checks || []).length;
+        const title = flagged ? flagged + ' of ' + total + ' copy checks flagged something for review — advisory only, does not affect the score'
+                              : 'No copy flags raised — advisory only, does not affect the score';
+        // Click-through goes to gotoStatus('manual') — an EXISTING, proven handler (window.gotoStatus).
+        // Copy rows are all status 'manual', so the Manual filter is exactly where they live. Do not
+        // invent a gotoSuite(): there is no such function, and a dead onclick here is not a dead link —
+        // it throws at parse and kills EVERY handler on the page (the 3.0.3 escape bug). suite:'copy'
+        // is unreachable from the status tabs otherwise.
+        return '<div class="tile meta" onclick="gotoStatus(\'manual\')" role="button" tabindex="0" title="' + title + '">'
+             + '<div class="v mono">' + flagged + '/' + total + '</div>'
+             + '<div class="l"><span class="dot"></span>Copy flags</div></div>';
+      })()}
     </div>
     <div class="legend" aria-label="Colour key">
       <span class="lg-t">What the colours mean</span>

@@ -48,7 +48,7 @@ console.log('FONT-001..006 / ICON-001..003 — font + icon integrity — test su
     ok([1, 2, 3].includes(r.tier), `registry: ${id} carries a launch tier`);
   }
   eq(REG.SUITES.reduce((a, s) => a + (REG.WEIGHTS[s] || 0), 0), 100, 'registry: weights still total 100');
-  eq(REG.REGISTRY_VERSION, '1.12.0', 'registry: version bumped to 1.12.0');
+  eq(REG.REGISTRY_VERSION, '1.13.0', 'registry: version bumped to 1.13.0');
 
   // VIS-003 (1.12.0) — drift()'s registry identity. It lives in the COMPARISON suite, not beside
   // FONT-001..006 in a11y: a font that changed vs the reference is not a defect in the candidate.

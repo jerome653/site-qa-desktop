@@ -51,6 +51,7 @@ const SUITES = [
   'best-practices/best-practices.test.js',
   'content-artifacts/content-artifacts.test.js',
   'spelling/spelling.test.js',
+  'copy-review/copy-review.test.js',
   'ops/ops.test.js',
   'reporting/reporting.test.js',
   'inventory/inventory.test.js',

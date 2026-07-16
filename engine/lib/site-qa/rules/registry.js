@@ -22,17 +22,17 @@
 // SEVERITY classifies the finding; DEDUCTION reflects real impact per Jerome's model. They are
 // independent on purpose (a "high" TLS-expired hurts more than a "high" placeholder).
 
-const REGISTRY_VERSION = '1.12.0'; // 1.12.0: +VIS-003 font-drift — the comparison lane's typography rule. font-checks.js has exported drift() since 1.11.0 with NOTHING calling it: it shipped dead in 3.0.0 and 3.0.1 while the UI advertised "font drift vs reference". Wired now by site-qa/visual-match.js (FONT_SWEEP once per PAGE PAIR, not per viewport — the same page-level reasoning that pins FONT-001..006 to one call per page in checks-render.js) and folded by visual-match/fold.js. It lands in 'visual' (Suite 12, WEIGHTS.visual=0) — NOT in a11y/typography beside FONT-001..006 — because a font that changed vs the reference is a COMPARISON fact, not a defect in the candidate: a redesign is supposed to change fonts, and scoring that against a11y (weight 14) would be a false blocker. Advisory, so overall scores stay byte-identical. // 1.11.0: +Typography & Icon Integrity (FONT-001..006, ICON-001..003) — first font coverage in the registry; all method:'render', emitted once per page by migration-qa/checks-render.js. FONT-003/006 (faux bold/italic) are a11y/typography, NOT best-practices: that suite is assembled by runBestPractices() from STATIC html DETECTORS, so a render-only rule there would emit a fake 'pass' (items.length?status:'pass') and is unreachable from the render pass (audit.js assembles 10 suites; 'best-practices' is not one of them). // 1.10.0: criteria re-prioritization (deploy false-concern fix, 2026-07-14): LINK-001 tier1->2 (HEAD-probe FP); +SEC-004/020/024/025 ->tier1 (real launch risks under-gated); relax FUNC-003/009,SEC-005,SEO-025,BP-004,VIS-001/002; cut RESP-003/004 deductions (overflow triple-count); RESP-001 kept tier1. // 1.6.0: +Interaction B1. 1.7.0: +Security B2. 1.8.0: +SEO B3. 1.9.0: +Stability B4 (DOM-003/004 dup-id/complexity, FORM-002 field-semantics, LINK-010 mailto/tel. Broken-markup/fonts deferred). // bump on ANY rule metadata change; every scan records this. 1.1.0: +SEO-029/030. 1.2.0: +Suite 11 Best Practices (advisory, weight 0 — provably score-neutral; WP-007). 1.2.1: +FUNC-008 content-artifacts. 1.3.0: +Suite 12 Visual Match (advisory, weight 0 — VIS-001/002; folded from qa-visual-match into the pipeline). 1.3.1: +FUNC-009 common-misspelling. 1.4.0: +CON-003 blocking-overlay (consent/age-gate dismissal, additive). 1.5.0: +tier field on every rule (launch-readiness; additive, scoring untouched).
+const REGISTRY_VERSION = '1.13.0'; // 1.13.0: +Suite 13 Copy Review (COPY-001..004) — advisory, WEIGHTS.copy=0, every rule severity:'manual'. Score-neutral by TWO mechanisms (manual rows skipped by score.js in both openRisk AND totalRisk; suite weight 0), so overall scores stay byte-identical — same additive pattern as best-practices (1.2.0) and visual (1.3.0). Detects copy ARTIFACTS (assistant boilerplate, unfilled placeholders) and reports PHRASING SIGNALS for a human; it never asserts a page is AI-written, which is not deterministically knowable and would be the most damaging false positive this tool could ship. // 1.12.0: +VIS-003 font-drift — the comparison lane's typography rule. font-checks.js has exported drift() since 1.11.0 with NOTHING calling it: it shipped dead in 3.0.0 and 3.0.1 while the UI advertised "font drift vs reference". Wired now by site-qa/visual-match.js (FONT_SWEEP once per PAGE PAIR, not per viewport — the same page-level reasoning that pins FONT-001..006 to one call per page in checks-render.js) and folded by visual-match/fold.js. It lands in 'visual' (Suite 12, WEIGHTS.visual=0) — NOT in a11y/typography beside FONT-001..006 — because a font that changed vs the reference is a COMPARISON fact, not a defect in the candidate: a redesign is supposed to change fonts, and scoring that against a11y (weight 14) would be a false blocker. Advisory, so overall scores stay byte-identical. // 1.11.0: +Typography & Icon Integrity (FONT-001..006, ICON-001..003) — first font coverage in the registry; all method:'render', emitted once per page by migration-qa/checks-render.js. FONT-003/006 (faux bold/italic) are a11y/typography, NOT best-practices: that suite is assembled by runBestPractices() from STATIC html DETECTORS, so a render-only rule there would emit a fake 'pass' (items.length?status:'pass') and is unreachable from the render pass (audit.js assembles 10 suites; 'best-practices' is not one of them). // 1.10.0: criteria re-prioritization (deploy false-concern fix, 2026-07-14): LINK-001 tier1->2 (HEAD-probe FP); +SEC-004/020/024/025 ->tier1 (real launch risks under-gated); relax FUNC-003/009,SEC-005,SEO-025,BP-004,VIS-001/002; cut RESP-003/004 deductions (overflow triple-count); RESP-001 kept tier1. // 1.6.0: +Interaction B1. 1.7.0: +Security B2. 1.8.0: +SEO B3. 1.9.0: +Stability B4 (DOM-003/004 dup-id/complexity, FORM-002 field-semantics, LINK-010 mailto/tel. Broken-markup/fonts deferred). // bump on ANY rule metadata change; every scan records this. 1.1.0: +SEO-029/030. 1.2.0: +Suite 11 Best Practices (advisory, weight 0 — provably score-neutral; WP-007). 1.2.1: +FUNC-008 content-artifacts. 1.3.0: +Suite 12 Visual Match (advisory, weight 0 — VIS-001/002; folded from qa-visual-match into the pipeline). 1.3.1: +FUNC-009 common-misspelling. 1.4.0: +CON-003 blocking-overlay (consent/age-gate dismissal, additive). 1.5.0: +tier field on every rule (launch-readiness; additive, scoring untouched).
 
 // 10 SCORED suites + 1 ADVISORY suite (best-practices). Best Practices carries weight 0: it has its
 // own sub-score for reporting, but contributes NOTHING to the SGEN Quality Score. This keeps every
 // historical overall score byte-identical (proven by golden parity) — additive, not a scoring change.
-const SUITES = ['functional', 'links', 'forms', 'responsive', 'a11y', 'seo', 'performance', 'security', 'crossbrowser', 'console', 'best-practices', 'visual'];
+const SUITES = ['functional', 'links', 'forms', 'responsive', 'a11y', 'seo', 'performance', 'security', 'crossbrowser', 'console', 'best-practices', 'visual', 'copy'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'manual'];
 const METHODS = ['static', 'render', 'network', 'cert', 'engine', 'manual'];
 
 // Suite category weights (scored suites sum = 100; best-practices = 0 advisory). Overall = Σ(suiteScore × weight)/Σweight.
-const WEIGHTS = { functional: 18, links: 8, forms: 6, responsive: 8, a11y: 14, seo: 16, performance: 14, security: 10, crossbrowser: 3, console: 3, 'best-practices': 0, visual: 0 };
+const WEIGHTS = { functional: 18, links: 8, forms: 6, responsive: 8, a11y: 14, seo: 16, performance: 14, security: 10, crossbrowser: 3, console: 3, 'best-practices': 0, visual: 0, copy: 0 };
 
 const V1 = '1.0';
 // Launch-readiness tier (1.5.0, additive — scoring untouched):
@@ -233,6 +233,28 @@ const RULES = [
   // whenever the copy also changed. This is set-based and page-level: family used on the reference,
   // used NOWHERE on the candidate.
   R('VIS-003', 'font-drift', 'Font changed vs the reference site', 'visual', 'typography', 'medium', 3, 'render', { introduced: '1.12.0', tier: 3 }),
+
+  // ---------------- COPY REVIEW (Suite 13 — ADVISORY, WEIGHTS.copy = 0) ----------------
+  // Owner ask (2026-07-16): "add new dashboard card for copy ai review or flags — it should not
+  // affect the scores but a review of how it looks like is a needed feature."
+  //
+  // SCORE-NEUTRAL BY TWO INDEPENDENT MECHANISMS, deliberately belt-and-braces:
+  //   1. severity 'manual' -> R() stamps manual:true, tier:null, and score.js skips manual rows in
+  //      BOTH openRisk and totalRisk (score.js:69/222/248). A manual rule cannot move a suite score.
+  //   2. WEIGHTS.copy = 0 -> even a non-zero suite score contributes nothing to the overall.
+  // Either alone would do it; both means a future edit that flips one still cannot contaminate the
+  // score. Same pattern proven by 'best-practices' (1.2.0) and 'visual' (1.3.0) — additive, overall
+  // scores stay byte-identical. Verify with a golden-parity run, never by assertion alone.
+  //
+  // THE LINE THESE RULES DO NOT CROSS: none of them claims a page IS AI-written. That is not
+  // deterministically knowable, and a false "your copy is AI-generated" in front of a client is far
+  // more damaging than any check this tool has ever got wrong. COPY-001/002 detect ARTIFACTS (text
+  // that should not be on a live page, whoever typed it). COPY-003/004 are SIGNALS a human reads.
+  // All four are Unknown, never Failed.
+  R('COPY-001', 'llm-boilerplate-leak', 'Assistant boilerplate left in visible copy', 'copy', 'ai-review', 'manual', 0, 'static', { introduced: '1.13.0' }),
+  R('COPY-002', 'unresolved-authoring-placeholder', 'Unfilled authoring placeholder in visible copy', 'copy', 'ai-review', 'manual', 0, 'static', { introduced: '1.13.0' }),
+  R('COPY-003', 'ai-tell-phrasing', 'Phrasing commonly seen in AI-drafted copy — flagged for review', 'copy', 'ai-review', 'manual', 0, 'static', { introduced: '1.13.0' }),
+  R('COPY-004', 'uniform-paragraph-rhythm', 'Paragraph rhythm is unusually uniform — flagged for review', 'copy', 'ai-review', 'manual', 0, 'static', { introduced: '1.13.0' }),
 ];
 
 // ---- runtime validation: fail fast, never run on an invalid registry (Phase 2 item 8) ----

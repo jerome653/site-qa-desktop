@@ -24,6 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { runAudit, SUITES: AUDIT_SUITES } = require('./lib/site-qa/audit');
+const { applyAdvisory } = require('./lib/site-qa/pipeline');   // advisory pass: FUNC-008/009, Best Practices, Copy Review
 const { compute: computeQuality } = require('./lib/site-qa/score');
 const { RULES, WEIGHTS } = require('./lib/site-qa/rules/registry');
 const { renderReport, STYLE, TOTOP_JS } = require('./lib/site-qa/report');
@@ -336,7 +337,18 @@ function appPage() {
   @media(max-width:440px){ .top .brand .bv{display:none} }
   /* overflow-x:clip (NOT hidden) prevents sideways scroll WITHOUT creating a scroll container, so the
      sticky header + tool tabs stay locked to the top during scroll. */
+  /* Paint the ROOT, not just body, and floor the height to the window.
+     Measured 2026-07-16 (Site Audit tab, 1440x900): body/html were both sized to CONTENT (624px) in a
+     900px window with min-height:0 and html's background TRANSPARENT — so the bottom 276px was dark
+     only because CSS propagates body's background to the canvas when html has none. That propagation
+     is a fallback, not a decision: any moment it does not apply (first paint before body renders,
+     print/PDF, the Electron window's own default surface) the same 276px comes back WHITE. That is
+     the "black or white gap" — one cause, two colours, depending on who paints the canvas.
+     Setting the background on html makes the root itself the painter (no propagation involved), and
+     min-height:100vh makes the ground reach the bottom of the window on short tabs. */
+  html{background:#000;min-height:100vh}
   html,body{max-width:100%;overflow-x:clip}
+  body{min-height:100vh}
   .topbar{box-shadow:0 1px 0 var(--line),0 6px 18px -12px rgba(0,0,0,.6)}
   .wrap{width:100%;max-width:none;margin:0;padding:26px clamp(22px,4vw,56px) 60px;box-sizing:border-box}
   .panel{display:none}.panel.on{display:block}
@@ -1763,7 +1775,17 @@ async function apiRun(req, res) {
     const maxPages = Number.isFinite(+opts.maxPages) && +opts.maxPages >= 1 ? +opts.maxPages : 1;
     // Viewport picker (labels) — filter the render matrix like Visual Comparison; absent/empty ⇒ all.
     const viewports = Array.isArray(opts.viewports) && opts.viewports.length ? opts.viewports : null;
-    const data = await runAudit(url, { maxPages, render: opts.render !== false, renderSample: Math.min(maxPages, 25), viewports, screensDir: path.join(outDir, 'screenshots'), log: () => {}, progress });
+    // collectPages:true + applyAdvisory = the ADVISORY pass. Measured 2026-07-16: this server called
+    // runAudit() and NOTHING ELSE, so applyAdvisory() had zero callers and runAudit's collectPages
+    // defaulted false — meaning FUNC-008 (content-artifacts), FUNC-009 (spelling), Best Practices and
+    // Copy Review were ALL registered, tested, and NEVER EXECUTED in the app. A live sgen.com scan
+    // returned 11 suites with no 'best-practices' and no 'copy' at all. Same class as VIS-003, which
+    // shipped dead through 3.0.0/3.0.1 while the UI advertised it: a suite that never runs cannot fail
+    // a test, so 34/34 green said nothing about it.
+    // Advisory suites carry weight 0 and their rows are manual/0-deduction, so this cannot move the
+    // SGEN Quality Score — verified by golden parity, not by assertion.
+    const raw = await runAudit(url, { maxPages, render: opts.render !== false, renderSample: Math.min(maxPages, 25), viewports, screensDir: path.join(outDir, 'screenshots'), log: () => {}, progress, collectPages: true });
+    const data = applyAdvisory(raw);
     emit({ t: 'p', pct: 99, phase: 'writing report' });
     // CHANGE E: auto-compare this scan against the most recent PRIOR recorded scan for this host and
     // embed a "vs previous scan" panel near the top. loadLatestRecord() runs BEFORE recordScan() below,

@@ -96,7 +96,7 @@ console.log('WP-007 — Best Practices (Suite 11) — test suite\n');
   const dir = __dirname + '/..';
   const env = Object.assign({}, process.env, { SCANSTORE_PERF_N: '200', FINDINGSTORE_PERF_N: '200' });
   const run = (cmd, needle) => { try { return needle.test(cp.execSync(cmd, { cwd: dir, env }).toString()); } catch (_) { return false; } };
-  ok(run('node rules/registry.test.js', /PASS · 138 rules/), 'frozen: registry 138 rules, invariants hold');
+  ok(run('node rules/registry.test.js', /PASS · 142 rules/), 'frozen: registry 142 rules, invariants hold');
   ok(run('node scan-store/scan-store.test.js', /56\/56/), 'frozen: scan-store 56/56');
   ok(run('node finding-store/finding-store.test.js', /60\/60/), 'frozen: finding-store 60/60');
 })();

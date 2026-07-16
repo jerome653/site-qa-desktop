@@ -68,7 +68,7 @@ console.log('FUNC-009 — spelling — test suite\n');
 (function frozen() {
   const dir = __dirname + '/..';
   const run = (cmd, needle) => { try { return needle.test(cp.execSync(cmd, { cwd: dir }).toString()); } catch (_) { return false; } };
-  ok(run('node rules/registry.test.js', /PASS · 138 rules/), 'frozen: registry 138 rules, invariants hold');
+  ok(run('node rules/registry.test.js', /PASS · 142 rules/), 'frozen: registry 142 rules, invariants hold');
 })();
 
 console.log('\n' + (fail === 0 ? '✅ PASS' : '❌ FAIL') + ` — ${pass}/${pass + fail} assertions`);
