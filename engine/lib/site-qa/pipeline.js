@@ -17,6 +17,7 @@ const { compute } = require('./score');
 const { runBestPractices } = require('./best-practices');
 const { scanContentArtifacts } = require('./content-artifacts');
 const { scanSpelling } = require('./spelling');
+const { scanCopyReview } = require('./copy-review');
 const { foldVisual } = require('./visual-match/fold');
 const visualMatch = require('./visual-match');
 const scanStore = require('./scan-store');
@@ -61,6 +62,14 @@ function applyAdvisory(result, opts = {}) {
       const bp = runBestPractices(pages);
       suites.push({ key: 'best-practices', name: 'Best Practices', desc: 'Advisory · modern web hygiene', icon: 'cursor', advisory: true, checks: bp.checks });
     }
+    // Copy Review (Suite 13, COPY-001..004) → advisory suite, exactly like Best Practices above:
+    // WEIGHTS.copy = 0 AND every row is status 'manual', so it cannot move the score by either the
+    // suite-weight path or the risk path. NOT folded into 'functional' the way FUNC-008/009 are —
+    // those are scored defects (a mojibake IS a bug); these are flags a human reads, and putting them
+    // in a weight-18 suite would let a phrasing signal act like a defect. See registry Suite 13.
+    if (!suites.some(s => s.key === 'copy')) {
+      suites.push({ key: 'copy', name: 'Copy Review', desc: 'Advisory · AI flags & copy artifacts', icon: 'cursor', advisory: true, checks: scanCopyReview(pages) });
+    }
     changed = true;
   }
 
@@ -84,7 +93,10 @@ async function runFullAudit(url, opts = {}) {
   let visualSummary = null;
   if (opts.compareUrl) {
     const visualFn = opts.visualFn || visualMatch.run;
-    const visual = await visualFn(opts.compareUrl, url, { maxPages: opts.maxPages, urlMap: opts.urlMap, outDir: opts.visualOutDir, log: opts.log });
+    // opts.mode reaches the engine so the programmatic lane can ask for a redesign comparison too;
+    // absent → visual-match normalizes to like-for-like, i.e. every existing caller is unchanged.
+    // foldVisual then reads the mode back off the RESULT, so the gate holds without being re-told.
+    const visual = await visualFn(opts.compareUrl, url, { maxPages: opts.maxPages, urlMap: opts.urlMap, outDir: opts.visualOutDir, mode: opts.mode, log: opts.log });
     const suite = foldVisual(visual, opts);
     visualSummary = suite.summary;
     (raw.suites = raw.suites || []).push(suite); // fold into the suites before advisory re-score

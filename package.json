@@ -1,7 +1,7 @@
 {
   "name": "sgen-site-qa-desktop",
   "productName": "SGEN Site QA",
-  "version": "2.5.3",
+  "version": "4.2.0",
   "description": "SGEN Site QA — developer-first website quality auditing, as a desktop app.",
   "main": "main.js",
   "author": "SGEN",
@@ -28,7 +28,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "docssgen-admin",
+        "owner": "jerome653",
         "repo": "migration-qa"
       }
     ],
@@ -44,12 +44,17 @@
     ],
     "extraResources": [
       {
+        "from": "README.html",
+        "to": "README.html"
+      },
+      {
         "from": "engine",
         "to": "engine",
         "filter": [
           "**/*",
           "!**/*.test.js",
-          "!**/_ui-runs/**"
+          "!**/_ui-runs/**",
+          "!**/.github/**"
         ]
       },
       {

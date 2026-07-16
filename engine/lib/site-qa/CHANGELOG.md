@@ -8,6 +8,36 @@
 - Phase 2: inspector lenses + Interaction Integrity top-line score + rendered-DOM link crawl.
 - Wider real-site validation + production-scale load tuning (operational).
 
+### Fixed — Site Comparison: two findings that misled rather than merely missed — R 1.12.0
+- **`drift()` was dead code, shipped in 3.0.0 and 3.0.1.** `font-checks.js` has exported and unit-tested
+  `drift(refSweep, candSweep)` since R 1.11.0 and **nothing ever called it** — `grep -E '\bdrift\('` over
+  `visual-match.js` / `audit.js` returned nothing — while the design mockup advertised *"Font drift vs
+  reference"* as a shipping **NEW** feature. Now wired into the real comparison path: `visual-match.js`
+  runs `FONT_SWEEP` on both sides **once per page pair** (not per viewport — the same page-level rule that
+  pins FONT-001..006 to one call per page), guarded in try/catch so it can never break a run, and folds to
+  the new **VIS-003 font-drift**. Emitted at the page level as `pages[].fontDrift` + `fontDriftAt`.
+- **VIS-003 lands in `visual` (Suite 12, weight 0), not a11y** beside FONT-001..006: a font that changed
+  vs the reference is a *comparison fact*, not a defect in the candidate. Advisory → overall scores are
+  unchanged. Matches CONSOLIDATION open decision #5 ("only font drift vs reference is comparison-specific").
+- **The pixel pass ran on every comparison.** VIS-001 is only meaningful for a **like-for-like** replatform;
+  on a **redesign** the sites are *supposed* to differ, so it is a documented false-positive machine
+  (antialiasing + font rasterisation alone spend 1–3%). Added a **comparison mode** — `like-for-like`
+  (default, today's behaviour byte-for-byte) vs `redesign`. In redesign the pixel pass is **skipped**, not
+  softened: `pixelMismatchPct` is `null`, no diff overlays are written, `matchScore` falls back to the
+  structural score, and VIS-001 cannot fire on the pixel axis. Structural mismatches still report — only
+  the pixel axis is gated. Unknown/absent mode → `like-for-like` (fails toward the status quo).
+  Settings popup (`v-mode`, bound to the live control per the one-source-of-truth rule), `/api/visual`,
+  and `sgen qa-visual-match --mode` all carry it; the run records `mode`/`pixelPass` in its result JSON so
+  a stored report can never be re-read out of context. Implements CONSOLIDATION open decision #4 (recommended option).
+- **VIS-001 evidence read `[object Object]` on every real run since R 1.3.** `structDelta()` returns
+  missing/extra/moved/restyled as **arrays of elements**; both consumers (`visual-match/fold.js` and
+  `inventory/visual-stage.js`) independently read them as counts, so the evidence string rendered
+  `" missing,  extra,  moved, [object Object],[object Object] restyled"` — empty categories listed with a
+  blank count (`[]` is truthy) and populated ones stringified as objects. It survived because the fold
+  fixtures passed **numbers**, a shape the engine has never emitted. One shared `structDeltaLabels()`
+  (tolerates arrays and numbers, drops empties), fixtures corrected to the real shape, and the suites now
+  assert the evidence is human-readable rather than merely present.
+
 ---
 
 ## 2026-07-09 — V2 Phase 1  (Developer-first platform: contract · providers · +32 rules) — E 2.3.0 · R 1.9.0 · Rep 1.2.0

@@ -25,7 +25,7 @@ The clever part: the engine **hot-updates itself**. A new engine is a ~370 KB zi
   │    active = userData/engines/<ver>/  (if newer)  else  bundled base      │
   └──────────────────────────────────────────────────────────────────────────┘
                  ▲ downloads engine.zip from ▼
-     GitHub Releases: docssgen-admin/migration-qa,  tag "engine-latest"
+     GitHub Releases: jerome653/migration-qa,  tag "engine-latest"
        assets:  version.txt  ·  engine.zip  ·  engine.zip.sha256
 ```
 
@@ -51,7 +51,18 @@ The clever part: the engine **hot-updates itself**. A new engine is a ~370 KB zi
 | `release/`, `dist-share/` | build outputs | ❌ regenerated |
 | `sgen/` | runtime scan data / reports | ❌ |
 
-> ⚠ **The engine here is the authoritative, current version** — it has every feature added recently. The separate `docssgen-admin/migration-qa` repo holds the older engine-library lineage and is *behind*; treat `siteqa-app/engine` as source of truth.
+> 🔴 **REVERSED as of 2026-07-16 — this used to say the opposite, and following the old text would
+> revert a week of fixes.** `jerome653/migration-qa` is now the **engine source of truth**; the
+> `engine/` folder here is a **stale 2.1.0 seed** kept only as the pre-first-update fallback that
+> ships inside the installer.
+>
+> Measured 2026-07-16: `siteqa-app/engine/package.json` = **2.1.0** · `jerome653/migration-qa` `main`
+> = **3.1.0** (`727df67`) · published feed `version.txt` = **3.1.0** · installed `active.json` = **3.1.0**.
+> The published payload and `main` are byte-identical (`diff -r --strip-trailing-cr` → 0 content
+> differences). **Building an engine from `siteqa-app/engine` would ship 2.1.0 and silently undo
+> v2 scoring, the font/icon rules, render honesty, and the save-baseline false-data fix.**
+>
+> **Do engine work in `jerome653/migration-qa`. Touch `engine/` here only to refresh the seed.**
 
 ---
 

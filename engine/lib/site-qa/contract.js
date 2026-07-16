@@ -68,6 +68,8 @@ function toContract(f, opts = {}) {
     ruleVersion: rule ? (rule.lastModified || rule.introduced || '1.0') : null,
     inspector: rule ? (rule.inspector || null) : null,
     category: f.suite || (rule && rule.suite) || null,
+    section: opts.section || null,
+    viewport: opts.viewport || null,
     interaction: rule ? !!rule.interaction : false,
     severity: f.severity || (rule && rule.severity) || null,
     tier: (f.tier !== undefined && f.tier !== null) ? f.tier : (rule ? rule.tier : null),

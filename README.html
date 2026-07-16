@@ -1,0 +1,96 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SGEN Site QA — install &amp; update</title>
+<style>
+  :root{--brand:#C8181C;--ink:#17151F;--soft:#56525F;--faint:#837E8C;--paper:#F5F4F6;--card:#fff;--line:#E2DFE6;
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;--body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  @media (prefers-color-scheme:dark){:root{--brand:#E5252A;--ink:#ECEAEF;--soft:#A5A0AE;--faint:#757083;--paper:#0B0A0C;--card:#131216;--line:#262430}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);line-height:1.6}
+  .wrap{max-width:46rem;margin:0 auto;padding:3rem 1.5rem 5rem}
+  .eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--brand);margin:0 0 .8rem}
+  h1{font-family:var(--mono);font-size:2rem;line-height:1.15;margin:0 0 .6rem}
+  .lede{color:var(--soft);font-size:1.05rem;margin:0 0 1.4rem}
+  .meta{font-family:var(--mono);font-size:.74rem;color:var(--faint);border-top:1px solid var(--line);padding-top:.9rem;display:flex;flex-wrap:wrap;gap:.3rem 1.3rem}
+  h2{font-family:var(--mono);font-size:1rem;margin:2.6rem 0 .8rem;padding-bottom:.45rem;border-bottom:1px solid var(--line)}
+  p{margin:0 0 .9rem;max-width:65ch}
+  pre{font-family:var(--mono);font-size:.8rem;background:var(--card);border:1px solid var(--line);border-left:2px solid var(--brand);padding:.85rem 1rem;overflow-x:auto;margin:.9rem 0}
+  code{font-family:var(--mono);font-size:.86em;background:color-mix(in srgb,var(--brand) 8%,transparent);border:1px solid var(--line);border-radius:3px;padding:.06em .32em}
+  pre code{background:none;border:0;padding:0}
+  .box{border:1px solid var(--brand);background:color-mix(in srgb,var(--brand) 6%,transparent);padding:1rem 1.1rem;margin:1.4rem 0}
+  .box .t{font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;color:var(--brand);display:block;margin-bottom:.4rem}
+  .box p:last-child{margin-bottom:0}
+  table{border-collapse:collapse;width:100%;font-size:.88rem;margin:.9rem 0}
+  th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:var(--mono);font-size:.68rem;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+  td:first-child{font-family:var(--mono);white-space:nowrap}
+  ol,ul{max-width:65ch;padding-left:1.2rem}
+  li{margin:.35rem 0}
+  footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+</style>
+<div class="wrap">
+  <p class="eyebrow">SGEN Site QA</p>
+  <h1>Install &amp; update</h1>
+  <p class="lede">How to get the app, and how it keeps itself current.</p>
+  <div class="meta">
+    <span>Engine 4.0.1</span><span>Feed: jerome653/migration-qa</span><span>Source: jerome653/site-qa-desktop</span>
+  </div>
+
+  <h2>Install</h2>
+  <ol>
+    <li>Run <code>SGEN Site QA Setup.exe</code>.</li>
+    <li>Launch <strong>SGEN Site QA</strong>. It starts a local server and opens the window — nothing else is needed.</li>
+  </ol>
+  <p>Everything runs on your machine. Scans, screenshots and reports never leave it. The only outbound request the app makes is checking the release feed for a newer engine.</p>
+
+  <h2>How updating actually works</h2>
+  <p>The app is split into two halves, and they update very differently. This is the single most important thing to understand.</p>
+  <table>
+    <thead><tr><th>Part</th><th>What it is</th><th>How it updates</th></tr></thead>
+    <tbody>
+      <tr><td>Engine</td><td>The QA code, rules and reports — the part that changes almost every release.</td><td><strong>Automatically.</strong> ~1 MB download, then relaunch.</td></tr>
+      <tr><td>Shell</td><td>Electron + Chromium + the bundled browsers (~865 MB). Changes rarely.</td><td><strong>Manually</strong> — reinstall the .exe.</td></tr>
+    </tbody>
+  </table>
+  <p>On launch the app polls <code>version.txt</code> on the release feed. If it is newer than what you have, the engine bundle downloads, its SHA-256 is verified against the published checksum, and it activates on the next relaunch. A failed checksum is never applied.</p>
+
+  <div class="box">
+    <span class="t">The repo must stay public</span>
+    <p>The app polls the release feed <strong>anonymously</strong> — it sends no credentials. If <code>jerome653/migration-qa</code> is made private, every install stops updating immediately (the poll 404s) and no engine ever lands again. The release <em>assets</em> are all the app reads; it never reads repo source. If the source must go private, move the three assets to a public feed repo <strong>and ship that new feed URL in a rebuilt installer first</strong> — existing installs have the old URL baked in and cannot be told about a new one.</p>
+  </div>
+
+  <h2>Getting it from the repo</h2>
+  <p>To run from source instead of the installer:</p>
+  <pre><code>git clone https://github.com/jerome653/site-qa-desktop.git
+cd site-qa-desktop
+npm install
+npm start</code></pre>
+  <p>The bundled <code>browsers/</code> folder (~685 MB) is not in git — the app needs it for rendering, so a source checkout must repopulate it (see <code>DEV-HANDOFF.md</code> §4).</p>
+  <p>To build a fresh installer:</p>
+  <pre><code>npm run dist        # electron-builder --win nsis --x64
+                    # output lands in release/</code></pre>
+
+  <h2>Publishing an engine update</h2>
+  <p>This ships to <strong>every install</strong>. The order matters:</p>
+  <pre><code>pwsh -File publish-engine.ps1 -Version 4.0.2</code></pre>
+  <ul>
+    <li>It stages from <code>engine/</code> in this folder — <strong>not from git</strong>. Whatever sits there is what ships. Confirm the staging tree holds the code you mean to publish before running it.</li>
+    <li>Payload and checksum upload first; <code>version.txt</code> flips last, because that file is the trigger.</li>
+    <li>Do not fetch the canonical <code>version.txt</code> between staging and flipping — doing so has warmed the CDN edge with the old value and served a stale marker for ~10 minutes.</li>
+    <li>Verify by downloading the payload back and comparing SHA-256. The upload tool reports success even when it prints nothing.</li>
+    <li>Every shipped version needs an entry in <code>CHANGELOG</code> (in <code>engine/sgen-qa-serve.js</code>), or it appears in Logs → Versions as a bare timestamp with no explanation.</li>
+  </ul>
+
+  <h2>Reading a report</h2>
+  <p><strong>Red means passing.</strong> The report uses an inverted status palette; it prints its own legend saying so. Let the page settle for a second before reading numbers — the score ring and the dashboard tiles count up from zero, and a number read mid-animation is not the real number.</p>
+  <p>Two figures are reported and they measure different things: <code>score</code> is a raw pass ratio (it weights a missing alt attribute the same as a site-wide NOINDEX), while <code>quality</code> is a weighted risk model (0–100) — the more honest of the two.</p>
+
+  <div class="box">
+    <span class="t">Scores changed in 4.0.0</span>
+    <p>Three sets of checks — content artifacts, spelling, and the whole Best Practices section — were built and shipped but had never actually run. They run now, so most sites score slightly higher. <strong>Scans from 4.0.0 onward are not comparable to earlier ones.</strong> Re-baseline before comparing a site to its own history.</p>
+  </div>
+
+  <footer>
+    SGEN Site QA · engine 4.0.1 · updates are engine-only; the shell requires a reinstall.
+  </footer>
+</div>

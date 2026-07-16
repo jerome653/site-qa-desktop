@@ -62,19 +62,88 @@ async function dismissOverlays(page, { maxPasses = 3, settleMs = 500 } = {}) {
   return { dismissed, passes };
 }
 
-// After dismissal passes: is a blocking overlay STILL covering the page? (cover ≥30% of viewport,
-// fixed/absolute, z-index ≥10). If yes the audit is looking at a gate, not the site — callers surface
-// this as a manual-review flag instead of silently auditing the overlay.
+// After dismissal passes: is a blocking overlay STILL covering the page? If yes the audit is looking
+// at a gate, not the site — callers surface this as a manual-review flag instead of silently auditing
+// the overlay. This report is shown to a CLIENT as evidence, so a false "this page is gated" discredits
+// every other finding on the page: geometry alone is not enough to earn it.
+//
+// Being fixed + high-z + big is NOT evidence of blocking. Three things must be true of a real gate:
+// it is on-screen, it is on top, and the page is not reachable through it. The old check tested none
+// of those and fired on every ordinary slide-out drawer:
+//   • RAW rect area ignored the viewport, so a panel parked off-screen (`translateX`) still measured
+//     "covers 68%" while covering nothing at all;
+//   • no pointer-events test, so a click-through drawer host counted as a wall;
+//   • no occlusion test, so a fully TRANSPARENT portal/drawer wrapper — geometry only, hiding nothing —
+//     was reported as "covers 100% of the viewport".
+// (All three fired together on sgen.com: div#dpzDrawer.dpz — transparent, pointer-events:none, with the
+// real panel translated off-screen — was reported as a 100% gate on all 3 pages while the screenshots
+// showed the complete, unobstructed page.)
 async function detectBlockingOverlay(page) {
   try {
     return await page.evaluate(`(function(){
-      var els=document.querySelectorAll('body *'); var best=null;
-      for(var i=0;i<els.length;i++){ var el=els[i]; var s=getComputedStyle(el);
+      var vw=innerWidth, vh=innerHeight, vArea=vw*vh;
+      if(!vArea) return null;
+
+      // Only the ON-SCREEN part of an element can gate the page. getBoundingClientRect keeps a
+      // slide-out panel's full size while transform parks it outside the viewport, so raw area
+      // reads as "covering" something no camera and no visitor can see.
+      function clip(r){
+        var x0=Math.max(0,r.left), y0=Math.max(0,r.top), x1=Math.min(vw,r.right), y1=Math.min(vh,r.bottom);
+        var w=Math.max(0,x1-x0), h=Math.max(0,y1-y0);
+        return { x0:x0, y0:y0, x1:x1, y1:y1, area:w*h };
+      }
+
+      // Does it actually paint a fill? A transparent wrapper (drawer host, portal root, click-catcher)
+      // occupies the viewport in geometry only — nothing of the page is hidden behind it.
+      function paints(s){
+        if(s.backgroundImage && s.backgroundImage!=='none') return true;
+        if(s.backdropFilter && s.backdropFilter!=='none') return true;
+        var m=/^rgba?\\(([^)]+)\\)/.exec(s.backgroundColor||'');
+        if(!m) return false;
+        var p=m[1].split(',');
+        return (p.length>3 ? parseFloat(p[3]) : 1) >= 0.5;
+      }
+
+      // Ask the browser what is on top instead of re-implementing compositing: elementFromPoint honours
+      // z-order, clipping, transforms and pointer-events exactly as a visitor's click does. Sampling a
+      // grid (not just the centre) stops a banner with a hole in the middle from reading as harmless.
+      function intercepted(el, c){
+        var hits=0, total=0;
+        for(var gx=1; gx<=3; gx++) for(var gy=1; gy<=3; gy++){
+          var px=c.x0+(c.x1-c.x0)*(gx/4), py=c.y0+(c.y1-c.y0)*(gy/4);
+          if(px<0||py<0||px>=vw||py>=vh) continue;
+          total++;
+          var t=document.elementFromPoint(px,py);
+          if(t && (t===el || el.contains(t))) hits++;
+        }
+        return total ? hits/total : 0;
+      }
+
+      var els=document.querySelectorAll('body *'), best=null;
+      for(var i=0;i<els.length;i++){
+        var el=els[i], s=getComputedStyle(el);
         if(s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity||'1')<0.5) continue;
         if(s.position!=='fixed'&&s.position!=='absolute') continue;
         var z=parseInt(s.zIndex,10)||0; if(z<10) continue;
-        var r=el.getBoundingClientRect(); var cover=(r.width*r.height)/(innerWidth*innerHeight);
-        if(cover>=0.3&&(!best||cover>best.cover)){ var id=el.id?('#'+el.id):''; var c=(typeof el.className==='string'&&el.className)?('.'+el.className.trim().split(/\\s+/)[0]):''; best={ selector:el.tagName.toLowerCase()+id+c, cover:+cover.toFixed(2), zIndex:z }; }
+
+        var c=clip(el.getBoundingClientRect());
+        var cover=c.area/vArea;
+        if(cover<0.3) continue;
+
+        // Two independent ways to gate a page; EITHER is disqualifying (fail closed — losing a true
+        // cookie wall is worse than a false alarm):
+        //  1. it swallows interaction across the page (what every consent gate does by definition), or
+        //  2. it is click-through yet still PAINTS an opaque fill over the page, so the audit's
+        //     screenshot is a picture of the overlay even though clicks pass through.
+        var hit=intercepted(el,c);
+        var reason = hit>=0.5 ? 'intercepts' : (paints(s) ? 'opaque' : null);
+        if(!reason) continue;   // transparent AND click-through: the page is fully visible and reachable
+
+        if(!best||cover>best.cover){
+          var id=el.id?('#'+el.id):'';
+          var cl=(typeof el.className==='string'&&el.className)?('.'+el.className.trim().split(/\\s+/)[0]):'';
+          best={ selector:el.tagName.toLowerCase()+id+cl, cover:+cover.toFixed(2), zIndex:z, reason:reason, intercepted:+hit.toFixed(2) };
+        }
       }
       return best;
     })()`);

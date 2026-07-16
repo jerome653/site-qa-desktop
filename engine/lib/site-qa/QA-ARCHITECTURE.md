@@ -42,8 +42,9 @@ Tool 2. A migration project composes both in Tool 3 and adds source→target com
 **Scope:** Entire Site · Selected Pages · Single Page.
 **Comparison level:** Entire Page · **Sections** · **Components** · **Elements** — reported PASS / WARNING / FAIL per unit (e.g. Home → Hero PASS · Testimonials WARNING · Footer PASS; Primary CTA PASS · Pricing Card FAIL; Heading PASS · SVG FAIL · Spacing WARNING).
 
-**Engine (built):** `visual-match.js` — crawl both, pair by path, at 6 SG-Builder breakpoints (1920/1199/991/767/575/480) capture full-page screenshot + **per-element structural read (section→element geometry + computed styles)** + **pixel mismatch % (sharp)** + structural deltas (missing/extra/moved/restyled). Folded into the pipeline as advisory suite `visual` (VIS-001/002).
-**CLI:** `sgen qa-visual-match <ref> <cand>` · `sgen qa-full <target> --compare <ref>`.
+**Engine (built):** `visual-match.js` — crawl both, pair by path, at 6 SG-Builder breakpoints (1920/1199/991/767/575/480) capture full-page screenshot + **per-element structural read (section→element geometry + computed styles)** + **pixel mismatch % (sharp)** + structural deltas (missing/extra/moved/restyled), plus a page-level **font drift** read (a family the reference renders that the candidate never uses). Folded into the pipeline as advisory suite `visual` (VIS-001/002/003).
+**Comparison mode (R 1.12.0):** `like-for-like` (default) | `redesign`. The pixel pass answers "same pixels?", which is only a question worth asking on a like-for-like replatform — on a redesign the sites are *supposed* to differ, so `redesign` **skips** it entirely (`pixelMismatchPct: null`, no diff overlays) and `matchScore` falls back to the structural score alone. Structural deltas and font drift report in both modes. The mode is recorded in the result JSON (`mode` / `pixelPass`), and `fold.js` re-gates on it independently of the engine.
+**CLI:** `sgen qa-visual-match <ref> <cand> [--mode like-for-like|redesign]` · `sgen qa-full <target> --compare <ref>`.
 **Verified live 2026-07-08** (example.com vs example.org, 100% match).
 
 | Comparison level | Status |

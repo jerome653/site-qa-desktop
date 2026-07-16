@@ -5,6 +5,10 @@
 // a complete evidence package (pixel %, match score, viewport, screenshots when present).
 const { addFinding } = require('./model');
 const { pathOf } = require('./providers');
+// Shared with visual-match/fold.js on purpose: this line existed here AND there as two independent
+// copies, and both got structDelta's shape wrong the same way ([object Object] in the evidence — see
+// the helper's note). One copy, one shape contract, one place to fix it next time.
+const { structDeltaLabels } = require('../visual-match/fold');
 
 // visualStage(refInv, tgtInv, visualResult, { at, matchThreshold=90, pixelThreshold=8 })
 // visualResult = visual-match run() output: { pages:[{ path, viewports|vps:[{label,pixelMismatchPct,matchScore,struct,shots}] }], unmatchedRef:[url] }
@@ -26,7 +30,7 @@ function visualStage(refInv, tgtInv, visualResult, opts = {}) {
       if (!over) continue;
       const sev = (ms != null && ms < 75) ? 'blocking' : 'advisory'; // <75 = rebuild (blocking); 75–90 = warning
       const st = vp.struct || {};
-      const deltas = ['missing', 'extra', 'moved', 'restyled'].filter(k => st[k]).map(k => `${st[k]} ${k}`).join(', ');
+      const deltas = structDeltaLabels(st).join(', ');
       addFinding(item, {
         axis: 'visual', ruleId: 'VIS-001', severity: sev, viewport: vp.label, confidence: 1,
         detail: `${px != null ? px + '% px · ' : ''}${ms != null ? ms + '/100 match' : ''}${deltas ? ' · ' + deltas : ''} [${vp.label}]`,
