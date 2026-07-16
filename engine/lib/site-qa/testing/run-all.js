@@ -15,7 +15,23 @@ const SUITES = [
   'rules/registry.test.js',
   'evidence-name.test.js',
   'consent.test.js',
+  'blocking-overlay.test.js',
   'contract.test.js',
+  'readiness.test.js',
+  'font-checks.test.js',
+  'pass-label-reachability.test.js',
+  // The render pass must never report a check it did not run as a check that passed. Real Chromium +
+  // the real stored sgen.com runs — it re-derives the cost of axe-core's silence (a11y 66 vs an honest
+  // 59) from report.json through the real scorer, so a fixture cannot agree with the bug.
+  '../migration-qa/render-honesty.test.js',
+  'score-evaluation.test.js',
+  // "I looked and it is clean" vs "I never looked". Drives the REAL runAudit against a real
+  // non-resolving host (37 green ticks, quality 98, before the fix) and through a REAL poisoned
+  // module in the require cache, so no fixture can agree with the bug.
+  'evaluation-ledger.test.js',
+  // annotate.test.js (66 assertions) shipped in 3.0.0 but was left out of this list purely because
+  // an earlier instruction pinned the suite count at 25 — a test that never runs is not a test.
+  'annotate.test.js',
   'lib/infra.test.js',
   'lib/providers.test.js',
   'lib/interaction.test.js',
@@ -24,6 +40,10 @@ const SUITES = [
   'lib/stability.test.js',
   'lib/lenses.test.js',
   'testing/foundation.test.js',
+  // Boots the real server and parses the client script it SERVES. The dashboard is ~66 KB of JS
+  // inside a template literal, so `node --check` passes while the emitted script is unparseable and
+  // every tool on the page is dead. Nothing else in this list can see that.
+  'testing/ui-script.test.js',
   'scan-store/scan-store.test.js',
   'finding-store/finding-store.test.js',
   'timeline/timeline.test.js',

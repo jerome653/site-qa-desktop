@@ -94,7 +94,10 @@ async function discoverPages(startUrl, { maxPages = 150, concurrency = 8, sitema
   let linkFollowed = 0;
 
   while (queue.length && fetched.size < maxPages) {
-    const batch = queue.splice(0, concurrency);
+    // Cap each batch to the REMAINING budget, not a full `concurrency` slice — otherwise maxPages:1
+    // still grabbed (and fetched) up to `concurrency` (8) pages before the loop re-checked the cap.
+    // (sitemapOnly deliberately raised maxPages to the seed size above, so it is unaffected.)
+    const batch = queue.splice(0, Math.max(0, Math.min(concurrency, maxPages - fetched.size)));
     const recs = await pool(batch, concurrency, async (u) => {
       const r = await getText(u);
       return { url: u, status: r.status, body: r.body, headers: r.headers, contentType: r.contentType, location: r.location, error: r.error };

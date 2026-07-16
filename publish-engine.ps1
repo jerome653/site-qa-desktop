@@ -3,8 +3,19 @@
 # Usage:  pwsh -File publish-engine.ps1 -Version 2.4.1
 param([Parameter(Mandatory = $true)][string]$Version)
 $ErrorActionPreference = 'Stop'
-$app  = 'D:\AI\_dist\siteqa-app'
-$repo = 'docssgen-admin/migration-qa'
+# Staging source. Was 'D:\AI\_dist\siteqa-app' — that is the OLD setup and there is NO D: drive on this
+# machine (verified 2026-07-16). The live tree is this repo itself, on C:. A stale path here is not a
+# harmless comment: publish-engine.ps1 stages the payload FROM $app, so pointing at a dead/old dir
+# either fails outright or ships whatever stale engine happens to sit there — the exact drift this
+# repo spent 14 versions recovering from. $PSScriptRoot = this script's own folder, so it cannot go
+# stale again when the tree moves.
+$app  = $PSScriptRoot
+# Owner is jerome653 (the repo's current home). It was 'docssgen-admin/migration-qa', which worked only
+# because GitHub 301s the transferred owner (-> api.github.com/repositories/1293719342/..., same host,
+# so auth survives and Invoke-RestMethod follows it — verified 2026-07-16, publishes did succeed this way).
+# The redirect is the problem, not a broken call: GitHub retires it the instant the old path is
+# re-registered, and this script would then publish into a repo we do not control. Don't point it back.
+$repo = 'jerome653/migration-qa'
 $tag  = 'engine-latest'
 
 # --- token (never printed) ---

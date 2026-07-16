@@ -59,6 +59,18 @@ function listRecords(host) {
   return fs.readdirSync(dir);
 }
 
+// Load the most-recent recorded scan for a host (or null). recordScan() runs AFTER the report is
+// rendered, so at render time this returns the most recent PRIOR scan — exactly what the Site-Audit
+// "vs previous scan" panel compares the current scan against. ISO timestamps sort chronologically, so
+// the last filename is the newest.
+function loadLatestRecord(host) {
+  const files = listRecords(host);
+  if (!files.length) return null;
+  const dir = path.join(RECORDS, String(host).replace(/[^a-z0-9._-]+/gi, '-'));
+  const file = path.join(dir, files[files.length - 1]);
+  try { return { data: JSON.parse(fs.readFileSync(file, 'utf8')), source: file, count: files.length }; } catch (e) { return null; }
+}
+
 // status rank for transition math; 'manual' is neutral (excluded from regression/fix).
 const RANK = { pass: 0, warn: 1, fail: 2 };
 const norm = (s) => String(s || '').toLowerCase().replace(/\d+/g, '#').replace(/\s+/g, ' ').trim();
@@ -114,4 +126,4 @@ function diff(a, b) {
   };
 }
 
-module.exports = { diff, loadResult, saveBaseline, listBaselines, recordScan, listRecords, BASELINES, RECORDS };
+module.exports = { diff, loadResult, saveBaseline, listBaselines, recordScan, listRecords, loadLatestRecord, BASELINES, RECORDS };

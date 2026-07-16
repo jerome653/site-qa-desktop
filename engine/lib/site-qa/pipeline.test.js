@@ -98,10 +98,16 @@ console.log('Pipeline integration — test suite\n');
 
   // ── visual match folded into the pipeline ──
   const dr2 = tmp();
+  // struct's missing/extra/moved/restyled are ARRAYS OF ELEMENTS — that is what visual-match's
+  // structDelta() really returns. This fixture used to pass counts (`{moved:2,restyled:1}`), a shape
+  // the engine has never emitted, and the fold read them straight into the evidence string. So the
+  // suite was green while every real run wrote "[object Object]" into VIS-001. Fixtures that do not
+  // match the producer do not test the consumer.
+  const el = (tag, text) => ({ sec: 'main', tag, text, x: 0, y: 0, w: 100, h: 20, font: 'Inter', size: 16, color: 'rgb(0,0,0)' });
   const visualResult = {
     pairs: 3, unmatchedRef: [T + '/press'], viewports: ['1920 · desktop-xl', '480 · mobile'],
     pages: [
-      { path: '/', cand: T + '/', viewports: [ { label: '1920 · desktop-xl', pixelMismatchPct: 1.2, matchScore: 98, struct: {} }, { label: '480 · mobile', pixelMismatchPct: 14.5, matchScore: 71, struct: { moved: 2, restyled: 1 } } ] },
+      { path: '/', cand: T + '/', viewports: [ { label: '1920 · desktop-xl', pixelMismatchPct: 1.2, matchScore: 98, struct: { missing: [], extra: [], moved: [], restyled: [] } }, { label: '480 · mobile', pixelMismatchPct: 14.5, matchScore: 71, struct: { missing: [], extra: [], moved: [{ el: el('h1', 'Hi'), from: [0, 0], to: [0, 90] }, { el: el('p', 'Yo'), from: [0, 10], to: [0, 100] }], restyled: [{ el: el('a', 'Buy'), diffs: ['color rgb(0,0,0)→rgb(9,9,9)'] }] } } ] },
       { path: '/about', cand: T + '/about', viewports: [ { label: '1920 · desktop-xl', pixelMismatchPct: 0.4, matchScore: 99, struct: {} } ] },
     ], sharp: true,
   };
@@ -112,6 +118,15 @@ console.log('Pipeline integration — test suite\n');
   const vis1 = vsuite.checks.find(c => c.ruleId === 'VIS-001');
   ok(vis1 && vis1.status !== 'pass', 'visual: VIS-001 fires (mobile home over threshold)');
   ok(vis1.items.some(i => i.section === '480 · mobile'), 'visual: mismatch attributed to the 480 breakpoint');
+  // The evidence string is what a human reads on the report. Assert it is HUMAN-READABLE, not merely
+  // present — the [object Object] defect passed every "does VIS-001 fire" check ever written.
+  const mob = vis1.items.find(i => i.section === '480 · mobile');
+  ok(!/\[object Object\]/.test(mob.value), 'visual: VIS-001 evidence contains no [object Object]');
+  ok(/2 moved/.test(mob.value) && /1 restyled/.test(mob.value), 'visual: VIS-001 evidence counts the structural deltas (2 moved, 1 restyled)');
+  ok(!/(^|\s)(missing|extra)\b/.test(mob.value.replace(/\d+ (missing|extra)/g, '')), 'visual: VIS-001 evidence omits empty delta categories (an empty array is truthy — the other half of the bug)');
+  const { structDeltaLabels } = require('./visual-match/fold');
+  eq(structDeltaLabels({ missing: [], extra: [{}, {}], moved: 3, restyled: undefined }), ['2 extra', '3 moved'],
+    'visual: structDeltaLabels counts arrays (engine) and numbers (stored/legacy results), drops empties');
   const vis2 = vsuite.checks.find(c => c.ruleId === 'VIS-002');
   ok(vis2 && vis2.items && vis2.items.length === 1, 'visual: VIS-002 flags the unmatched /press page');
   eq(rv.visual.mismatches, 1, 'visual: summary counts 1 mismatch');
@@ -120,6 +135,35 @@ console.log('Pipeline integration — test suite\n');
   ok(rv.result.quality.categories.find(c => c.key === 'visual').weight === 0, 'visual: suite weight 0 (no overall impact)');
   // persisted + gate still runs
   ok(require('./scan-store').verify(rv.stores.scans).ok, 'visual: scan with visual findings persists + verifies');
+
+  // ── comparison mode: the pixel pass is only meaningful on a like-for-like replatform ──
+  // The result above carries no `mode` (exactly like every result written before 1.12.0) and VIS-001
+  // fired off its 14.5% pixel diff — so the default path is provably unchanged. A REDESIGN is a
+  // different question: the sites are meant to differ, so a pixel mismatch is not a finding.
+  const { foldVisual } = require('./visual-match/fold');
+  eq(foldVisual(visualResult).summary.mode, 'like-for-like', 'mode: a result with no mode folds as like-for-like (pre-1.12.0 results unchanged)');
+  ok(foldVisual(visualResult).checks.find(c => c.ruleId === 'VIS-001').status !== 'pass', 'mode: like-for-like → the 14.5% pixel diff still fires VIS-001');
+
+  // Same numbers, mode=redesign. The engine returns pct:null in redesign mode, but fold gates
+  // independently — so even a result that somehow carries a pct cannot produce a pixel failure.
+  const redesigned = { ...visualResult, mode: 'redesign' };
+  const rdFold = foldVisual(redesigned);
+  eq(rdFold.summary.mode, 'redesign', 'mode: redesign is recorded in the fold summary');
+  eq(rdFold.summary.pixelPass, false, 'mode: redesign reports the pixel pass as off');
+  const rdVis1 = rdFold.checks.find(c => c.ruleId === 'VIS-001');
+  ok(!rdVis1.items || !rdVis1.items.some(i => /% px/.test(i.value || '')), 'mode: redesign → no finding is raised on the pixel axis');
+
+  // The structural axis SURVIVES the mode gate. "The old site had a phone number and the new one
+  // doesn't" is a real finding on a redesign too — only the PIXEL axis is meaningless there.
+  const structOnly = foldVisual({ ...visualResult, mode: 'redesign',
+    pages: [{ path: '/', viewports: [{ label: '480 · mobile', pixelMismatchPct: null, matchScore: 60, struct: { missing: 4 } }] }] });
+  ok(structOnly.checks.find(c => c.ruleId === 'VIS-001').status !== 'pass', 'mode: redesign still reports a STRUCTURAL mismatch (only the pixel axis is gated)');
+
+  // engine-side normalizer: unknown/absent mode must fail toward today's behaviour, never into silence
+  const vmm = require('./visual-match');
+  eq(vmm.normalizeMode(undefined), 'like-for-like', 'mode: absent → like-for-like (existing users keep the pixel pass)');
+  eq(vmm.normalizeMode('REDESIGN'), 'like-for-like', 'mode: unrecognised value → like-for-like, never silently quieter');
+  eq(vmm.normalizeMode('redesign'), 'redesign', 'mode: redesign is honoured');
 
   console.log('\n' + (fail === 0 ? '✅ PASS' : '❌ FAIL') + ` — ${pass}/${pass + fail} assertions`);
   if (fail) { console.log('Failures:\n' + failures.map(f => '  - ' + f).join('\n')); process.exit(1); }

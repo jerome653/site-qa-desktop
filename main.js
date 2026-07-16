@@ -40,7 +40,12 @@ const ENGINES_DIR = path.join(app.getPath('userData'), 'engines');
 const ACTIVE_JSON = path.join(ENGINES_DIR, 'active.json');
 const BASE_VERSION = app.getVersion();                        // engine base ships with the shell => same version
 const ENGINE_TAG = 'engine-latest';
-const FEED_BASE = 'https://github.com/docssgen-admin/migration-qa/releases/download/' + ENGINE_TAG;
+// Owner is jerome653 — the repo's CURRENT home. Do NOT "restore" docssgen-admin: that path only still
+// works because GitHub kept a permanent owner-redirect after the transfer (measured 2026-07-16:
+// docssgen-admin/... -> 301 -> jerome653/... -> 302 -> release-assets -> 200). GitHub RETIRES that
+// redirect the instant the old path is re-registered, and every install pointed at it would then
+// silently poll a repo we do not control — a hijackable update channel, with no error surfaced.
+const FEED_BASE = 'https://github.com/jerome653/migration-qa/releases/download/' + ENGINE_TAG;
 
 let win = null, PORT = 0;
 

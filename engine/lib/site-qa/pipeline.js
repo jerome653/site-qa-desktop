@@ -84,7 +84,10 @@ async function runFullAudit(url, opts = {}) {
   let visualSummary = null;
   if (opts.compareUrl) {
     const visualFn = opts.visualFn || visualMatch.run;
-    const visual = await visualFn(opts.compareUrl, url, { maxPages: opts.maxPages, urlMap: opts.urlMap, outDir: opts.visualOutDir, log: opts.log });
+    // opts.mode reaches the engine so the programmatic lane can ask for a redesign comparison too;
+    // absent → visual-match normalizes to like-for-like, i.e. every existing caller is unchanged.
+    // foldVisual then reads the mode back off the RESULT, so the gate holds without being re-told.
+    const visual = await visualFn(opts.compareUrl, url, { maxPages: opts.maxPages, urlMap: opts.urlMap, outDir: opts.visualOutDir, mode: opts.mode, log: opts.log });
     const suite = foldVisual(visual, opts);
     visualSummary = suite.summary;
     (raw.suites = raw.suites || []).push(suite); // fold into the suites before advisory re-score

@@ -90,4 +90,104 @@ function renderCompare(d, outDir) {
   return { htmlPath, jsonPath };
 }
 
-module.exports = { renderCompare };
+// ---- CHANGE E: embedded "vs previous scan" panel for the Site Audit report --------------------
+// A COMPACT fragment (not a full page) injected near the top of report.html. Emits only self-contained
+// `.cmpp-*` markup whose CSS lives in report.js STYLE (the host page) — so it renders natively inside
+// the audit report with no extra stylesheet. Redesigned in 2.5.10 (approved Option-A mockup) for
+// at-a-glance scanning: a plain-language verdict headline, an oversized Previous→This-scan score with a
+// green/red delta badge, 5 semantic count cells (green=good / red=bad / amber=persisting, zeros dimmed),
+// and a movers-first suite-trend strip. Presentation only — the data (diff()/loadLatestRecord) is
+// unchanged. Pass the diff `d` from compare.diff(prior, current); pass a falsy `d` for the empty state.
+function fmtWhen(iso) { try { return String(iso).slice(0, 16).replace('T', ' ') + ' UTC'; } catch (e) { return String(iso || ''); } }
+// Score delta badge. SGEN palette is inverted (a HIGHER score is better), so scoreDelta >= 0 reads as
+// improvement → green ▲; a negative delta reads as worse → red ▼.
+function deltaBadge(n) {
+  const v = Number(n) || 0;
+  return v >= 0
+    ? `<span class="cmpp-delta">▲ +${v}</span>`
+    : `<span class="cmpp-delta neg">▼ −${Math.abs(v)}</span>`;
+}
+
+// Plain-language verdict composed from the REAL transition counts (resolved/fixed/regressed/new/
+// persisting) — a real sentence, not chips. Green tone unless the scan is `worse`. Returns
+// { tone, head, body }: `head` is bolded and color-coded, `body` is the rest of the sentence.
+function verdictLine(d) {
+  const c = d.counts || {};
+  const resolved = c.resolved || 0, fixed = c.fixed || 0;
+  const regressed = c.regressed || 0, neu = c.newIssues || 0, persisting = c.persisting || 0;
+  const gained = resolved + fixed, broke = regressed + neu, worse = !!d.worse;
+
+  const head = worse ? 'Regressed.' : (gained > 0 ? 'Improved.' : 'No change.');
+
+  const gains = [];
+  if (resolved > 0) gains.push(`${resolved} issue${resolved === 1 ? '' : 's'} resolved`);
+  if (fixed > 0) gains.push(`${fixed} fixed`);
+
+  let regClause;
+  if (broke === 0) regClause = 'no regressions';
+  else {
+    const rb = [];
+    if (regressed > 0) rb.push(`${regressed} regressed`);
+    if (neu > 0) rb.push(`${neu} new`);
+    regClause = rb.join(', ');
+  }
+
+  const lead = gains.length ? gains.join(', ') + ', ' + regClause
+                            : regClause.charAt(0).toUpperCase() + regClause.slice(1);
+  const tail = persisting > 0 ? ` — ${persisting} still need${persisting === 1 ? 's' : ''} attention.` : '.';
+  return { tone: worse ? 'bad' : 'good', head, body: lead + tail };
+}
+
+function renderComparePanel(d, meta = {}) {
+  if (!d) {
+    return `<section class="cmpp cmpp-empty" id="cmp-panel"><div class="cmpp-h"><span class="cmpp-tag">Progress</span><h2>vs previous scan</h2></div>`
+      + `<div class="cmpp-first">First scan for this host — no history to compare yet. Re-run the audit after a change and this panel will show exactly what improved or regressed since this scan.</div></section>`;
+  }
+  const c = d.counts || {};
+  const v = verdictLine(d);
+
+  // 5 semantic count cells. good=green, bad=red, warn=amber. A 0 count gets `zero` (dim + colored
+  // top-edge hidden) so the non-zero numbers dominate the eye.
+  const cell = (n, cls, label, sub) =>
+    `<div class="cmpp-cell ${cls}${(n || 0) === 0 ? ' zero' : ''}"><div class="cmpp-top"></div><div class="cmpp-n">${n || 0}</div><div class="cmpp-k">${label}</div><div class="cmpp-sub">${sub}</div></div>`;
+  const cells = cell(c.fixed, 'good', 'Fixed', 'checks now passing')
+    + cell(c.regressed, 'bad', 'Regressed', 'got worse')
+    + cell(c.newIssues, 'bad', 'New', 'new problems')
+    + cell(c.resolved, 'good', 'Resolved', 'issues gone')
+    + cell(c.persisting, 'warn', 'Persisting', 'still failing');
+
+  // Suite trend — header count, then chips with only the movers highlighted (movers first).
+  const suites = d.suites || [];
+  const nUp = suites.filter(s => s.trend === 'improved').length;
+  const nDown = suites.filter(s => s.trend === 'regressed').length;
+  const nSame = suites.filter(s => s.trend === 'same').length;
+  const sumBits = [];
+  if (nUp) sumBits.push(`${nUp} improved`);
+  if (nDown) sumBits.push(`${nDown} regressed`);
+  if (nSame) sumBits.push(`${nSame} unchanged`);
+  const suiteSummary = sumBits.length ? ` — ${sumBits.join(', ')}` : '';
+  const ordered = suites.filter(s => s.trend !== 'same').concat(suites.filter(s => s.trend === 'same'));
+  const chips = ordered.map(s => {
+    if (s.trend === 'improved') return `<span class="cmpp-strend improved"><span class="cmpp-ar">▲</span>${esc(s.name)}</span>`;
+    if (s.trend === 'regressed') return `<span class="cmpp-strend regressed"><span class="cmpp-ar">▼</span>${esc(s.name)}</span>`;
+    return `<span class="cmpp-strend same">= ${esc(s.name)}</span>`;
+  }).join('');
+
+  const priorN = meta.priorCount || 0;
+  const foot = `Auto-compared against the most recent prior scan for this host` + (priorN > 1 ? ` (${priorN} scans on record).` : '.');
+  return `<section class="cmpp" id="cmp-panel">
+  <div class="cmpp-h"><span class="cmpp-tag">Progress</span><h2>vs previous scan</h2><span class="cmpp-when">prior scan · ${esc(fmtWhen(d.a.generated))}</span></div>
+  <div class="cmpp-verdict ${v.tone}"><div class="cmpp-vico">${v.tone === 'bad' ? '!' : '✓'}</div><div class="cmpp-vtxt"><b>${v.head}</b> ${v.body}</div></div>
+  <div class="cmpp-score">
+    <div class="cmpp-sc"><span class="cmpp-lbl">Previous</span><span class="cmpp-prev">${d.a.score}%</span></div>
+    <span class="cmpp-arrow">→</span>
+    <div class="cmpp-sc"><span class="cmpp-lbl">This scan</span><span class="cmpp-now">${d.b.score}%</span></div>
+    ${deltaBadge(d.scoreDelta)}
+  </div>
+  <div class="cmpp-counts">${cells}</div>
+  ${chips ? `<div class="cmpp-suites"><div class="cmpp-slbl">Suite trend${suiteSummary}</div><div class="cmpp-strip">${chips}</div></div>` : ''}
+  <div class="cmpp-foot">${foot}</div>
+</section>`;
+}
+
+module.exports = { renderCompare, renderComparePanel };

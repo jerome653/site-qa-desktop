@@ -90,7 +90,21 @@ async function stableCapture(page, { fullPage = true, path: shotPath, engine = '
   const vp = (page.viewportSize && page.viewportSize()) || {};
   let trimmedTrailingBlank = null;
   if (shotPath) {
-    await page.screenshot({ path: shotPath, fullPage });
+    // scale:'css' captures at CSS-pixel size instead of the context's deviceScaleFactor.
+    //
+    // This matters now that the matrix emulates real device DPR (2 / 3 / 3.75). Playwright's
+    // default, scale:'device', bakes that multiplier into the PNG: a full-page shot of a long page
+    // at 360·Galaxy S (dpr 3) measured **6.70 MB**, and a single audit's report.html reached
+    // **136 MB** — 133 MB of it base64-inlined screenshots. Unsendable, and a regression introduced
+    // by the DPR work itself (the pre-3.0 engine never set deviceScaleFactor, so it was always 1).
+    //
+    // Measured on sgen.com @ 360·Galaxy S, dpr 3:  device 6.70 MB -> css 1.15 MB (-82.9%).
+    //
+    // Crucially this ONLY affects the capture, not the page: devicePixelRatio stays 3 and touch
+    // stays true, so srcset / image-set / retina asset fetching are still genuinely exercised — we
+    // keep the emulation and drop only the pixels nobody reads. Evidence shots are for a human to
+    // look at; they do not need 3x density.
+    await page.screenshot({ path: shotPath, fullPage, scale: 'css' });
     // Trim trailing blank on full-page shots: the fullPage capture is the whole scrollHeight, which often
     // includes a tall empty run of body background below the last real element. Crop the PNG down to the
     // measured content bottom (+ small pad). Guarded so real content is never cut: only when the blank gap
@@ -110,6 +124,26 @@ async function stableCapture(page, { fullPage = true, path: shotPath, engine = '
           }
         }
       } catch (_) { /* keep the untrimmed full-page shot on any error */ }
+    }
+
+    // Write a compressed sibling preview for the report to inline. The PNG stays as the lossless
+    // archive; `<name>.preview.jpg` is what report.html embeds.
+    //
+    // Why here: renderReport() is SYNC and every caller invokes it sync, but sharp's toBuffer() is
+    // Promise-only — compressing there would inline "[object Promise]". This function is already
+    // async and already requires sharp (above), so the preview is built where it can be.
+    //
+    // Why JPEG and not WebP: measured — sharp throws "Processed image is too large for the WebP
+    // format" on these captures. WebP caps at 16383px/side; the worst full-page shot on sgen.com is
+    // 1024x29386px. JPEG has no such limit here.
+    //
+    // Measured on that evidence, 26 inlined shots: raw PNG base64 62.27 MB -> JPEG q82 16.92 MB.
+    if (fullPage && shotPath && /\.png$/i.test(shotPath)) {
+      try {
+        const sharp = require('sharp');
+        const previewPath = shotPath.replace(/\.png$/i, '.preview.jpg');
+        await sharp(shotPath).jpeg({ quality: 82, mozjpeg: true }).toFile(previewPath);
+      } catch (_) { /* no preview -> report.js falls back to the PNG. Never fail a capture over this. */ }
     }
   }
   return {

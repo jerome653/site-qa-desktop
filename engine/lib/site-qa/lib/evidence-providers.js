@@ -35,6 +35,17 @@ const domProvider = {
     if (facts.text) loc.text = String(facts.text).slice(0, 120);
     if (facts.outerHTML) loc.outerHTML = String(facts.outerHTML).slice(0, 400);
     if (facts.visible !== undefined) loc.visible = !!facts.visible;
+    // 2.5.11 — full dom-context so reporters can surface exactly WHERE the element is (developer-centric
+    // report). Additive: strategies/locatorId/text/outerHTML/visible are unchanged.
+    loc.dom = {
+      tag: facts.tag || null,
+      id: facts.id || null,
+      classes: Array.isArray(facts.classes) ? facts.classes : [],
+      attributes: facts.attributes || {},
+      structuralCss: facts.structuralCss || null,
+      xpath: facts.xpath || null,
+      boundingBox: facts.boundingBox || null,
+    };
     return loc;
   },
 };
