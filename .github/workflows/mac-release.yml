@@ -79,8 +79,11 @@ jobs:
 
       # dist:mac already sets CSC_IDENTITY_AUTO_DISCOVERY=false (unsigned, ad-hoc
       # signed by build/after-pack.js). No signing secrets required.
+      # --publish never: package.json build.publish points at github, and
+      # electron-builder auto-publishes in CI (needs GH_TOKEN) — which fails
+      # AFTER the DMG builds. We publish via the gh step below instead.
       - name: Build arm64 DMG
-        run: npm run dist:mac
+        run: npm run dist:mac -- --publish never
 
       - name: List build output
         run: ls -la release/
