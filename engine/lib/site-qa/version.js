@@ -4,6 +4,6 @@
 const { REGISTRY_VERSION } = require('./rules/registry');
 module.exports = {
   ENGINE_VERSION: '2.3.0',   // V2 Phase 1: Finding Contract + Evidence Providers + Developer Locator Objects + 32 rules
-  REPORT_VERSION: '1.3.0',   // + Phase 2 Inspector Lenses (per-lens sub-scores + Interaction Integrity views)
+  REPORT_VERSION: '1.4.0',   // merged findings list (Issues + per-section detail -> one filtered, section-grouped table)
   REGISTRY_VERSION,          // rule metadata version (owned by the registry)
 };

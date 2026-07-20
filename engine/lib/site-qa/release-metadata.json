@@ -1,18 +1,18 @@
 {
-  "packageVersion": "3.1.0",
+  "packageVersion": "4.5.0",
   "engineVersion": "2.3.0",
-  "registryVersion": "1.12.0",
+  "registryVersion": "1.13.0",
   "contractVersion": "1.0.0",
-  "reportVersion": "1.3.0",
+  "reportVersion": "1.4.0",
   "developerEvidenceTier": 1,
-  "ruleCount": 138,
+  "ruleCount": 142,
   "v2RuleCount": 32,
   "evidenceQuality": {
     "verified": 28,
     "derived": 3,
     "heuristic": 1
   },
-  "release": "V2 Phase 2 (lenses)",
+  "release": "Annotate + annotated PDF export extended to Site Audit runs (one-pane sheets), reusing the comparison store/renderer/exporter unchanged",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
@@ -20,6 +20,6 @@
     "near-duplicate content"
   ],
   "generatedAt": "2026-07-15T08:21:48.870Z",
-  "gitTag": "v3.1.0",
+  "gitTag": "v4.5.0",
   "buildBaseCommit": "7103c82"
 }

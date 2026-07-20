@@ -40,6 +40,21 @@ const { FONT_SWEEP, drift, GENERIC } = require('./font-checks');
 const MODES = ['like-for-like', 'redesign'];
 function normalizeMode(m) { return MODES.includes(m) ? m : 'like-for-like'; }
 
+// ── COMPARISON AXES — "what to compare" ─────────────────────────────────────────────────────────────
+// STRUCTURE (element presence / geometry / text / colour) is the spine and is ALWAYS compared — it is
+// the backbone the whole comparison hangs on and is never gated. On TOP of it sit three OPTIONAL sensors
+// the operator can switch off in the pre-check:
+//   • pixel      — the sharp pixel-diff pass (STILL also gated by mode: redesign => off regardless).
+//   • background — the CSS background-image comparison inside structDelta (the rb!==cb block).
+//   • typography — the font-drift sweep (FONT_SWEEP) + drift() compare.
+// Fails TOWARD the status quo, exactly like normalizeMode: absent, non-object, garbage, or all-true =>
+// byte-identical to today. Only an EXPLICIT `false` turns a sensor off — any other value reads as ON —
+// so an old caller that passes no axes and a caller that passes { } are both "everything on".
+function normalizeAxes(a) {
+  const o = (a && typeof a === 'object') ? a : {};
+  return { pixel: o.pixel !== false, background: o.background !== false, typography: o.typography !== false };
+}
+
 // ── REAL DEVICES ──────────────────────────────────────────────────────────────────────────────────
 // Verified against each vendor's published spec (native px ÷ scale factor), 2026-07-15. Sourcing:
 // docs/sgen-site-qa/VIEWPORT-MATRIX-FIX-SPEC.md §7. Dense across the phone band where most real-world
@@ -104,8 +119,13 @@ const READ = `(function(){
   function vis(el){ if(!el.getClientRects().length) return false; var s=getComputedStyle(el); if(s.visibility==='hidden'||s.display==='none'||+s.opacity===0) return false; var r=el.getBoundingClientRect(); return r.width>1&&r.height>1; }
   function secOf(el){ var n=el,L={header:1,nav:1,main:1,footer:1,section:1,article:1,aside:1}; while(n&&n.nodeType===1){ if(L[n.tagName.toLowerCase()]) return n.tagName.toLowerCase(); n=n.parentElement; } return 'body'; }
   function nearestHeading(el){ var sc=el,L={header:1,nav:1,main:1,footer:1,section:1,article:1,aside:1}; while(sc&&sc.nodeType===1){ if(L[sc.tagName.toLowerCase()])break; sc=sc.parentElement; } sc=sc||document.body; var h='',all=sc.querySelectorAll('h1,h2,h3'); for(var i=0;i<all.length;i++){ if(all[i].compareDocumentPosition(el)&Node.DOCUMENT_POSITION_FOLLOWING) h=(all[i].textContent||'').trim().slice(0,50); } return h; }
+  // background-image identity: the file name from a url(...) background, 'gradient' for a gradient, or ''
+  // for none. Mirrors how <img> src is reduced to a filename below, so a CSS background and an <img> read
+  // comparably. String-only parse (no backslash-escaped regex) so the READ template stays literal-safe.
+  // This is the field the structural comparison was blind to before v5 ("ignores background images").
+  function bgUrl(cs){ var b=cs.backgroundImage; if(!b||b==='none') return ''; var i=b.indexOf('url('); if(i>=0){ var s2=b.slice(i+4); var c=s2.indexOf(')'); var inner=(c<0?s2:s2.slice(0,c)).trim().replace(/^["']+|["']+$/g,''); return (inner.split('/').pop()||'').slice(0,60); } return /gradient/i.test(b)?'gradient':''; }
   var TAGS='h1,h2,h3,h4,p,a,button,img,ul,ol,section,header,footer,nav,form,input,label,table,figure,blockquote,[role=button]';
-  var out=[], seen=0;
+  var out=[], seen=0, capEls=new Set();
   Array.prototype.forEach.call(document.querySelectorAll(TAGS),function(el){
     if(seen>1200||!vis(el))return; seen++;
     var r=el.getBoundingClientRect(), s=getComputedStyle(el);
@@ -113,6 +133,7 @@ const READ = `(function(){
     var href=(el.tagName==='A')?((el.getAttribute('href')||'').replace(location.origin,'').trim().slice(0,60)):'';
     var aria=(el.getAttribute('aria-label')||el.getAttribute('title')||'').trim().slice(0,60);
     var ialt='';if(!txt&&el.querySelector){var im=el.querySelector('img');if(im)ialt=(im.getAttribute('alt')||'').trim().slice(0,60);}
+    capEls.add(el);
     out.push({
       tag: el.tagName.toLowerCase(),
       sec: secOf(el),
@@ -124,8 +145,27 @@ const READ = `(function(){
       weight: s.fontWeight,
       color: s.color,
       bg: s.backgroundColor,
+      bgImg: bgUrl(s),
       src: el.tagName==='IMG'?((el.currentSrc||el.src||'').split('/').pop()||'').slice(0,60):''
     });
+  });
+  // Supplementary sweep — elements carrying a real url() BACKGROUND IMAGE that the semantic TAGS set
+  // above misses (hero <div>s, CSS-art panels). Bounded: visible, >=40x40, deduped against the main set,
+  // capped at 300 records / 6000 elements examined so it can never dominate capture runtime. Without this
+  // a redesign that drops or swaps a hero background stays invisible to the structural comparison.
+  var bgSeen=0, examined=0;
+  Array.prototype.forEach.call(document.querySelectorAll('*'),function(el){
+    if(bgSeen>=300||examined>=6000) return; examined++;
+    if(capEls.has(el)) return;
+    var cs=getComputedStyle(el); var fn=bgUrl(cs);
+    if(!fn||fn==='gradient') return;                 // only real image backgrounds carry section art
+    if(!vis(el)) return;
+    var r=el.getBoundingClientRect(); if(r.width<40||r.height<40) return;
+    bgSeen++;
+    out.push({ tag: el.tagName.toLowerCase(), sec: secOf(el), head: nearestHeading(el),
+      text:'', href:'', aria:(el.getAttribute('aria-label')||'').trim().slice(0,60), ialt:'',
+      x: Math.round(r.left), y: Math.round(r.top+window.scrollY), w: Math.round(r.width), h: Math.round(r.height),
+      font:'', size:0, weight:'', color:cs.backgroundColor, bg:cs.backgroundColor, bgImg:fn, src:'', isBg:1 });
   });
   return { url: location.href, docHeight: document.documentElement.scrollHeight, count: out.length, els: out };
 })();`;
@@ -142,6 +182,28 @@ function pairByPath(aPages, bPages, urlMap) {
     if (bByPath[target]) pairs.push({ path: ap, a: a.url, b: bByPath[target] });
   }
   return pairs;
+}
+
+// Explain an EMPTY comparison. A visual comparison that yields zero page pairs otherwise completes as a
+// silent "success" (pairs:0, no report) and the operator cannot tell WHY — most often because the
+// REFERENCE returned non-200 (a WAF 403, or a connection failure) so aHtml came back empty. Pure + total
+// over the shape run() already computes: returns null when the comparison is healthy (pairs.length > 0),
+// else { ok:false, reason, message } naming the cause in operator language. refStatuses / candStatuses are
+// the DISTINCT HTTP status numbers seen crawling each side (0 = a fetch/connection failure). No browser,
+// no I/O — unit-testable, and additive: an existing caller that ignores the field is unaffected.
+function diagnoseEmpty({ aHtml = [], bHtml = [], refStatuses = [], candStatuses = [], pairs = [] } = {}) {
+  if (pairs.length > 0) return null;
+  // one wording rule, applied to whichever side came back empty (site = the noun, urlNoun = the URL label)
+  const explain = (statuses, site, urlNoun) => {
+    const blocked = statuses.find(s => s === 401 || s === 403);
+    if (blocked != null) return `The ${site} blocked this scanner (HTTP ${blocked}). It is likely blocking this scanner's IP — ask the site owner to allowlist it, or point at a source this tool can reach.`;
+    if (statuses.includes(0) || statuses.length === 0) return `Could not connect to the ${site} (DNS or connection failure). Check the ${urlNoun} URL is correct and reachable.`;
+    return `The ${site} returned no crawlable pages (statuses: ${statuses.join(', ')}).`;
+  };
+  if (aHtml.length === 0) return { ok: false, reason: 'reference-unreachable', message: explain(refStatuses, 'reference site', 'reference') };
+  if (bHtml.length === 0) return { ok: false, reason: 'candidate-unreachable', message: explain(candStatuses, 'candidate (staging) site', 'candidate') };
+  if (pairs.length === 0) return { ok: false, reason: 'no-common-pages', message: 'Both sites were reachable, but they share no matching page paths — check the reference and target URLs line up (same paths on live vs staging).' };
+  return null;
 }
 
 // pixel mismatch % between two PNG files (candidate resized to reference size). Needs sharp.
@@ -164,7 +226,12 @@ async function pixelDiff(refPng, candPng, outDiff) {
 }
 
 // structural delta: match elements by (section + tag + text|head), report unmatched + moved + restyled.
-function structDelta(refEls, candEls) {
+// opts.background = compare CSS background-image (the rb!==cb block below). Default (no opt / anything not
+// === false) = compare, i.e. v5 behaviour byte-for-byte. axes.background:false threads through here to
+// SKIP only that block; structure/text/font/size/colour comparison is untouched. Fails toward the status
+// quo — an existing caller with no third arg keeps comparing backgrounds.
+function structDelta(refEls, candEls, opts = {}) {
+  const compareBg = opts.background !== false;
   const key = e => `${e.sec}|${e.tag}|${(e.text || e.head || e.src || '').toLowerCase().slice(0, 40)}`;
   const candBy = {}; candEls.forEach(e => { (candBy[key(e)] = candBy[key(e)] || []).push(e); });
   const missing = [], moved = [], restyled = [], matched = [];
@@ -180,7 +247,18 @@ function structDelta(refEls, candEls) {
     if (r.font && c.font && r.font.toLowerCase() !== c.font.toLowerCase()) styleDiffs.push(`font ${r.font}→${c.font}`);
     if (r.size && c.size && Math.abs(r.size - c.size) > 2) styleDiffs.push(`size ${r.size}→${c.size}px`);
     if (r.color !== c.color) styleDiffs.push(`color ${r.color}→${c.color}`);
-    if (styleDiffs.length) restyled.push({ el: r, diffs: styleDiffs });
+    // background-image: the axis the structural comparison was blind to before v5. A matched element that
+    // lost, gained, or swapped its CSS background is a real design difference — and it is the ONLY sensor
+    // for backgrounds on a redesign-mode run (pixel pass off). Tagged bg:true so the grader can weight a
+    // background change (DEFECT) distinctly from a text-colour tweak.
+    const rb = r.bgImg || '', cb = c.bgImg || '';
+    const bgChanged = compareBg && rb !== cb;   // axes.background:false => never flag a bg diff (block skipped)
+    if (bgChanged) {
+      if (rb && !cb) styleDiffs.push(`background removed (${rb})`);
+      else if (!rb && cb) styleDiffs.push(`background added (${cb})`);
+      else styleDiffs.push(`background ${rb}→${cb}`);
+    }
+    if (styleDiffs.length) restyled.push({ el: r, diffs: styleDiffs, bg: bgChanged });
   }
   let extra = candEls.filter(e => !usedCand.has(e));
   // Relocation pass: an element that went "missing" from one landmark but reappears (same tag + identity)
@@ -251,11 +329,12 @@ async function readAndShoot(browser, url, vp, shotPath, warmLoads = 3, opts = {}
   return read;
 }
 
-async function run(refUrl, candUrl, { maxPages = 20, urlMap = null, outDir, viewports = null, warmLoads = 3, mode = 'like-for-like', log = () => {}, progress = () => {} } = {}) {
+async function run(refUrl, candUrl, { maxPages = 20, urlMap = null, outDir, viewports = null, warmLoads = 3, mode = 'like-for-like', axes = null, log = () => {}, progress = () => {} } = {}) {
   const VPS = (Array.isArray(viewports) && viewports.length) ? viewports : VIEWPORTS;
   const warm = clampWarmLoads(warmLoads);   // total loads per capture, clamped to [1,5]
   const MODE = normalizeMode(mode);
-  const pixelOn = MODE === 'like-for-like';
+  const AXES = normalizeAxes(axes);         // "what to compare" — absent/all-true => today's behaviour
+  const pixelOn = (MODE === 'like-for-like') && AXES.pixel;   // pixel gated by BOTH mode and the axis
   log(`Warm-up loads per capture: ${warm} (applied to reference + candidate, every viewport).`);
   log(pixelOn
     ? 'Comparison mode: like-for-like — pixel pass ON (same design, new platform).'
@@ -270,6 +349,11 @@ async function run(refUrl, candUrl, { maxPages = 20, urlMap = null, outDir, view
   const bHtml = B.pages.filter(p => p.status === 200);
   const pairs = pairByPath(aHtml, bHtml, urlMap);
   const unmatchedRef = aHtml.map(p => pathOf(p.url)).filter(pp => !pairs.find(x => x.path === pp));
+  // Distinct HTTP statuses seen on each crawl (0 = fetch/connection failure), and the diagnosis of an
+  // EMPTY pairing — so a blocked/unreachable reference reports the REASON instead of a silent 0-pair run.
+  const refStatuses = [...new Set((A.pages || []).map(p => p.status))];
+  const candStatuses = [...new Set((B.pages || []).map(p => p.status))];
+  const diagnostic = diagnoseEmpty({ aHtml, bHtml, refStatuses, candStatuses, pairs });
   log(`Paired ${pairs.length} page(s) by path (${unmatchedRef.length} reference page(s) with no candidate match).`);
 
   const browser = await chromium.launch({ headless: true });
@@ -290,7 +374,9 @@ async function run(refUrl, candUrl, { maxPages = 20, urlMap = null, outDir, view
       // `1920 · Desktop`: dpr1, no touch, no UA — the nearest thing this engine has to the pinned
       // metrics context checks-render.js uses for the same reason). Running it inside this loop would
       // emit the identical finding once per viewport — 13x duplicates on the default matrix.
-      const sweepHere = vps.length === 0;
+      // typography axis: OFF => never run FONT_SWEEP and never call drift(); fontDrift stays null, so the
+      // page result simply omits the fontDrift block (same shape as a pair whose sweep didn't complete).
+      const sweepHere = (vps.length === 0) && AXES.typography;
       const refRead = await readAndShoot(browser, pr.a, vp, refShot, warm, { fontSweep: sweepHere });
       const candRead = await readAndShoot(browser, pr.b, vp, candShot, warm, { fontSweep: sweepHere });
       if (sweepHere && refRead.fontSweep && candRead.fontSweep) {
@@ -314,7 +400,7 @@ async function run(refUrl, candUrl, { maxPages = 20, urlMap = null, outDir, view
       if (pixelOn) {
         try { if (fs.existsSync(refShot) && fs.existsSync(candShot)) pix = await pixelDiff(refShot, candShot, diffShot); } catch (e) { pix = { pct: null, note: e.message }; }
       } else pix = { pct: null, note: 'pixel pass off — redesign mode' };
-      const sd = structDelta(refRead.els || [], candRead.els || []);
+      const sd = structDelta(refRead.els || [], candRead.els || [], { background: AXES.background });
       const visScore = pix.pct == null ? null : Math.max(0, +(100 - pix.pct).toFixed(1));
       const matchScore = (visScore == null) ? sd.structScore : +(((sd.structScore + visScore) / 2)).toFixed(1);
       vps.push({ label: vp.label, pixelMismatchPct: pix.pct, visScore, struct: sd, matchScore,
@@ -337,7 +423,8 @@ async function run(refUrl, candUrl, { maxPages = 20, urlMap = null, outDir, view
   // can read it off the artifact instead of being re-told out of band.
   return { reference: refUrl, candidate: candUrl, generated: new Date().toISOString(), overall,
     pairs: pairs.length, unmatchedRef, viewports: VPS.map(v => v.label), warmLoads: warm, mode: MODE,
-    pixelPass: pixelOn, pages: pageResults, sharp: !!sharp };
+    axes: AXES, pixelPass: pixelOn, pages: pageResults, sharp: !!sharp,
+    refStatuses, candStatuses, diagnostic };
 }
 
-module.exports = { run, readAndShoot, clampWarmLoads, normalizeMode, MODES, VIEWPORTS, DEVICES, BREAKPOINTS, UA, contextOptionsFor, structDelta, pixelDiff, pairByPath, pathOf };
+module.exports = { run, readAndShoot, clampWarmLoads, normalizeMode, normalizeAxes, MODES, VIEWPORTS, DEVICES, BREAKPOINTS, UA, contextOptionsFor, structDelta, pixelDiff, pairByPath, pathOf, diagnoseEmpty };

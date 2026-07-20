@@ -154,23 +154,33 @@ function buildExportModel(data, ann, opts = {}) {
     return { marks: it.marks || [], comments: it.comments || [] };
   };
 
+  // The pane list is data-driven so a ONE-pane source can reuse this whole path. A visual-match run
+  // supplies no spec and gets exactly the pair it always got — same panes, same order, same keys —
+  // so its output is unchanged. `v.shots.diff` is still never read, by either spec.
+  const spec = (Array.isArray(data.paneSpec) && data.paneSpec.length) ? data.paneSpec : [
+    { pane: 'ref',  title: 'REFERENCE · live',    urlKey: 'ref' },
+    { pane: 'cand', title: 'CANDIDATE · staging', urlKey: 'cand' },
+  ];
+
   const pages = [];
   for (const p of (data.pages || [])) {
     const viewports = [];
     for (const v of (p.viewports || [])) {
-      const refB = bucket(p.path, v.label, 'ref');
-      const candB = bucket(p.path, v.label, 'cand');
-      const n = refB.marks.length + refB.comments.length + candB.marks.length + candB.comments.length;
+      const buckets = spec.map(s => bucket(p.path, v.label, s.pane));
+      const n = buckets.reduce((a, b) => a + b.marks.length + b.comments.length, 0);
       if (onlyAnnotated && !n) continue;
       viewports.push({
         label: v.label,
         matchScore: v.matchScore,
         annotationCount: n,
-        // Two panes. Exactly two. `v.shots.diff` is intentionally not read.
-        panes: [
-          { pane: 'ref',  title: 'REFERENCE · live',      url: p.ref,  shot: fwd(v.shots && v.shots.ref),  marks: refB.marks,  comments: refB.comments },
-          { pane: 'cand', title: 'CANDIDATE · staging',   url: p.cand, shot: fwd(v.shots && v.shots.cand), marks: candB.marks, comments: candB.comments },
-        ],
+        panes: spec.map((s, i) => ({
+          pane: s.pane,
+          title: s.title,
+          url: p[s.urlKey || s.pane] || null,
+          shot: fwd(v.shots && v.shots[s.pane]),
+          marks: buckets[i].marks,
+          comments: buckets[i].comments,
+        })),
       });
     }
     if (!viewports.length) continue;
@@ -186,9 +196,67 @@ function buildExportModel(data, ann, opts = {}) {
     reference: data.reference, candidate: data.candidate,
     domain: domainOf(data.reference),
     overall: data.overall,
+    mode: data.mode === 'audit' ? 'audit' : 'compare',   // cover copy only; sheets are identical
     generated: new Date().toISOString(),
     onlyAnnotated,
     pages, totals,
+  };
+}
+
+// ---- Site Audit adapter -------------------------------------------------------------------------
+// Annotate was Site-Comparison-only: a Site Audit run has ONE screenshot per page+viewport rather
+// than a live/staging PAIR, so it could not be fed through the two-pane model and /annotate/<id>
+// answered "comparison run not found" for every audit. Reported as "the annotate options we got and
+// export pdf is not working" — the option simply was not offered on the tool being used.
+//
+// This reshapes an audit report.json into the SAME `data` contract buildExportModel consumes, with a
+// one-pane spec. Everything downstream — the annotation store, the key format, the sanitizer, the
+// live page, the print body and the PDF exporter — is reused untouched. No second implementation of
+// any of it, and nothing about the comparison path changes.
+//
+// Only FULL-PAGE shots become sheets. A run also carries per-issue element close-ups (measured on a
+// real 15-page run: 114 close-ups vs 47 full-page shots), and turning each into its own markup sheet
+// would bury the pages the operator actually wants to draw on. Close-ups stay attached to their
+// findings in the report, where they already are and where they make sense.
+function auditToModelData(report, runDir) {
+  // report.json stores ABSOLUTE screenshot paths, and the annotate page can only serve files from
+  // INSIDE the run dir (serveAnnotateAsset joins RUNS/<id>/<rest> and refuses anything that escapes).
+  // So a run that has been copied or moved — the normal life of a report you are marking up to send
+  // on — produced paths resolving outside the run, which Chromium then blocked as file:/// URLs:
+  // 47 sheets, every image dead. Measured against a real run copied to a second location.
+  // Resolve relative first; if that escapes, fall back to the file's own name under screenshots/,
+  // which is where the capture always writes it. Both are inside the run, so both are servable.
+  const relShot = (f) => {
+    try {
+      const r = path.relative(runDir, f).replace(/\\/g, '/');
+      if (r && !r.startsWith('..') && !path.isAbsolute(r)) return r;
+    } catch (_) {}
+    const base = String(f || '').replace(/\\/g, '/').split('/').pop();
+    if (!base) return null;
+    try { if (fs.existsSync(path.join(runDir, 'screenshots', base))) return 'screenshots/' + base; } catch (_) {}
+    return null;
+  };
+  const pathOf = (u) => { try { const x = new URL(u); return x.pathname === '/' ? '/' : x.pathname; } catch (e) { return String(u || '/'); } };
+  const pages = [];
+  for (const [url, arr] of Object.entries((report && report.shots) || {})) {
+    const viewports = [];
+    for (const s of (Array.isArray(arr) ? arr : [])) {
+      if (!s || s.issue || !s.file) continue;              // close-ups carry `issue`; skip them
+      const shot = relShot(s.file);
+      if (!shot) continue;                                 // no servable file => no sheet, rather than an empty pane
+      viewports.push({ label: s.label, matchScore: null, shots: { shot } });
+    }
+    if (!viewports.length) continue;
+    pages.push({ path: pathOf(url), ref: url, cand: null, pageScore: null, viewports });
+  }
+  pages.sort((a, b) => a.path.localeCompare(b.path));
+  return {
+    mode: 'audit',
+    reference: report.target || (report.host ? 'https://' + report.host + '/' : ''),
+    candidate: null,
+    overall: (report.quality && report.quality.overall != null) ? report.quality.overall : (report.score != null ? report.score : null),
+    paneSpec: [{ pane: 'shot', title: 'SCREENSHOT', urlKey: 'ref' }],
+    pages,
   };
 }
 
@@ -196,5 +264,5 @@ module.exports = {
   ANN_VERSION, ANN_FILE, EXPORTS_DIRNAME,
   annKey, sanitizeMark, sanitizeComment, sanitizeAnnotations,
   loadAnnotations, saveAnnotations, countAnnotations,
-  domainOf, todayStamp, nextExportName, buildExportModel,
+  domainOf, todayStamp, nextExportName, buildExportModel, auditToModelData,
 };

@@ -361,6 +361,8 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
   catch (e) { log(`Playwright launch failed (${e.message}) — skipping render pass. Run: npx playwright install chromium`); return { findings: [], shots: {}, rendered: 0, sampled: 0, total: pageUrls.length, error: e.message }; }
 
   let rendered = 0;
+  // Pages where the PRIMARY (Chromium) navigation did not complete. See the push site below.
+  const navFailures = [];
   for (const url of targets) {
     // Per-label buffers. Context groups run in group order; findings and screenshots are EMITTED in
     // matrix order below, so the report ordering is identical to the single-context version.
@@ -402,7 +404,16 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
     try {
       await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
       await page.waitForTimeout(1200);
-    } catch (e) { consoleErr.push('[navigation] ' + (e.message || '').slice(0, 160)); }
+    } catch (e) {
+      consoleErr.push('[navigation] ' + (e.message || '').slice(0, 160));
+      // ALSO recorded structurally. Buried in consoleErr this was invisible as what it is: the PRIMARY
+      // engine failing to finish navigating. Measured 2026-07-20 — the same page timed out here and was
+      // swallowed into a console line, while the cross-browser suite turned the identical timeout into
+      // a tier-1 LAUNCH BLOCKER against WebKit. Same failure, two verdicts, and the loud one blamed the
+      // wrong thing: a slow page read as a Safari incompatibility. audit.js uses this to attribute the
+      // cross-browser row honestly. Additive — no finding, no rule, no scoring change.
+      navFailures.push({ url, err: (e.message || '').split('\n')[0].slice(0, 160) });
+    }
 
     // consent-class overlays (cookie banner / age gate / T&C modal): dismiss deterministically so the
     // audit sees the real page. Everything clicked is recorded; a STILL-blocking overlay is flagged —
@@ -613,6 +624,7 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
     sweepFailures,
     axeRan, axeAvailable: !!AXE_SRC,
     unverified,
+    navFailures,
   };
 }
 

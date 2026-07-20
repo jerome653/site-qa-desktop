@@ -49,6 +49,11 @@ const CSS = `
 .sh-vp{font-family:var(--mono);font-size:11px;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:2px 9px}
 .sh-n{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);margin-left:auto}
 .panes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+/* A Site Audit sheet has ONE pane (its own screenshot), not a live/staging pair. Without this it
+   would render at half width against dead space, and the mark coordinates — normalised against the
+   pane box — would be drawn on a needlessly small target. :has() is safe here: both the app and the
+   PDF renderer are the same bundled Chromium. */
+.panes:has(> .pane:only-child){grid-template-columns:1fr}
 .pane{margin:0;min-width:0}
 .pane figcaption{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px}
 .pane figcaption i{width:7px;height:7px;border-radius:50%;background:var(--ink-faint);flex:none}
@@ -244,20 +249,25 @@ function sheetHtml(p, v, mode) {
 function annKeyAttr(pagePath, vpLabel, pane) { return `${pagePath}||${vpLabel}||${pane}`; }
 
 function coverHtml(model) {
+  // An audit has no candidate and no match score, so the cover must not print "Live vs staging" or a
+  // MATCH percentage over a single-site run — that would describe a comparison that never happened.
+  const isAudit = model.mode === 'audit';
   return `<section class="cover">
-    <p class="ann-eyebrow">SGEN Site QA · Site Comparison</p>
+    <p class="ann-eyebrow">SGEN Site QA · ${isAudit ? 'Site Audit' : 'Site Comparison'}</p>
     <h1 class="ann-h1" style="font-size:30px">${esc(model.domain)}</h1>
-    <p class="ann-sub" style="font-size:14px;margin-top:8px">Live vs staging, annotated.</p>
+    <p class="ann-sub" style="font-size:14px;margin-top:8px">${isAudit ? 'Audited screenshots, annotated.' : 'Live vs staging, annotated.'}</p>
     <div style="margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--ink-soft);line-height:2">
-      <div><span style="color:var(--ink-faint)">REFERENCE (live)&nbsp;&nbsp;</span>${esc(model.reference)}</div>
-      <div><span style="color:var(--ink-faint)">CANDIDATE (staging)</span>&nbsp;&nbsp;${esc(model.candidate)}</div>
-      <div><span style="color:var(--ink-faint)">OVERALL MATCH&nbsp;&nbsp;&nbsp;&nbsp;</span>${model.overall}%</div>
+      <div><span style="color:var(--ink-faint)">${isAudit ? 'SITE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' : 'REFERENCE (live)&nbsp;&nbsp;'}</span>${esc(model.reference)}</div>
+      ${isAudit ? '' : `<div><span style="color:var(--ink-faint)">CANDIDATE (staging)</span>&nbsp;&nbsp;${esc(model.candidate)}</div>`}
+      ${model.overall == null ? '' : `<div><span style="color:var(--ink-faint)">${isAudit ? 'QUALITY&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' : 'OVERALL MATCH&nbsp;&nbsp;&nbsp;&nbsp;'}</span>${model.overall}%</div>`}
       <div><span style="color:var(--ink-faint)">SHEETS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>${model.totals.sheets} (page × viewport)</div>
       <div><span style="color:var(--ink-faint)">ANNOTATIONS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>${model.totals.annotations}</div>
       <div><span style="color:var(--ink-faint)">EXPORTED&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>${esc(model.generated)}</div>
       ${model.exportName ? `<div><span style="color:var(--ink-faint)">FILE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>${esc(model.exportName)}</div>` : ''}
     </div>
-    <p class="ann-sub" style="margin-top:20px;max-width:150mm">Each sheet below pairs the live page (left) with the staging rebuild (right) at one viewport, carrying the marks and comments added in the app. Numbered marks correspond to the numbered notes under each sheet.</p>
+    <p class="ann-sub" style="margin-top:20px;max-width:150mm">${isAudit
+      ? 'Each sheet below is one audited page at one viewport, carrying the marks and comments added in the app.'
+      : 'Each sheet below pairs the live page (left) with the staging rebuild (right) at one viewport, carrying the marks and comments added in the app.'} Numbered marks correspond to the numbered notes under each sheet.</p>
   </section>`;
 }
 

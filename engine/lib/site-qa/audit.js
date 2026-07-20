@@ -396,8 +396,73 @@ function formAudit(htmlPages) {
   return { forms, problems };
 }
 
-async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 12, render = true, viewports = null, screensDir, log = () => {}, progress = () => {}, bus = createBus(), collectPages = false } = {}) {
+// ---- page coverage (pure): which pages WERE audited, which errored, which were never reached ----
+// Additive report surface so the operator can SEE crawl coverage instead of a bare page count. Fully
+// guarded: a missing/old `crawl` or `htmlPages` yields empty arrays + zero counts and never throws, so
+// an old result/report without pageCoverage is unaffected. Exported for evaluation-ledger-style tests.
+function buildPageCoverage(crawl, htmlPages) {
+  const c = crawl || {};
+  const pages = Array.isArray(c.pages) ? c.pages : [];
+  const audited = (htmlPages || []).map(p => p.url);
+  const auditedSet = new Set(audited);
+  // errored = fetched but NOT audited (non-200 e.g. 404/403/redirect, or non-html). Cap for huge sites.
+  const errored = pages.filter(p => !auditedSet.has(p.url)).map(p => ({ url: p.url, status: p.status })).slice(0, 500);
+  const fetchedSet = new Set(pages.map(p => p.url));
+  // notReached = sitemap URLs we never fetched (crawl capped by maxPages). Cap for huge sites.
+  const notReached = (Array.isArray(c.sitemapUrls) ? c.sitemapUrls : []).filter(u => !fetchedSet.has(u)).slice(0, 500);
+  return {
+    audited,
+    errored,
+    notReached,
+    capped: !!c.capped,
+    maxPages: c.maxPages,
+    counts: {
+      audited: audited.length,
+      errored: errored.length,
+      notReached: notReached.length,
+      discovered: audited.length + errored.length + notReached.length,
+    },
+  };
+}
+
+// ---- OPERATOR SKIP: unticking a whole section means it does not RUN --------------------------
+// `skipSuites` is the honest half of the settings popup's scope tree. Excluding rules from the SCORE
+// (opts.excludeRules, score.js) always ran the check anyway and still printed it — correct for a
+// partial selection, but it made "I turned SEO off" a lie: SEO still crawled, still filled the
+// Issues list, still gated launch readiness. Here a suite the operator switched off entirely is
+// GENUINELY NOT EXECUTED, is absent from `suites` (so it reaches neither the Issues list nor the
+// per-section detail, and cannot move the tally, verdict or readiness gate), and its registry rules
+// are declared NOT EVALUATED so score.js drops them from BOTH sides of the ratio.
+//
+// Granularity is the SUITE, deliberately. Detection code is interleaved per page across rules inside
+// shared batch modules (BATCH_IDS), so a per-rule skip cannot be honoured without pretending — an
+// unticked rule inside a still-running suite therefore stays a SCORING exclusion, which is what
+// excludeRules already means. Suite off = did not run; single rule off = ran, not counted.
+//
+// The direction of the lie matters, so note which way this one falls: a skipped suite REMOVES its
+// weight from the mean rather than banking it as resolved risk (score.js's evaluatedRules path), so
+// skipping cannot buy a higher score for the site — it can only narrow what the score covers. The
+// caller is responsible for disclosing that narrowing; sgen-qa-serve.js renders the scope panel
+// above the number for exactly that reason.
+function normalizeSkip(skipSuites) {
+  const valid = new Set(SUITES.map(s => s.key));
+  const out = new Set((Array.isArray(skipSuites) ? skipSuites : []).filter(k => valid.has(k)));
+  // Skipping EVERY suite would emit a scoreless, sectionless report that still calls itself an audit.
+  // Refuse it here rather than rendering something meaningless: an all-off selection audits normally.
+  if (out.size >= valid.size) out.clear();
+  return out;
+}
+
+async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 12, render = true, viewports = null, screensDir, log = () => {}, progress = () => {}, bus = createBus(), collectPages = false, skipSuites = [] } = {}) {
   const host = new URL(url).host;
+  const skipped = normalizeSkip(skipSuites);
+  const isSkipped = (k) => skipped.has(k);
+  const skipCheck = (id) => isSkipped(STATIC_SUITE[id]);
+  // A batch module emits several families at once, so it can only be skipped when EVERY family it
+  // feeds belongs to a switched-off suite. A partially-skipped batch still runs; its rows for the
+  // skipped suite are dropped with that suite at assembly.
+  const skipBatch = (ids) => ids.every(skipCheck);
+  if (skipped.size) log(`Sections switched off by the operator (not run): ${[...skipped].join(', ')}`);
   bus.fire('scan.started', { url, host, versions: VERSIONS });
   log(`\n=== SGEN Site QA · ${url} ===`);
   progress(4, 'starting scan');
@@ -425,6 +490,7 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     for (const chk of STATIC_CHECKS) {
       if (chk.id === 'staging-leak') continue; // migration-only
       if (chk.id === 'security-headers') continue; // qa-site uses granular SEC-011..015 (checks-security); SEC-010 roll-up is qa-migration only
+      if (skipCheck(chk.id)) continue; // operator switched this whole section off — do not run it, do not mark the ledger
       let r, threw = null;
       try { r = chk.fn(ctx, { env: 'live', host }); } catch (e) { r = null; threw = e; }
       // The catch above still swallows, because one bad page must not abort the crawl — but the
@@ -436,16 +502,16 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     }
     // Batch modules: ONE throw takes out every family in the batch, so the ledger marks them all.
     // Interaction Integrity (Batch 1) — dead links/buttons, nesting, disabled-active. Static + deterministic.
-    if (ctx.isHtml && p.status === 200) { try { interactionCheck(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.interaction, true); } catch (e) { ledger.markAll(BATCH_IDS.interaction, false, e); } }
+    if (ctx.isHtml && p.status === 200 && !skipBatch(BATCH_IDS.interaction)) { try { interactionCheck(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.interaction, true); } catch (e) { ledger.markAll(BATCH_IDS.interaction, false, e); } }
     // Security Batch 2 — granular headers, cookies, dangerous JS, password/login transport (per page).
-    if (p.status === 200) { try { securityPageChecks(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.securityPage, true); } catch (e) { ledger.markAll(BATCH_IDS.securityPage, false, e); } }
+    if (p.status === 200 && !skipBatch(BATCH_IDS.securityPage)) { try { securityPageChecks(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.securityPage, true); } catch (e) { ledger.markAll(BATCH_IDS.securityPage, false, e); } }
     // SEO Batch 3 — hreflang, indexability-signal conflicts, thin content, readability (per page).
-    if (ctx.isHtml && p.status === 200) { try { seoPageChecks(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.seoPage, true); } catch (e) { ledger.markAll(BATCH_IDS.seoPage, false, e); } }
+    if (ctx.isHtml && p.status === 200 && !skipBatch(BATCH_IDS.seoPage)) { try { seoPageChecks(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.seoPage, true); } catch (e) { ledger.markAll(BATCH_IDS.seoPage, false, e); } }
     // Stability Batch 4 — duplicate ids, DOM size, form field semantics, mailto/tel validity (per page).
-    if (ctx.isHtml && p.status === 200) { try { stabilityPageChecks(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.stabilityPage, true); } catch (e) { ledger.markAll(BATCH_IDS.stabilityPage, false, e); } }
+    if (ctx.isHtml && p.status === 200 && !skipBatch(BATCH_IDS.stabilityPage)) { try { stabilityPageChecks(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.stabilityPage, true); } catch (e) { ledger.markAll(BATCH_IDS.stabilityPage, false, e); } }
     // The cross-page duplicate roll-ups below are fed from HERE, so their evidence is this page, not
     // a STATIC_CHECKS entry — without these marks they would look "never run" on every site.
-    if (pageIsHtml) ledger.markAll(['duplicate-title', 'duplicate-description'], true);
+    if (pageIsHtml && !isSkipped('seo')) ledger.markAll(['duplicate-title', 'duplicate-description'], true);
     if (ctx.isHtml && p.status === 200 && ctx.title) (titles[ctx.title] = titles[ctx.title] || []).push(p.url);
     // `descs` was declared and never read: SEO-010 (duplicate-description) had NO detection code
     // anywhere in the product, yet PASS_LABEL printed "Meta descriptions are unique" on every scan —
@@ -470,6 +536,7 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   // 4) site-level checks (robots/sitemap/404/https)
   const { SITE_CHECKS } = require('../migration-qa/checks-static');
   for (const chk of SITE_CHECKS) {
+    if (skipCheck(chk.id)) continue; // section switched off (robots-txt/sitemap are SEO; 404-config is Links)
     let r, threw = null;
     try { r = await chk.fn({ origin: crawl.origin, host, env: 'live', http, crawl }); } catch (e) { r = null; threw = e; }
     // 404-config and https-enforce probe the origin themselves and return null BOTH when the probe
@@ -479,7 +546,7 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     if (r) (Array.isArray(r) ? r : [r]).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f));
   }
   // Security Batch 2 — site-level exposure probes (.git / config / backup / dir-listing), once per origin.
-  if (originResponded) {
+  if (originResponded && !skipBatch(BATCH_IDS.securitySite)) {
     try { (await securitySiteProbes(crawl.origin, http, log)).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.securitySite, true); }
     catch (e) { ledger.markAll(BATCH_IDS.securitySite, false, e); }
   }
@@ -503,8 +570,12 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   if (/^https:/i.test(crawl.origin)) { try { tls = await tlsCheck(host); } catch (e) { tls = { reachable: false, error: String(e && e.message || e) }; } }
 
   // 7) real cross-browser render (free Firefox + WebKit engines; degrades to manual if not installed)
+  // Skipping this one is a REAL time saving, not just a reporting one: it launches Firefox and WebKit.
+  // The render pass above is deliberately NOT gated the same way — it also produces the screenshot
+  // gallery and per-page evidence that the rest of the report reads, so switching off (say) Responsive
+  // must not blank the evidence every other section links to.
   let xbrowser = [];
-  if (render) { try { xbrowser = await crossBrowser(url, { screensDir, log }); } catch (e) { xbrowser = []; } }
+  if (render && !isSkipped('crossbrowser')) { try { xbrowser = await crossBrowser(url, { screensDir, log }); } catch (e) { xbrowser = []; } }
 
   // 8) og:image + favicon actually LOAD (#3) — HEAD the declared URLs from the first HTML page
   let assetLoad = null;
@@ -535,9 +606,14 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   // coverage: the machine-readable record of which check families actually looked. Built alongside
   // the rows so the two can never disagree.
   const coverageChecks = [];
+  // A switched-off section is forced not-verified HERE, at the single place coverage is written, so a
+  // skip can never be recorded as evidence by any caller. That routes its rules into
+  // notEvaluatedRules -> out of BOTH sides of score.js's ratio (never banked as resolved risk), and
+  // gives the report a machine-readable reason distinct from a check that tried and failed.
   const recordCoverage = (checkId, suite, verified, reason, l) => coverageChecks.push({
-    checkId, suite, verified,
-    reason: verified ? 'evaluated' : reason,
+    checkId, suite,
+    verified: isSkipped(suite) ? false : verified,
+    reason: isSkipped(suite) ? 'skipped-by-operator' : (verified ? 'evaluated' : reason),
     ruleIds: CHECK_RULES[checkId] || [],
     attempted: l ? l.applicable : 0, errored: l ? l.err : 0, error: l ? l.error : null,
   });
@@ -546,6 +622,10 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   for (const id of Object.keys(STATIC_SUITE)) {
     if (NOT_APPLICABLE.has(id)) continue;
     const suite = STATIC_SUITE[id];
+    // Coverage is still RECORDED for a switched-off section (as skipped-by-operator, above) — that is
+    // what removes its rules from the denominator. No rows are built: the suite itself is dropped at
+    // assembly, so building them would only be work nobody reads.
+    if (isSkipped(suite)) { recordCoverage(id, suite, false, 'skipped-by-operator', null); continue; }
     const finds = staticBy[id] || [];
     const l = ledger.get(id);
     const ok = ledger.verified(id);
@@ -699,7 +779,40 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     for (const b of xbrowser) {
       const label = b.engine === 'webkit' ? 'WebKit (Safari engine)' : 'Firefox';
       if (!b.available) { suiteRows.crossbrowser.push(notRunRow('cross-browser', 'crossbrowser', 'engine-missing', b.engine === 'webkit' ? ['XBR-002'] : ['XBR-001'], `the ${label} engine is not installed, so the page was never opened in it — this browser is UNMEASURED, not working. Run once: npx playwright install ${b.engine}. This is NOT a pass.`, { applicable: 0, err: 0, error: 'engine not installed' })); continue; }
-      if (!b.ok) suiteRows.crossbrowser.push(row('fail', `${label} failed to load the page`, url, b.navErr || 'navigation error', 'fail', undefined, b.engine === 'webkit' ? 'XBR-002' : 'XBR-001'));
+      if (!b.ok) {
+        // ── ATTRIBUTION. XBR-001/002 are tier-1 LAUNCH BLOCKERS whose titles name a browser, so an
+        // unqualified "WebKit failed to load the page" reads as a Safari INCOMPATIBILITY. Often it is
+        // not. Measured 2026-07-20 on a real staging run: Chromium's own navigation timed out too (it
+        // was swallowed into a console line), the page had a request timing out, an icon font that
+        // never loaded and a 30s LCP. The page was slow for EVERYONE; WebKit was simply the only
+        // engine that reported it, and it reported it as the wrong kind of defect.
+        // So: when the primary engine also failed to navigate, the row says the page did not load in
+        // any engine. Still a failure — the site does not load — but attributed to the site rather
+        // than to one browser, which is what the reader acts on. No registry change: same rule, same
+        // deduction, same tier. Only the claim gets accurate.
+        const primaryAlsoFailed = (renderRes.navFailures || []).some(f => f.url === url);
+        const name = primaryAlsoFailed
+          ? `Page did not finish loading — ${label} timed out (Chromium timed out too)`
+          : `${label} failed to load the page`;
+        // The evidence the old row threw away. Its table rendered EMPTY on a real failure: engine,
+        // what each attempt waited for and for how long, whether the DOM ever arrived, which requests
+        // the engine reported as failed, and what was still in flight when it gave up — all of it
+        // existed and none of it reached the report.
+        const ev = [];
+        (b.attempts || []).forEach(a => ev.push({ page: url, section: 'navigation', id: `waitUntil: ${a.waitUntil}`,
+          value: `${a.ok ? 'ok' : 'timed out'} after ${Math.round(a.ms / 100) / 10}s`, evidence: a.err || '' }));
+        ev.push({ page: url, section: 'navigation', id: 'DOMContentLoaded',
+          value: b.domReady ? 'fired — the document arrived; a SUBRESOURCE never finished'
+                            : 'never fired — the document itself never arrived',
+          evidence: '' });
+        (b.failedReq || []).forEach(r => ev.push({ page: url, section: 'failed request', id: String(r.url).slice(0, 180), value: r.why, evidence: '' }));
+        (b.stalled || []).forEach(r => ev.push({ page: url, section: 'still in flight when it gave up', id: String(r.url).slice(0, 180), value: `waited ${Math.round(r.waitedMs / 100) / 10}s`, evidence: '' }));
+        const culprits = (b.failedReq || []).length + (b.stalled || []).length;
+        const detail = (b.navErr || 'navigation error')
+          + (b.domReady ? ' — the document loaded but a subresource never completed' : '')
+          + (culprits ? ` · ${culprits} request(s) failed or were still in flight; they are listed below` : '');
+        suiteRows.crossbrowser.push(row('fail', name, url, detail, 'fail', ev, b.engine === 'webkit' ? 'XBR-002' : 'XBR-001'));
+      }
       else if (b.errors && b.errors.length) suiteRows.crossbrowser.push(row('warn', `${label}: ${b.errors.length} console error(s)`, url, b.errors[0], String(b.errors.length), undefined, 'XBR-003'));
       else suiteRows.crossbrowser.push(row('pass', `Renders in ${label} with no console errors`, url, '', 'ok'));
       if (b.shot) (renderRes.shots[url] = renderRes.shots[url] || []).push({ label: b.engine, file: b.shot });
@@ -713,7 +826,10 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   progress(98, 'building report');
   // ---- registry-driven assembly: enrich FIRST (status/suite/severity/deduction/ruleId all from the
   // registry), THEN count + score from the enriched findings. No rule metadata is decided here. ----
-  const suites = enrichSuites(SUITES.map(s => ({ ...s, checks: suiteRows[s.key] })), bus);
+  // THE CUT. A switched-off suite is dropped from `suites` right here, which is the single seam every
+  // downstream number reads: tally, verdict, checks-passing score, quality, readiness, the Issues list
+  // and the per-section detail all derive from this array. One filter, no per-consumer special cases.
+  const suites = enrichSuites(SUITES.filter(s => !isSkipped(s.key)).map(s => ({ ...s, checks: suiteRows[s.key] })), bus);
   suites.forEach(s => {
     const c = { pass: 0, warn: 0, fail: 0, manual: 0 };
     s.checks.forEach(r => c[r.status]++);
@@ -795,7 +911,11 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     target: url, host, generated,
     versions: { engine: VERSIONS.ENGINE_VERSION, report: VERSIONS.REPORT_VERSION, registry: VERSIONS.REGISTRY_VERSION },
     verdict, ready, score, quality, readiness, tally: tot, coverage: coverageOut,
+    // Recorded so the narrowing is auditable from report.json alone, not just visible in the HTML —
+    // a report that covers 9 of 10 sections must be able to say so to anyone who reads it later.
+    ...(skipped.size ? { skipped: { model: 'operator-skip-v1', suites: [...skipped], names: SUITES.filter(s => skipped.has(s.key)).map(s => s.name) } } : {}),
     crawl: { pages: crawl.pages.length, htmlPages: htmlPages.length, sitemapCount: crawl.sitemapCount, linkFollowed: crawl.linkFollowed, capped: crawl.capped, maxPages },
+    pageCoverage: buildPageCoverage(crawl, htmlPages),
     render: { rendered: renderRes.rendered, total: renderRes.total, viewports: renderRes.viewports || [], error: renderRes.error || null },
     links: { checked: links.totalInternal + links.totalExternal, broken: links.brokenInternal.length + links.brokenExternal.length, brokenInternal: links.brokenInternal.length, brokenExternal: links.brokenExternal.length, chains: links.chains.length },
     suites, shots: renderRes.shots || {}, consent: renderRes.consentByPage || {},
@@ -821,4 +941,4 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
 // because the registry carries no `check` field — so the test re-derives it from the real emitter
 // call sites and fails on drift. newLedger is exported so the pass-requires-evidence rule (ok > 0 &&
 // err === 0) is testable without a network round-trip.
-module.exports = { runAudit, SUITES, RENDER_SUITE, PASS_LABEL, STATIC_SUITE, metaDescriptionOf, CHECK_RULES, NOT_APPLICABLE, newLedger };
+module.exports = { runAudit, buildPageCoverage, SUITES, RENDER_SUITE, PASS_LABEL, STATIC_SUITE, metaDescriptionOf, CHECK_RULES, NOT_APPLICABLE, newLedger };

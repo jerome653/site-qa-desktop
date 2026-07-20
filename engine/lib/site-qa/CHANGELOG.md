@@ -40,6 +40,26 @@
 
 ---
 
+## [4.3.5] — 2026-07-20
+### Added — Issues rows carry their evidence inline — Rep
+- **Every row in the flat Issues section now shows its own evidence.** Click a row to expand **Page** (or **Scope**, when the target is a site-wide aggregate rather than a URL), **Observed**, **Measured**, and **Occurrences** — the last reusing the existing `drill()` renderer, so occurrence grouping by page, the developer block, the 500-occurrence cap and the per-occurrence Copy button all come with it. Previously a row carried the rule name, the suite and an occurrence *count*: `c.target` / `c.detail` / `c.meta` / `c.items` were already on the object the renderer held and none were printed, so learning anything about an issue required a jump into per-section detail. `detail →` is unchanged and still deep-links there.
+- **The priority filter and ignore both preserve which rows are open** (`OPN`), since either rebuilds the list. Clicking a control inside a row — `detail →`, Copy for dev, ignore — or anything inside the open panel does not toggle it.
+- **A check with nothing recorded says so** ("No evidence recorded for this check") instead of rendering an empty panel, which would imply evidence was collected and withheld.
+### Changed — section order, action-first — Rep
+- Order is now **verdict → pages audited → last-scan comparison → Issues → per-section detail → Inspector lenses → rendered screenshots**. Issues previously sat *below* Inspector lenses (a summary view), and the screenshot gallery sat *between* Issues and the per-section detail it links into — so every `detail →` jumped the reader past a full image gallery to reach the row they had just clicked.
+### Notes
+- Rendering only: no rule, score, weight, registry or engine change. `report.json` is byte-identical for the same scan; header score, tally and launch verdict are untouched.
+- `.iss` gained `flex-wrap:wrap` — load-bearing, not cosmetic. It is `display:flex` and was nowrap above 700px, so a `flex:1 0 100%` child does not move to its own line: it competes on the same line and squeezes every sibling to zero width (measured: `.iss-t` at 0px wide while the row grew to 412px tall). The collapsed row is unchanged — the panel is `display:none`, so out of flow.
+
+## [4.3.4] — 2026-07-17
+### Changed — Site Audit report: one overall score, per-section Score dashboard removed — Rep
+- The header ring now shows the overall **Quality score (0–100)** as the single headline number, replacing the "% checks passing" reading; the arc gauges that score. Falls back to the checks-passing % on older scans that carry no quality score.
+- The per-section **"Score dashboard / per-section summary"** has been removed, including its "🔴 Fix first" launch-blocker shortcut list. The launch verdict + readiness badge remain in the header; every finding is still listed in full in the flat Issues section and the per-section detail. The last-scan comparison (Fixed / Regressed / New / Resolved) and Suite trend are unchanged.
+
+## [4.3.3] — 2026-07-17
+### Added — Score dashboard lists each section's issues as clickable rows — Rep
+- Each per-section score card now lists its open issues inline as clickable rows (status, name, occurrence count) instead of a single "N issues →" summary chip. Every row deep-links to that issue's per-section detail (evidence, occurrences, element locators). Restores the pre-3.0.0 inline list, capped at 8 rows/card with a "+N more →" overflow to the flat Issues section.
+
 ## 2026-07-09 — V2 Phase 1  (Developer-first platform: contract · providers · +32 rules) — E 2.3.0 · R 1.9.0 · Rep 1.2.0
 ### Added — platform (the durable foundation)
 - **Finding Contract v1** (ADR-0003, `contract.js`, `schemas/finding-contract.schema.json`): one canonical

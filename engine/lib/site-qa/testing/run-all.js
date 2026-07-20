@@ -19,6 +19,14 @@ const SUITES = [
   'contract.test.js',
   'readiness.test.js',
   'font-checks.test.js',
+  // v5 reference-fidelity scorer + its background-image sensor. Pure functions, no browser: grade()
+  // turns structural facts into tier-graded findings + a score; structDelta()'s bg axis is the only
+  // sensor for backgrounds on a redesign-mode run, so both are gated here against fixtures.
+  'visual-match/grade.test.js',
+  'visual-match/structdelta-bg.test.js',
+  // diagnoseEmpty(): a 0-pair comparison (blocked/unreachable reference or candidate, or no shared paths)
+  // must report the REASON, never complete as a silent ok:true/pairs:0 "success". Pure, no browser.
+  'visual-match/diagnose.test.js',
   'pass-label-reachability.test.js',
   // The render pass must never report a check it did not run as a check that passed. Real Chromium +
   // the real stored sgen.com runs — it re-derives the cost of axe-core's silence (a11y 66 vs an honest
@@ -56,6 +64,10 @@ const SUITES = [
   'reporting/reporting.test.js',
   'inventory/inventory.test.js',
   'inventory/qualification.js',
+  // buildPageCoverage(): the Site Audit report must LIST which pages were audited, which errored
+  // (fetched but non-200/non-html), and which the sitemap listed but the crawl never reached (capped).
+  // Pure, no browser — guarded so an old result without pageCoverage yields empty arrays, not a throw.
+  'page-coverage.test.js',
   'pipeline.test.js',
 ];
 

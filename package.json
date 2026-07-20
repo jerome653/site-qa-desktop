@@ -1,7 +1,7 @@
 {
   "name": "sgen-site-qa-desktop",
   "productName": "SGEN Site QA",
-  "version": "4.2.0",
+  "version": "4.5.0",
   "description": "SGEN Site QA — developer-first website quality auditing, as a desktop app.",
   "main": "main.js",
   "author": "SGEN",
