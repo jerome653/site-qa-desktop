@@ -100,6 +100,6 @@ srv.listen(0, '127.0.0.1', async () => {
     try { fs.rmSync(out, { recursive: true, force: true }); } catch (_) {}
     srv.close();
   }
-  console.log((bad ? 'FAIL' : 'PASS') + ' report-merged.test.js — ' + (n - bad) + '/' + n + ' assertions');
+  console.log((bad ? '❌ FAIL' : '✅ PASS') + ' — report-merged.test.js — ' + (n - bad) + '/' + n + ' assertions');
   process.exit(bad ? 1 : 0);
 });

@@ -104,5 +104,5 @@ ok(cv.panes[0].url === 'https://live.test/' && cv.panes[1].url === 'https://stag
 ok(!JSON.stringify(cm).includes('shots/d.png'), 'the diff overlay is STILL never read — the deliberate exclusion survives');
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {}
-console.log((bad ? 'FAIL' : 'PASS') + ' annotate-audit.test.js — ' + (n - bad) + '/' + n + ' assertions');
+console.log((bad ? '❌ FAIL' : '✅ PASS') + ' — annotate-audit.test.js — ' + (n - bad) + '/' + n + ' assertions');
 if (bad) process.exit(1);

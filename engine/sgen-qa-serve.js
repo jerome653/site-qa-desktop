@@ -71,10 +71,15 @@ let MANUAL_HTML = ''; try { MANUAL_HTML = fs.readFileSync(path.join(__dirname, '
 
 // ---- version log: release notes + this machine's update history ----------------------------------
 // A hot engine is extracted to userData/engines/<version>/, so our own version == this directory's name.
-// The literal below is the fallback used only when this dir is NOT named like a version (dev checkout).
-// BUMP IT EVERY RELEASE — it has already gone stale twice. Keep in sync with package.json "version"
-// and lib/site-qa/release-metadata.json packageVersion.
-const SELF_VER = (path.basename(__dirname).match(/^\d+\.\d+\.\d+$/) || ['3.1.0'])[0];
+// The fallback below is used only when this dir is NOT named like a version (dev checkout).
+// It used to be a hand-maintained literal carrying the instruction "BUMP IT EVERY RELEASE — it has
+// already gone stale twice". It then went stale a THIRD time: it still read '3.1.0' while package.json
+// said 4.5.0. A literal that must be remembered is a second version authority, and second authorities
+// go stale silently — the same defect D6 removed from lib/site-qa. So it is now DERIVED from
+// package.json, which is the authority it was only ever meant to mirror. Nothing to remember, nothing
+// to bump, and it cannot disagree.
+const SELF_VER = (path.basename(__dirname).match(/^\d+\.\d+\.\d+$/)
+  || [(() => { try { return require('./package.json').version; } catch (_) { return '0.0.0'; } })()])[0];
 const NOTES_DIR = path.join(process.env.APPDATA || process.env.HOME || __dirname, 'SGEN Site QA');
 const UPDATE_LOG = path.join(NOTES_DIR, 'update-log.json');
 // Newest first. Each shipped engine carries its own notes; older entries are kept for the in-app log.

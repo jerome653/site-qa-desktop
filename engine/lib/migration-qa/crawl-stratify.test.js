@@ -68,5 +68,5 @@ ok(next[0] === 'https://x.com/about', 'an unsampled family outranks one we alrea
 ok(stratify([], new Map()).length === 0, 'empty input is empty output');
 ok(stratify(['not a url'], new Map()).length === 1, 'an unparsable URL is kept, not dropped');
 
-console.log((bad ? 'FAIL' : 'PASS') + ' crawl-stratify.test.js — ' + (n - bad) + '/' + n + ' assertions');
+console.log((bad ? '❌ FAIL' : '✅ PASS') + ' — crawl-stratify.test.js — ' + (n - bad) + '/' + n + ' assertions');
 if (bad) process.exit(1);

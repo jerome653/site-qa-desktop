@@ -3,7 +3,7 @@
 > Complete documentation of what the auditor does **today** (Release Candidate, 2026-07-08).
 > Companion docs: `CHARTER.md` (why) · `ARCHITECTURE.md` (how it's built) · `CERTIFICATION.md` (proof it works) ·
 > `ROADMAP.md` (what's next) · `docs/` (developer/ops/troubleshooting/upgrade guides).
-> Versions: **Engine 2.1.0 · Registry 1.2.0 · Report 1.1.0**. Status: **RELEASE CANDIDATE** (all 10 gates PASS; GA needs a live run — E9/TD-005).
+> Versions: **Engine 2.4.0 · Registry 1.13.0 · Report 1.4.0** (package 4.5.0). Status: **RELEASE CANDIDATE** (all 10 gates PASS; GA needs a live run — E9/TD-005).
 
 ## 1 · What it is
 A **deterministic, offline** website-quality platform. Identical input → identical output, every time,
@@ -16,7 +16,7 @@ rule ID; nothing is a black box. It scans a site across 10 quality dimensions, s
 ### Foundation — the deterministic engine
 | Subsystem | File | Capability |
 |---|---|---|
-| Rule Registry | `rules/registry.js` | **Single source of truth.** 95 rules with permanent `SUITE-NNN` ids; each carries suite, severity, deduction, method, docs. Load-time invariants (unique ids/slugs, valid suite/severity/method, suite weights total 100, manual⇔deduction 0). Query API: `getById/getBySlug/bySuite/…`. |
+| Rule Registry | `rules/registry.js` | **Single source of truth.** 142 rules with permanent `SUITE-NNN` ids; each carries suite, severity, deduction, method, docs. Load-time invariants (unique ids/slugs, valid suite/severity/method, suite weights total 100, manual⇔deduction 0). Query API: `getById/getBySlug/bySuite/…`. |
 | Quality Score | `score.js` | Per-suite `score = clamp(0..100, 100 − Σ deductions)`; `overall = Σ(score×weight)/Σweight`. **Zero hardcoded numbers** — every deduction/weight comes from the registry. Each deduction is line-itemed with its rule id. |
 | Finding model | `finding.js` | Canonical finding; enrichment stamps ruleId/suite/severity/deduction/docs from the registry at one boundary. Identity is the **native ruleId** (no title matching). |
 | Event bus | `events.js` | 7 lifecycle events (`scan.started`…`scan.completed` + `finding.created`); guarded emit (a throwing listener can't break a scan). The extension seam. |
@@ -46,7 +46,7 @@ own advisory sub-score but **provably never changes** the SGEN Quality Score (ve
 ### Assurance & operations
 | Pillar | File | Capability |
 |---|---|---|
-| Testing | `testing/run-all.js`, `testing/coverage.js` | One command runs all 9 suites; line coverage via Node's **built-in V8 coverage** (no external deps) — currently **97.6%**, with a `≥N%` gate mode. |
+| Testing | `testing/run-all.js`, `testing/coverage.js` | One command runs all 58 suites; line coverage via Node's **built-in V8 coverage** (no external deps) — currently **97.9%**, with a `≥N%` gate mode. |
 | Performance | `testing/benchmark.js` | Measured throughput at scale (10k scans / 10k findings). |
 | Security | `testing/security-audit.js` | Deterministic offline self-audit over 6 threat classes with live probes. |
 | Operations | `ops/` | Config loader; tamper-evident backup (per-file + overall sha256 manifest), `verifyBackup`, and `restore` that refuses an unverified backup and confirms restored-store integrity. |

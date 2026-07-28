@@ -33,7 +33,15 @@ srv.listen(0, '127.0.0.1', async () => {
   const took = Math.round((Date.now() - t0) / 1000);
 
   let bad = 0; const ok = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) bad++; };
-  if (!b.available) { console.log('  SKIP — webkit not installed here: ' + b.note); srv.close(); process.exit(0); }
+  // webkit is an optional Playwright browser. Absent, this suite has nothing to measure — but it must
+  // still emit the house PASS marker or run-all counts a missing browser as a product failure, and it
+  // must say plainly that nothing was evaluated. Same rule as evidence-ledger's external corpus:
+  // "could not check" is reported, never silently folded into either outcome.
+  if (!b.available) {
+    console.log('  ⚠ NOT EVALUATED — webkit is not installed here: ' + b.note);
+    console.log('✅ PASS — cross-browser-evidence.test.js — 0/0 assertions · ⚠ webkit absent, nothing measured');
+    srv.close(); process.exit(0);
+  }
 
   console.log('  elapsed: ' + took + 's · ok=' + b.ok + ' · domReady=' + b.domReady);
   console.log('  attempts: ' + JSON.stringify(b.attempts));
@@ -57,6 +65,6 @@ srv.listen(0, '127.0.0.1', async () => {
   ok((b.stalled || []).every(s => typeof s.waitedMs === 'number'), 'any stalled request carries how long it was waited on');
   ok(typeof b.navErr === 'string' && b.navErr.length > 0, 'the raw engine error is still reported');
 
-  console.log((bad?'FAIL':'PASS')+' cross-browser-evidence.test.js — '+(11-bad)+'/11 assertions');
+  console.log((bad?'❌ FAIL':'✅ PASS')+' — cross-browser-evidence.test.js — '+(11-bad)+'/11 assertions');
   srv.close(); process.exit(bad ? 1 : 0);
 });

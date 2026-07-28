@@ -16,6 +16,16 @@ const SUITES = [
   // TREE, and this one validates what is actually COMMITTED. Those differed, and the difference was a
   // release blocker: two runtime sources were never committed while committed code required them.
   'testing/repo-integrity.test.js',
+  // RELEASE PROVENANCE — the other half of integrity. repo-integrity asks whether every require()
+  // RESOLVES to a tracked path; it passed throughout while ~1,005 lines of product work lived only in
+  // the working tree, because a committed test asserting an uncommitted FEATURE resolves perfectly.
+  // This gate compares SHIPPED against COMMITTED. Structural tier here; SGEN_RELEASE_GATE=1 adds the
+  // clean-checkout requirement and re-runs this whole suite from the committed artifact.
+  'testing/release-gate.js',
+  // The security self-audit. It was written, then left out of this list, and spent the entire ADR
+  // programme failing unnoticed on a false positive nobody was running. An unregistered gate is not a
+  // gate. (D4)
+  'testing/security-audit.js',
   'rules/registry.test.js',
   'evidence-name.test.js',
   // The no-hang gate. Registered here because the failure it covers is invisible to every other suite:
@@ -122,6 +132,14 @@ const SUITES = [
   // ADR-0011 Phase 4. Spawns the REAL server and reads the report.json the APP wrote. The defect only
   // existed on the production path (collectPages:true), so no unit test could ever have caught it.
   'collection-store/score-integrity-e2e.test.js',
+  // D5 — these four were written, passed, and were never registered OR committed (0 commits in the
+  // entire history). They cover the runtime work restored in the release-provenance commit: stratified
+  // crawl discovery, audit->annotation model data, cross-browser evidence, and the merged findings
+  // table that REPORT_VERSION 1.4.0 had been claiming since the 4.4.0 release.
+  '../migration-qa/crawl-stratify.test.js',
+  'annotate-audit.test.js',
+  'cross-browser-evidence.test.js',
+  'report-merged.test.js',
 ];
 
 const env = Object.assign({}, process.env, {
