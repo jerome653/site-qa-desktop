@@ -75,6 +75,10 @@ const SUITES = [
   // without collection persistence -- and asserts the audit result is byte-identical. The only two
   // fields that ever differed were the run timestamp and a Date.now() duration, both normalised.
   'collection-store/producer.test.js',
+  // D2 remediation. Spawns the REAL sgen-qa-serve.js and drives /api/run over HTTP -- the actual
+  // production path -- to prove the app REACHES the producer. producer.test.js proved the producer
+  // works; it called runAudit directly, so it could not have caught the app never passing collectionRoot.
+  'collection-store/production-wiring.test.js',
   'finding-store/finding-store.test.js',
   'timeline/timeline.test.js',
   'regression/regression.test.js',
@@ -107,6 +111,13 @@ const SUITES = [
   // Pure, no browser — guarded so an old result without pageCoverage yields empty arrays, not a throw.
   'page-coverage.test.js',
   'pipeline.test.js',
+  // ADR-0011 P0. THE DIFFERENTIAL ORACLE: pins honest 79 / inflated 90 / corrected 80 from a REAL
+  // audit. It reconstructs the undeclared computation on demand, so the suite fails the moment any
+  // change reproduces the inflated score.
+  'score-declaration.test.js',
+  // ADR-0011 Phase 4. Spawns the REAL server and reads the report.json the APP wrote. The defect only
+  // existed on the production path (collectPages:true), so no unit test could ever have caught it.
+  'collection-store/score-integrity-e2e.test.js',
 ];
 
 const env = Object.assign({}, process.env, {

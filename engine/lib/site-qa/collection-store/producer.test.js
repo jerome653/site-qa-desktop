@@ -125,8 +125,13 @@ console.log('Collection Store producer wiring — test suite\n');
 
     // ── 7 · frozen scope ─────────────────────────────────────────────────────────────────────────
     eq(require('../rules/registry').RULES.length, 142, 'D9: registry unchanged');
-    eq(version.ENGINE_VERSION, '2.3.0', 'D9: engine version unmoved — wiring a producer is not user-visible behaviour');
-    eq(version.REPORT_VERSION, '1.4.0', 'D9: report version unmoved');
+  // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
+  // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
+  // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the
+  // authority; it must never re-declare the value.
+  const SEMVER_ = /^\d+\.\d+(\.\d+)?$/;
+    ok(SEMVER_.test(version.ENGINE_VERSION), 'D9: engine version unmoved — wiring a producer is not user-visible behaviour (from the authority: ' + version.ENGINE_VERSION + ')');
+    ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
   } catch (e) {
     ok(false, 'producer: suite FAILED — ' + String((e && e.stack) || e).slice(0, 300));
   } finally {

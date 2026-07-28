@@ -40,6 +40,53 @@
 
 ---
 
+## [2.4.0] — 2026-07-29 — ADR-0011 · Score Declaration Integrity (P0) — E 2.4.0
+### Fixed — the SGEN Quality Score was inflated on the default path
+- **Scores were too high, and this release corrects them downward.** The engine computed an honest
+  score over the rules it had actually evaluated, then **overwrote it** with one that credited every
+  rule that never ran. `pipeline.js` re-scored the suites after merging the advisory passes and called
+  `compute(suites)` with no coverage declaration — which `score.js` correctly reads as its legacy
+  "assume every rule ran" shape.
+- **Measured on a real site, ordinary no-render run: 79 honest → 90 shipped (+11).** Two suites that
+  evaluated *no rule at all* — Cross-Browser and Console — each scored a perfect **100** and banked
+  their full registry weight. Responsive went 0 → 57.
+- **Corpus replay: 9 of 9 re-scorable stored runs were inflated.** Mean correction **−8.1**, median
+  **−10**, range −3 to −10. The single run that included a browser render moved only −3, because far
+  fewer rules went unevaluated — measuring more is what protects the score.
+- **A perverse inversion is also gone.** Narrowing the scope used to produce a *more honest* number
+  than a full audit (80 declared vs 90 undeclared), because the declaration was only re-passed on the
+  scoped path.
+- **`score.js` is unchanged.** Its model was always correct; the declaration was lost in transport
+  between two call sites. This release fixes the transport and adds a guard: a recompute may never
+  replace a coverage-declared score with an undeclared one — it now fails loudly instead.
+### Notes
+- No registry, rule, report-rendering, event-model or scoring-model change. Report layout is identical;
+  only the Quality Score number moves. Tally, verdict and the launch-readiness verdict are untouched.
+- Historical reports keep the number they were generated with. Every report produced before this
+  release carries an inflated Quality Score.
+- Engine 2.4.0. Registry 1.13.0, Report 1.4.0, Contract 1.0 unchanged. `release-metadata.json`
+  regenerated through the Version Authority (ADR-0004 §D6), never by hand.
+
+## [4.3.5] — 2026-07-20
+### Added — Issues rows carry their evidence inline — Rep
+- **Every row in the flat Issues section now shows its own evidence.** Click a row to expand **Page** (or **Scope**, when the target is a site-wide aggregate rather than a URL), **Observed**, **Measured**, and **Occurrences** — the last reusing the existing `drill()` renderer, so occurrence grouping by page, the developer block, the 500-occurrence cap and the per-occurrence Copy button all come with it. Previously a row carried the rule name, the suite and an occurrence *count*: `c.target` / `c.detail` / `c.meta` / `c.items` were already on the object the renderer held and none were printed, so learning anything about an issue required a jump into per-section detail. `detail →` is unchanged and still deep-links there.
+- **The priority filter and ignore both preserve which rows are open** (`OPN`), since either rebuilds the list. Clicking a control inside a row — `detail →`, Copy for dev, ignore — or anything inside the open panel does not toggle it.
+- **A check with nothing recorded says so** ("No evidence recorded for this check") instead of rendering an empty panel, which would imply evidence was collected and withheld.
+### Changed — section order, action-first — Rep
+- Order is now **verdict → pages audited → last-scan comparison → Issues → per-section detail → Inspector lenses → rendered screenshots**. Issues previously sat *below* Inspector lenses (a summary view), and the screenshot gallery sat *between* Issues and the per-section detail it links into — so every `detail →` jumped the reader past a full image gallery to reach the row they had just clicked.
+### Notes
+- Rendering only: no rule, score, weight, registry or engine change. `report.json` is byte-identical for the same scan; header score, tally and launch verdict are untouched.
+- `.iss` gained `flex-wrap:wrap` — load-bearing, not cosmetic. It is `display:flex` and was nowrap above 700px, so a `flex:1 0 100%` child does not move to its own line: it competes on the same line and squeezes every sibling to zero width (measured: `.iss-t` at 0px wide while the row grew to 412px tall). The collapsed row is unchanged — the panel is `display:none`, so out of flow.
+
+## [4.3.4] — 2026-07-17
+### Changed — Site Audit report: one overall score, per-section Score dashboard removed — Rep
+- The header ring now shows the overall **Quality score (0–100)** as the single headline number, replacing the "% checks passing" reading; the arc gauges that score. Falls back to the checks-passing % on older scans that carry no quality score.
+- The per-section **"Score dashboard / per-section summary"** has been removed, including its "🔴 Fix first" launch-blocker shortcut list. The launch verdict + readiness badge remain in the header; every finding is still listed in full in the flat Issues section and the per-section detail. The last-scan comparison (Fixed / Regressed / New / Resolved) and Suite trend are unchanged.
+
+## [4.3.3] — 2026-07-17
+### Added — Score dashboard lists each section's issues as clickable rows — Rep
+- Each per-section score card now lists its open issues inline as clickable rows (status, name, occurrence count) instead of a single "N issues →" summary chip. Every row deep-links to that issue's per-section detail (evidence, occurrences, element locators). Restores the pre-3.0.0 inline list, capped at 8 rows/card with a "+N more →" overflow to the flat Issues section.
+
 ## 2026-07-09 — V2 Phase 1  (Developer-first platform: contract · providers · +32 rules) — E 2.3.0 · R 1.9.0 · Rep 1.2.0
 ### Added — platform (the durable foundation)
 - **Finding Contract v1** (ADR-0003, `contract.js`, `schemas/finding-contract.schema.json`): one canonical
