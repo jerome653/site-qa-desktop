@@ -21,3 +21,8 @@ engine/**/_ui-runs/
 Thumbs.db
 .DS_Store
 .vscode/
+
+# Cardinal runtime state - machine-local session/journal/recovery records.
+# Created automatically when a Cardinal session opens here. Never commit it.
+# Added 2026-07-28 (platform consolidation).
+.aincard/

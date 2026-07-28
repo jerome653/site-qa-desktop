@@ -24,6 +24,21 @@ async function get(url, opts = {}) {
   }
 }
 
+// Classify a fetch rejection into a stable code the diagnostics layer can act on.
+// Necessary because undici collapses a DNS failure and a refused connection into the SAME message
+// ("fetch failed") and hangs the real reason off e.cause — so e.message alone cannot tell a typo'd
+// domain from a blackholed route, and a caller reading only the message will blame the URL for a
+// network fault. Verified on Node 24: a bad name -> cause.code 'ENOTFOUND'; an aborted request ->
+// AbortError carrying no cause at all. get()'s AbortController is the only aborter in this module,
+// so AbortError here always means OUR timeout elapsed. Returns '' when the cause is unknowable —
+// callers must treat '' as "no evidence" and not guess.
+function failureCode(e) {
+  if (!e) return '';
+  if (e.name === 'AbortError') return 'ETIMEDOUT';
+  const code = e.cause && e.cause.code;
+  return code ? String(code) : '';
+}
+
 // Full GET: returns status, body, a plain-object header map, final URL, redirect location.
 async function getText(url, opts = {}) {
   try {
@@ -42,7 +57,7 @@ async function getText(url, opts = {}) {
       contentType: (headers['content-type'] || ''),
     };
   } catch (e) {
-    return { ok: false, status: 0, body: '', headers: {}, finalUrl: url, location: null, contentType: '', error: String(e && e.message || e) };
+    return { ok: false, status: 0, body: '', headers: {}, finalUrl: url, location: null, contentType: '', error: String(e && e.message || e), errorCode: failureCode(e) };
   }
 }
 
@@ -76,4 +91,4 @@ async function pool(items, conc, fn) {
   return ret;
 }
 
-module.exports = { UA, get, getText, head, abs, pool };
+module.exports = { UA, get, getText, head, abs, pool, failureCode };

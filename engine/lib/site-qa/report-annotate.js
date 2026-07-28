@@ -49,6 +49,11 @@ const CSS = `
 .sh-vp{font-family:var(--mono);font-size:11px;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:2px 9px}
 .sh-n{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);margin-left:auto}
 .panes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+/* A Site Audit sheet has ONE pane (its own screenshot), not a live/staging pair. Without this it
+   would render at half width against dead space, and the mark coordinates — normalised against the
+   pane box — would be drawn on a needlessly small target. :has() is safe here: both the app and the
+   PDF renderer are the same bundled Chromium. */
+.panes:has(> .pane:only-child){grid-template-columns:1fr}
 .pane{margin:0;min-width:0}
 .pane figcaption{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px}
 .pane figcaption i{width:7px;height:7px;border-radius:50%;background:var(--ink-faint);flex:none}
@@ -144,6 +149,11 @@ const PANE_MAX_H = '168mm';   // A4 landscape: 210 - 6 - 6 page margins = 198mm 
                               // sheet's 8mm padding, ~6mm header and ~4mm caption. Measured: the
                               // sheet lands at 720.6px against 748.3px usable — 27.7px of headroom.
 const NOTES_COL = '62mm';     // the dead right-hand column a height-bounded pane leaves behind
+// Detail sheets (see detailSheetHtml below for the why). Declared HERE, above PRINT_CSS, because that
+// template literal is evaluated at module load and reads DETAIL_VP_H.
+const DETAIL_CAP = 24;        // a hard ceiling on added sheets; overflow is REPORTED on the cover,
+                              // never silently dropped.
+const DETAIL_VP_H = '150mm';  // the clipping viewport: sheet 190mm usable, less header and caption.
 const PRINT_CSS = `
 body{background:#000}
 .wrap{padding:0}
@@ -158,6 +168,13 @@ body{background:#000}
 /* Bounded by BOTH axes => always fits its page; fit-content above keeps the wrapper on the image. */
 .wrapc img{width:auto;height:auto;max-width:100%;max-height:${PANE_MAX_H}}
 .notes{break-inside:avoid;page-break-inside:avoid}
+/* Detail sheets. .zoomv is a fixed clipping window; the .wrapc inside is the FULL image box, scaled
+   up and offset by the client once natural size is known. Every bound the overview sheet relies on
+   has to be undone in here, or the image would be re-fitted to the page and there would be no zoom. */
+.zoomv{position:relative;overflow:hidden;width:100%;height:${DETAIL_VP_H};background:#0b0b0b;border-radius:2px}
+.zoomv .wrapc{position:absolute;left:0;top:0;width:auto;max-width:none;margin:0}
+.zoomv .wrapc img{width:100%;height:100%;max-width:none;max-height:none;display:block}
+.sheet.detail .sh-n{color:var(--ink-soft)}
 /* Only a sheet that actually has notes pays for the notes column. The .note rows are built by
    PRINT_CLIENT before the ready flag, so :has() has settled long before page.pdf() lays out. */
 .sheet:has(.note){display:grid;grid-template-columns:1fr ${NOTES_COL};grid-template-areas:"head head" "panes notes";column-gap:4mm;align-content:start}
@@ -243,21 +260,64 @@ function sheetHtml(p, v, mode) {
 // keep the key construction identical to annotate.annKey without importing it into the template
 function annKeyAttr(pagePath, vpLabel, pane) { return `${pagePath}||${vpLabel}||${pane}`; }
 
+// ---- detail sheets: the answer to the KNOWN LIMIT stated above -----------------------------------
+// The overview sheet is height-bounded so a pane can never fragment away from its overlay, and the
+// cost is that a 1:11 full-page capture renders as an unreadable sliver (measured on floraterraca.com:
+// three sheets of ~85mm-wide thumbnails with dead space either side). That was called out in the
+// comment above as "small-but-true beats large-but-lying", with the real fix named: region cropping
+// around each mark. This is that fix, and it keeps the invariant instead of trading it away.
+//
+// A detail sheet shows the SAME region of both panes, magnified to readable size, for ONE mark. The
+// crop is done with CSS geometry, not by cutting new images: the .wrapc stays EXACTLY the image's box
+// (just scaled up and offset inside a clipping viewport), so .ov's 0..1 coordinates still land on the
+// pixels they were drawn on — the one invariant this file exists to protect. Nothing is cropped away
+// either: the overview sheet still carries the whole page, so a reader gets both where and what.
+//
+// Both panes get the same NORMALISED window even though their captures differ in height, because that
+// is what makes the pair comparable — the same relative region of each page, side by side.
+function detailSheetHtml(p, v, ownerPane, mark, markIndex) {
+  const paneHtml = (q) => `
+      <figure class="pane ${q.pane}" data-pane="${q.pane}">
+        <figcaption><i></i>${esc(q.title)} <u>${esc(q.url || '')}</u></figcaption>
+        <div class="zoomv">
+          <div class="wrapc" data-key="${esc(annKeyAttr(p.path, v.label, q.pane))}">
+            ${q.shot ? `<img src="${esc(q.shot)}${PRINT_IMG_Q}" alt="${esc(q.title)}">` : `<div class="empty">screenshot missing for this pane</div>`}
+            <svg class="ov" viewBox="0 0 1000 1000" preserveAspectRatio="none"></svg>
+          </div>
+        </div>
+      </figure>`;
+  return `<section class="sheet detail" data-page="${esc(p.path)}" data-vp="${esc(v.label)}" data-detail="1" data-mark="${esc(mark.id)}" data-owner="${esc(ownerPane)}">
+    <div class="sh-head">
+      <span class="sh-path">${esc(p.path)}</span>
+      <span class="sh-vp">${esc(v.label)}</span>
+      <span class="sh-n">detail · mark ${markIndex + 1} on ${ownerPane === 'ref' ? 'LIVE' : 'STAGING'}</span>
+    </div>
+    <div class="panes">${v.panes.map(paneHtml).join('')}</div>
+    <div class="notes" data-notes></div>
+  </section>`;
+}
+
 function coverHtml(model) {
+  // An audit has no candidate and no match score, so the cover must not print "Live vs staging" or a
+  // MATCH percentage over a single-site run — that would describe a comparison that never happened.
+  const isAudit = model.mode === 'audit';
   return `<section class="cover">
-    <p class="ann-eyebrow">SGEN Site QA · Site Comparison</p>
+    <p class="ann-eyebrow">SGEN Site QA · ${isAudit ? 'Site Audit' : 'Site Comparison'}</p>
     <h1 class="ann-h1" style="font-size:30px">${esc(model.domain)}</h1>
-    <p class="ann-sub" style="font-size:14px;margin-top:8px">Live vs staging, annotated.</p>
+    <p class="ann-sub" style="font-size:14px;margin-top:8px">${isAudit ? 'Audited screenshots, annotated.' : 'Live vs staging, annotated.'}</p>
     <div style="margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--ink-soft);line-height:2">
-      <div><span style="color:var(--ink-faint)">REFERENCE (live)&nbsp;&nbsp;</span>${esc(model.reference)}</div>
-      <div><span style="color:var(--ink-faint)">CANDIDATE (staging)</span>&nbsp;&nbsp;${esc(model.candidate)}</div>
-      <div><span style="color:var(--ink-faint)">OVERALL MATCH&nbsp;&nbsp;&nbsp;&nbsp;</span>${model.overall}%</div>
+      <div><span style="color:var(--ink-faint)">${isAudit ? 'SITE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' : 'REFERENCE (live)&nbsp;&nbsp;'}</span>${esc(model.reference)}</div>
+      ${isAudit ? '' : `<div><span style="color:var(--ink-faint)">CANDIDATE (staging)</span>&nbsp;&nbsp;${esc(model.candidate)}</div>`}
+      ${model.overall == null ? '' : `<div><span style="color:var(--ink-faint)">${isAudit ? 'QUALITY&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' : 'OVERALL MATCH&nbsp;&nbsp;&nbsp;&nbsp;'}</span>${model.overall}%</div>`}
       <div><span style="color:var(--ink-faint)">SHEETS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>${model.totals.sheets} (page × viewport)</div>
       <div><span style="color:var(--ink-faint)">ANNOTATIONS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>${model.totals.annotations}</div>
+      ${!model.totals.details ? '' : `<div><span style="color:var(--ink-faint)">DETAIL SHEETS&nbsp;&nbsp;&nbsp;&nbsp;</span>${model.totals.details}${model.totals.detailsDropped ? ` (${model.totals.detailsDropped} more not shown — this export caps detail sheets at ${DETAIL_CAP})` : ''}</div>`}
       <div><span style="color:var(--ink-faint)">EXPORTED&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>${esc(model.generated)}</div>
       ${model.exportName ? `<div><span style="color:var(--ink-faint)">FILE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>${esc(model.exportName)}</div>` : ''}
     </div>
-    <p class="ann-sub" style="margin-top:20px;max-width:150mm">Each sheet below pairs the live page (left) with the staging rebuild (right) at one viewport, carrying the marks and comments added in the app. Numbered marks correspond to the numbered notes under each sheet.</p>
+    <p class="ann-sub" style="margin-top:20px;max-width:150mm">${isAudit
+      ? 'Each sheet below is one audited page at one viewport, carrying the marks and comments added in the app.'
+      : 'Each sheet below pairs the live page (left) with the staging rebuild (right) at one viewport, carrying the marks and comments added in the app.'} Numbered marks correspond to the numbered notes under each sheet.</p>
   </section>`;
 }
 
@@ -429,14 +489,59 @@ const PRINT_CLIENT = `
 var ANN=window.__ANN__;
 function bucket(k){ return (ANN.items&&ANN.items[k])||{marks:[],comments:[]}; }
 ${PAINT}
+// ---- detail-sheet geometry ----
+// The window is chosen in IMAGE PIXELS and aspect-matched to the clipping viewport, so the image is
+// scaled by ONE factor on both axes — a non-uniform scale would distort the capture and, worse, slide
+// every mark off its pixels. .wrapc keeps its exact 1:1 relationship to the image (it IS the image
+// box, at scale s), which is what lets paintPane below stay completely unchanged.
+function bboxOf(m){ var p=m.points,x0=1,y0=1,x1=0,y1=0,i;
+  for(i=0;i<p.length;i++){ x0=Math.min(x0,p[i][0]); y0=Math.min(y0,p[i][1]); x1=Math.max(x1,p[i][0]); y1=Math.max(y1,p[i][1]); }
+  return {x0:x0,y0:y0,x1:x1,y1:y1}; }
+function placeZoom(wrap,win){
+  var vp=wrap.parentNode, img=wrap.querySelector('img'); if(!img) return false;
+  var nw=img.naturalWidth, nh=img.naturalHeight, vw=vp.clientWidth, vh=vp.clientHeight;
+  if(!nw||!nh||!vw||!vh) return false;
+  var A=vw/vh;
+  var cx=(win.x0+win.x1)/2*nw, cy=(win.y0+win.y1)/2*nh;
+  var mw=Math.max(1,(win.x1-win.x0)*nw), mh=Math.max(1,(win.y1-win.y0)*nh);
+  // 560px of source across the pane is about what stays readable once it lands on ~131mm of paper;
+  // the 2.2x/1.7x padding keeps context around the mark instead of cropping tight to the ink.
+  var ww=Math.max(mw*2.2,560), wh=ww/A;
+  if(wh<mh*1.7){ wh=mh*1.7; ww=wh*A; }
+  if(ww>nw){ ww=nw; wh=ww/A; }
+  if(wh>nh){ wh=nh; ww=wh*A; if(ww>nw){ ww=nw; wh=ww/A; } }
+  var s=vw/ww;                                   // ONE scale factor, both axes
+  var fw=nw*s, fh=nh*s;                          // the full image at that scale
+  var left=Math.max(0,Math.min(cx*s-vw/2, Math.max(0,fw-vw)));
+  var top =Math.max(0,Math.min(cy*s-vh/2, Math.max(0,fh-vh)));
+  wrap.style.width=fw+'px'; wrap.style.height=fh+'px';
+  wrap.style.left=(-left)+'px'; wrap.style.top=(-top)+'px';
+  return true;
+}
+function layoutDetail(sheet){
+  var mid=sheet.getAttribute('data-mark'), owner=sheet.getAttribute('data-owner');
+  var wraps=sheet.querySelectorAll('.zoomv .wrapc'), win=null, i, k;
+  for(i=0;i<wraps.length;i++){
+    if(wraps[i].closest('.pane').getAttribute('data-pane')!==owner) continue;
+    var b=bucket(wraps[i].getAttribute('data-key'));
+    for(k=0;k<b.marks.length;k++) if(b.marks[k].id===mid) win=bboxOf(b.marks[k]);
+  }
+  if(!win) return;   // the mark was deleted between render and paint — leave the pane unzoomed
+  for(i=0;i<wraps.length;i++) placeZoom(wraps[i],win);
+}
 function notesPrint(sheet){
   var box=sheet.querySelector('[data-notes]'), wraps=sheet.querySelectorAll('.wrapc'), n=0;
+  // A detail sheet is about ONE mark: repeating the whole run's notes on all 16 of them would bury
+  // the one line the reader is there for.
+  var onlyMark=sheet.getAttribute('data-mark');
   box.innerHTML='';
   for(var i=0;i<wraps.length;i++){
     var wrap=wraps[i], b=bucket(wrap.getAttribute('data-key'));
     var paneName=wrap.closest('.pane').getAttribute('data-pane')==='ref'?'LIVE':'STAGING';
-    for(var c=0;c<b.comments.length;c++){ var cm=b.comments[c]; n++;
+    for(var c=0;c<b.comments.length;c++){ var cm=b.comments[c];
       var mi=cm.markId?b.marks.map(function(x){return x.id;}).indexOf(cm.markId):-1;
+      if(onlyMark&&cm.markId!==onlyMark) continue;
+      n++;
       var row=document.createElement('div'); row.className='note';
       row.innerHTML='<span class="badge'+(mi<0?' ghost':'')+'">'+(c+1)+'</span><div class="ntxt"><span class="nwhere">'+paneName+(mi>=0?' · mark '+(mi+1):'')+'</span><br></div>';
       row.querySelector('.ntxt').appendChild(document.createTextNode(cm.text));
@@ -446,6 +551,10 @@ function notesPrint(sheet){
   if(n){ var h=document.createElement('div'); h.className='nlbl'; h.textContent='Notes'; box.insertBefore(h,box.firstChild); }
 }
 function go(){
+  // Zoom BEFORE painting: paintPane derives stroke width from the rendered pane width, so a pane that
+  // is resized afterwards would carry strokes scaled for the old box.
+  var d=document.querySelectorAll('.sheet.detail');
+  for(var q=0;q<d.length;q++)layoutDetail(d[q]);
   var w=document.querySelectorAll('.wrapc');
   for(var i=0;i<w.length;i++)paintPane(w[i],bucket(w[i].getAttribute('data-key')),false);
   var s=document.querySelectorAll('.sheet');
@@ -468,7 +577,25 @@ function go(){
 function render(model, ann, opts = {}) {
   const mode = opts.mode === 'print' ? 'print' : 'live';
   const runId = opts.runId || '';
-  const sheets = model.pages.map(p => p.viewports.map(v => sheetHtml(p, v, mode)).join('')).join('');
+  // Print gets a detail sheet per mark, straight after the overview sheet that mark sits on, so the
+  // reader goes "here is the page → here is what I circled, readable" without flipping back.
+  let detailCount = 0, detailDropped = 0;
+  const sheetsFor = (p, v) => {
+    const overview = sheetHtml(p, v, mode);
+    if (mode !== 'print') return overview;
+    const details = [];
+    for (const pn of v.panes) {
+      (pn.marks || []).forEach((m, i) => {
+        if (detailCount >= DETAIL_CAP) { detailDropped++; return; }
+        detailCount++;
+        details.push(detailSheetHtml(p, v, pn.pane, m, i));
+      });
+    }
+    return overview + details.join('');
+  };
+  const sheets = model.pages.map(p => p.viewports.map(v => sheetsFor(p, v)).join('')).join('');
+  model.totals.details = detailCount;
+  model.totals.detailsDropped = detailDropped;
   const body = model.totals.sheets
     ? sheets
     : `<div class="empty">Nothing to show — ${model.onlyAnnotated ? 'no annotations have been added yet (untick “annotated only”).' : 'this run paired no pages.'}</div>`;
