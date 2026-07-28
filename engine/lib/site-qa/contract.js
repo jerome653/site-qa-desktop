@@ -13,7 +13,11 @@
 const reg = require('./rules/registry');
 const { fingerprintOf, normalizeUrl, normalizeEvidence } = require('./lib/fingerprint');
 
-const CONTRACT_VERSION = '1.0';
+// D6 (ADR-0004 §D6): imported, never restated. This file declared its own literal while
+// release-metadata.json declared '1.0.0' for the same stream — one stream, two values, and the kind of
+// drift a replay cannot distinguish from a genuine incompatibility. Value unchanged ('1.0'), home
+// corrected, so every stored contract and every historical report is byte-identical.
+const { CONTRACT_VERSION } = require('./version');
 const EVIDENCE_QUALITY = ['verified', 'derived', 'heuristic'];
 const FIXABILITY = ['none', 'manual', 'guided', 'automatic'];
 const LOCATOR_TYPES = ['dom', 'build-artifact', 'manifest', 'route', 'configuration', 'page'];
@@ -42,6 +46,20 @@ function toContract(f, opts = {}) {
     value: f.value != null ? String(f.value) : (opts.value != null ? String(opts.value) : ''),
     screenshot: f.evidence ? String(f.evidence).split(/[\\/]/).pop() : (opts.screenshot || null),
   };
+  // ADR-0007 — the content-addressed reference to the artifact this finding is evidenced by. The
+  // `screenshot` basename above is a filename, not an identity: it cannot be verified, cannot be
+  // de-duplicated, and stops resolving the moment a report directory is copied. `artifactId` is
+  // sha256-of-bytes, so it survives both.
+  //
+  // ADDED ONLY WHEN PRESENT, deliberately. A run with no ledger (every static-only scan, and every
+  // historical report) emits a byte-identical contract — the field cannot appear as a null and quietly
+  // change report.json for scans that have no artifacts. Additive per the frozen schema's own
+  // `additionalProperties: true` (ADR-0003), so no schema change is required or made.
+  //
+  // It does NOT affect `fingerprint`: fingerprintOf() reads only evidence.value / evidence.detail
+  // (lib/fingerprint.js normalizeEvidence), so finding identity is untouched by design, not by luck.
+  const artifactId = opts.artifactId || f.evidenceArtifactId || null;
+  if (artifactId) evidence.artifactId = artifactId;
 
   // Locator: null for page-level findings (no element). Generic + type-tagged so Build Integrity reuses
   // it. A provider-built locator (opts.locator, from the DOM/Render provider) wins; otherwise a single

@@ -5,6 +5,10 @@
 const fs = require('fs');
 const path = require('path');
 const { sha256 } = require('./digest');
+// ADR-0008: the durable-commit primitives (temp->fsync->rename record write, manifest append,
+// index append) live ONCE in immutable-store/. The byte sequence they perform is unchanged -- that
+// is the point of the extraction, and it is proven by an on-disk parity oracle, not asserted.
+const { writeRecordAtomic, appendLine, appendLines } = require('../immutable-store');
 const { buildRegression } = require('./regression');
 
 class RegressionStore {
@@ -21,14 +25,11 @@ class RegressionStore {
   save(scanStore, findingStore, params = {}) {
     const rec = buildRegression(scanStore, findingStore, params);
     if (this.has(rec.recordId)) return { recordId: rec.recordId, verdict: rec.verdict, fingerprint: rec.fingerprint, duplicate: true };
-    const p = this.recordPath(rec.recordId), tmp = p + '.tmp';
-    const fd = fs.openSync(tmp, 'w');
-    try { fs.writeSync(fd, JSON.stringify(rec, null, 2)); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-    fs.renameSync(tmp, p);
-    fs.appendFileSync(this.manifestPath, JSON.stringify({
+    writeRecordAtomic(this.recordPath(rec.recordId), rec);
+    appendLine(this.manifestPath, {
       recordId: rec.recordId, fingerprint: rec.fingerprint, digest: rec.digest, target: rec.target, targetDigest: rec.targetDigest,
       baselineScanId: rec.baselineScanId, candidateScanId: rec.candidateScanId, verdict: rec.verdict, generatedAt: rec.generatedAt,
-    }) + '\n');
+    });
     return { recordId: rec.recordId, verdict: rec.verdict, fingerprint: rec.fingerprint, duplicate: false };
   }
   get(id) { return this.has(id) ? JSON.parse(fs.readFileSync(this.recordPath(id), 'utf8')) : null; }

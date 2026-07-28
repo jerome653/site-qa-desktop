@@ -1,12 +1,15 @@
 'use strict';
 // providers.js — the Provider layer (frozen spec). Each provider enumerates ONE inventory type from a
 // crawl result (pages carry { url, body, headers, status }). Providers implement a stable interface —
-// `enumerate(pages, host) → [{ identityKey, meta }]` — so new inventory types (ecommerce/LMS/booking)
+// `enumerate(collection, ctx) → [{ identityKey, meta }]` (ADR-0004 §D2; widened from the shipped
+// `enumerate(pages, host)`, which could carry static HTML only) — so new inventory types (ecommerce/LMS/booking)
 // plug in without touching the engine. Detection is deterministic + conservative (reuses existing
 // signal patterns). Component-level enumeration is RESERVED (needs the render-time element read).
 //
 // identityKey is the STABLE logical identity (→ id-registry mints the stable ID). It must not depend on
 // discovery order or run — it is derived from the object's nature (path, role+filename, component key).
+
+const { wasCollected, assertCollection } = require('./collection');
 
 function pathOf(u) { try { const x = new URL(u); return (x.pathname.replace(/\/+$/, '') || '/'); } catch (_) { return u; } }
 function basename(u) { try { const x = new URL(u, 'http://x/'); return (x.pathname.split('/').pop() || u).toLowerCase().slice(0, 80); } catch (_) { return String(u).split('/').pop().toLowerCase().slice(0, 80); } }
@@ -18,14 +21,16 @@ function anyPage(pages, re) { for (const p of htmlPages(pages)) if (re.test(p.bo
 
 const PageProvider = {
   type: 'page',
-  enumerate(pages) {
+  enumerate(collection) {
+    const pages = collection.staticPages;
     return htmlPages(pages).map(p => ({ identityKey: 'page:' + pathOf(p.url), meta: { url: p.url, path: pathOf(p.url), status: p.status } }));
   },
 };
 
 const SectionProvider = {
   type: 'section',
-  enumerate(pages) {
+  enumerate(collection) {
+    const pages = collection.staticPages;
     const out = [];
     for (const p of htmlPages(pages)) {
       const path = pathOf(p.url);
@@ -57,7 +62,8 @@ const ASSET_RULES = [
 ];
 const AssetProvider = {
   type: 'asset',
-  enumerate(pages) {
+  enumerate(collection) {
+    const pages = collection.staticPages;
     const seen = new Map();
     for (const p of htmlPages(pages)) {
       const body = p.body || '';
@@ -109,7 +115,8 @@ const GLOBAL_SIGNALS = {
 };
 const GlobalProvider = {
   type: 'global',
-  enumerate(pages) {
+  enumerate(collection) {
+    const pages = collection.staticPages;
     const out = [];
     for (const [key, re] of Object.entries(GLOBAL_SIGNALS)) {
       const hit = anyPage(pages, re);
@@ -121,7 +128,8 @@ const GlobalProvider = {
 
 const FormProvider = {
   type: 'form',
-  enumerate(pages) {
+  enumerate(collection) {
+    const pages = collection.staticPages;
     const out = []; const seen = new Set();
     for (const p of htmlPages(pages)) {
       const forms = [...(p.body || '').matchAll(/<form\b[\s\S]*?<\/form>/gi)];
@@ -176,7 +184,8 @@ const BEHAVIOR_SIGNALS = {
 };
 const BehaviorProvider = {
   type: 'behavior',
-  enumerate(pages) {
+  enumerate(collection) {
+    const pages = collection.staticPages;
     const out = [];
     for (const [key, re] of Object.entries(BEHAVIOR_SIGNALS)) {
       const hit = anyPage(pages, re);
@@ -187,9 +196,181 @@ const BehaviorProvider = {
 };
 
 // Component-level enumeration is reserved (needs the render-time element read); interface honoured.
-const ComponentProvider = { type: 'component', enumerate() { return []; } };
+// ComponentProvider — THE PROVIDER THE OLD CONTRACT COULD NOT CARRY, and the A1 demonstration that the
+// widened one can. It has been a stub since it was written for exactly one reason, recorded at the top
+// of this file: component enumeration needs the render-time element read, and `enumerate(pages, host)`
+// could only ever hand it static HTML. It is not a missing feature — it is the contract refusing a
+// legitimate provider (ADR-0004 §Context/2).
+//
+// It now reads `collection.render`, a channel no collector fills yet (that is ADR-0005/0006 work,
+// explicitly out of A1 scope). So it still returns zero items — BY EVIDENCE, not by hard-coding: the
+// channel is read, found empty, and reported empty.
+//
+// The throw is deliberate and matches this codebase's oldest discipline (`registry.validate()`,
+// `assertTransition()`, `notRunRow`): if a render channel ever IS populated, returning [] would mint
+// "this site has no components" out of an unimplemented code path — the exact green-tick-from-nothing
+// defect the engine has spent several releases eliminating. Fail closed instead, and name the ADR that
+// owns the missing half.
+const ComponentProvider = {
+  type: 'component',
+  enumerate(collection) {
+    const render = collection.render;
+    if (!render.length) return [];
+    throw new Error('inventory: component enumeration over a populated render channel is not implemented (out of ADR-0004 A1 scope — see ADR-0005/ADR-0006)');
+  },
+};
 
-const PROVIDERS = [PageProvider, SectionProvider, ComponentProvider, GlobalProvider, AssetProvider, FormProvider, BehaviorProvider];
+// ── NetworkProvider (ADR-0005) — the first provider over a NON-staticPages channel ────────────────
+// Reads `collection.network` (the Network Collector's records) and enumerates one inventory item per
+// logical request. Pure: no browser, no filesystem, no clock, no scoring, no formatting.
+//
+// DETERMINISM IS THE WHOLE POINT, so the item deliberately carries LESS than the record does. A record
+// holds `timing` and `capturedAt` — real, wanted, and different on every run. Copying them into an
+// inventory item would make the inventory non-reproducible and quietly destroy replay ("same
+// collection → same score, forever", ADR-0004 §D3). They stay in the collection as evidence, and the
+// item points back at them by index. That index-not-copy seam is what ADR-0007's Evidence Ledger will
+// formalise.
+//
+// IDENTITY = method + URL, fragment stripped, QUERY PRESERVED. A cache-busted asset really is a
+// different request, so this is intentionally NOT the aggressive page-URL normalisation in
+// lib/fingerprint.js. Repeat requests for the same URL collapse onto one item and are counted.
+const NetworkProvider = {
+  type: 'network',
+  enumerate(collection) {
+    // Seam validator (ADR-0004 §D7). Handed anything that is not a Collection — a bare array, null, a
+    // look-alike — this throws instead of quietly returning []. Without it, `wasCollected` on a bare
+    // array is simply false and the provider reports "no network items" for input it never understood:
+    // a wrong answer dressed as a clean one. Caught by network-ledger.test.js, not by inspection.
+    assertCollection(collection, 'network provider');
+    // "Never looked" and "looked, saw nothing" are different facts. If no collector declared this
+    // channel, the provider contributes NOTHING and claims nothing — it does not throw, because a
+    // static-only crawl legitimately has no network channel and every existing caller is exactly that.
+    // The distinction survives for consumers via `wasCollected(collection, 'network')`; a rule or view
+    // that means to make a CLAIM about network must consult it. That duty is the consumer's, and
+    // consumers are out of ADR-0005 scope.
+    if (!wasCollected(collection, 'network')) return [];
+    const recs = collection.network;
+    const byKey = new Map();
+    recs.forEach((r, idx) => {
+      // Fail closed on a malformed record. A ledger that silently drops unreadable rows under-reports
+      // while looking complete, which is the failure mode this engine keeps having to un-ship.
+      if (!r || typeof r !== 'object' || typeof r.url !== 'string' || !r.url) {
+        throw new Error(`network provider: malformed record at index ${idx} (a record must carry a url) — the collector produced something this contract cannot read`);
+      }
+      const method = r.method || 'GET';
+      const key = 'network:' + method + ' ' + r.url;
+      let m = byKey.get(key);
+      if (!m) {
+        let origin = null, path = null;
+        try { const u = new URL(r.url); origin = u.origin; path = u.pathname; } catch (_) { /* non-absolute (data:, blob:) — stay null, never guess */ }
+        m = {
+          identityKey: key,
+          meta: {
+            url: r.url, method, origin, path,
+            resourceType: r.resourceType != null ? r.resourceType : null,
+            status: r.status != null ? r.status : null,
+            mimeType: r.mimeType != null ? r.mimeType : null,
+            sizeBytes: r.sizeBytes != null ? r.sizeBytes : null,
+            // Preserved as recorded — null here means the collector could not observe it, which is a
+            // different claim from `false`/`0` and must stay different.
+            fromCache: r.fromCache != null ? r.fromCache : null,
+            protocol: r.protocol != null ? r.protocol : null,
+            initiator: r.initiator != null ? r.initiator : null,
+            failure: r.failure != null ? r.failure : null,
+            occurrences: 0,
+            recordIndexes: [],   // -> collection.network; evidence stays in the collection, not copied
+          },
+        };
+        byKey.set(key, m);
+      }
+      m.meta.occurrences++;
+      m.meta.recordIndexes.push(idx);
+    });
+    return [...byKey.values()];
+  },
+};
+
+// ── DocumentAssetProvider (ADR-0006) — the second provider over a non-staticPages channel ─────────
+// Reads `collection.documents` (the Document Collector's per-document asset lists) and enumerates one
+// inventory item per logical document asset. Pure: no browser, no filesystem, no Playwright, no clock,
+// no scoring, no formatting — and, per ADR-0006's brief, NO CLASSIFICATION. It does not decide what
+// blocks rendering, what is a tracker, what is duplicated or what is unused. Those are rules and views.
+//
+// DOCUMENT ORDER IS PRESERVED, NOT IMPOSED. Items come back in the order the collector recorded them
+// (documents in collection order, assets in document order). Nothing here sorts. `buildInventory` DOES
+// sort by identityKey before minting IDs — that is a pre-existing, deliberate property of the inventory
+// layer (deterministic mint order) and is unrelated to asset order, which is preserved inside
+// `meta.index` / `meta.sectionIndex` where an order-dependent consumer will read it.
+//
+// IDENTITY. External assets key on their URL, so the same stylesheet referenced from two pages is two
+// items (a document asset belongs to its document — unlike a network request, which is one logical
+// request however many pages ask for it). Inline assets have no URL, so they key on their ordinal
+// within (document, section, tag) — stable for a stable document, which is the most that can honestly
+// be claimed for a thing with no identity of its own.
+const DocumentAssetProvider = {
+  type: 'document',
+  enumerate(collection) {
+    assertCollection(collection, 'document-asset provider');
+    // Same rule as NetworkProvider: an undeclared channel yields no items and makes NO claim. A
+    // static-only crawl legitimately has no document channel. `wasCollected` keeps the distinction
+    // available to any consumer that means to assert something about document assets.
+    if (!wasCollected(collection, 'documents')) return [];
+    const docs = collection.documents;
+    const out = [];
+    docs.forEach((d, di) => {
+      // Fail closed on a malformed document entry rather than skipping it: an inventory that silently
+      // drops what it cannot read under-reports while looking complete.
+      if (!d || typeof d !== 'object' || !Array.isArray(d.assets)) {
+        throw new Error(`document-asset provider: malformed document entry at index ${di} (needs an assets array) — the collector produced something this contract cannot read`);
+      }
+      const docUrl = typeof d.documentUrl === 'string' ? d.documentUrl : '';
+      let docPath = docUrl;
+      try { const u = new URL(docUrl); docPath = u.pathname; } catch (_) { /* relative or absent — keep as given, never guess */ }
+      d.assets.forEach((a, ai) => {
+        if (!a || typeof a !== 'object' || typeof a.tag !== 'string' || !a.tag) {
+          throw new Error(`document-asset provider: malformed asset at document ${di} index ${ai} (needs a tag)`);
+        }
+        const url = a.src || a.href || null;
+        const who = url != null ? url : `inline#${a.inlineIndex != null ? a.inlineIndex : ai}`;
+        out.push({
+          identityKey: `docasset:${docPath}|${a.section}|${a.tag}|${who}`,
+          meta: {
+            documentUrl: docUrl || null,
+            path: docPath || null,
+            source: typeof d.source === 'string' ? d.source : null,
+            // position — the whole point of a document inventory
+            index: typeof a.index === 'number' ? a.index : ai,
+            sectionIndex: typeof a.sectionIndex === 'number' ? a.sectionIndex : null,
+            section: a.section || null,
+            tag: a.tag,
+            inline: !!a.inline,
+            external: !!a.external,
+            href: a.href != null ? a.href : null,
+            src: a.src != null ? a.src : null,
+            rel: a.rel != null ? a.rel : null,
+            relTokens: a.relTokens != null ? a.relTokens : null,
+            type: a.type != null ? a.type : null,
+            media: a.media != null ? a.media : null,
+            integrity: a.integrity != null ? a.integrity : null,
+            crossorigin: a.crossorigin != null ? a.crossorigin : null,
+            async: !!a.async,
+            defer: !!a.defer,
+            module: !!a.module,
+            nomodule: !!a.nomodule,
+            attrs: a.attrs && typeof a.attrs === 'object' ? a.attrs : null,
+            // Evidence stays in the collection; the item points back at it. Same index-not-copy seam
+            // as ADR-0005, and the shape ADR-0007 will formalise. `raw` and `capturedAt` deliberately
+            // do NOT travel into the item.
+            recordIndexes: [{ document: di, asset: ai }],
+          },
+        });
+      });
+    });
+    return out;
+  },
+};
+
+const PROVIDERS = [PageProvider, SectionProvider, ComponentProvider, GlobalProvider, AssetProvider, FormProvider, BehaviorProvider, NetworkProvider, DocumentAssetProvider];
 
 module.exports = {
   PROVIDERS, PageProvider, SectionProvider, ComponentProvider, GlobalProvider, AssetProvider, FormProvider, BehaviorProvider,

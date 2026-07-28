@@ -13,7 +13,10 @@
 const REG = require('../site-qa/rules/registry');
 
 // ---------- shared HTML extraction ----------
-function headSlice(html) { const m = html.match(/<head[\s\S]*?<\/head>/i); return m ? m[0] : html.slice(0, 8000); }
+// headSlice + the document tokenizer now have ONE definition, in the Document Collector (ADR-0006).
+// The implementation moved unchanged — including the `slice(0, 8000)` fallback every head-based check
+// has always relied on — so nothing that reads c.head can move.
+const { collectDocumentAssets, headSlice } = require('../site-qa/collectors/document');
 function mainSlice(html) { const m = html.match(/<main[\s\S]*?<\/main>/i) || html.match(/<article[\s\S]*?<\/article>/i); return m ? m[0] : html; }
 function stripTags(s) { return s.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); }
 function attr(tag, name) { const m = tag.match(new RegExp('\\s' + name + '\\s*=\\s*["\']([^"\']*)["\']', 'i')); return m ? m[1] : null; }
@@ -321,8 +324,14 @@ const STATIC_CHECKS = [
   // §6 — render-blocking resources in <head>
   { id: 'render-blocking', section: '6 Performance', fn(c) {
     if (!c.isHtml) return null;
-    const css = (c.head.match(/<link\b[^>]*rel\s*=\s*["']stylesheet["'][^>]*>/gi) || []).filter(t => !/\smedia\s*=\s*["']print/i.test(t));
-    const js = (c.head.match(/<script\b[^>]*\ssrc\s*=[^>]*>/gi) || []).filter(t => !/\b(async|defer)\b/i.test(t) && !/type\s*=\s*["']module["']/i.test(t));
+    // ADR-0006: the head is tokenized ONCE by the Document Collector; this check no longer parses it.
+    // The filters below are the ORIGINAL regexes applied to the ORIGINAL tag strings (`a.raw`), so the
+    // result is identical BY CONSTRUCTION rather than by a re-implementation that would have to be
+    // trusted — quirks included (`\ssrc\s*=` demands whitespace before src; `\b(async|defer)\b` matches
+    // anywhere in the tag, filename included). document-assets.test.js diffs this against the original.
+    const headAssets = collectDocumentAssets(c.html).assets.filter(a => a.section === 'head');
+    const css = headAssets.filter(a => a.tag === 'link' && /rel\s*=\s*["']stylesheet["']/i.test(a.raw)).map(a => a.raw).filter(t => !/\smedia\s*=\s*["']print/i.test(t));
+    const js = headAssets.filter(a => a.tag === 'script' && /\ssrc\s*=/i.test(a.raw)).map(a => a.raw).filter(t => !/\b(async|defer)\b/i.test(t) && !/type\s*=\s*["']module["']/i.test(t));
     const n = css.length + js.length;
     if (n < 4) return null;
     const items = [
