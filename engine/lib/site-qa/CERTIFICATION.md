@@ -101,6 +101,26 @@ All objective evidence in one place. Re-run to refresh; date each result.
 | Eall | Full suite run | `node testing/run-all.js` | ✅ PASS · 9/9 suites green | 2026-07-08 |
 | E9 | Live pipeline run (real scan + visual-match) | `node sgen-qa-full.js https://example.com` · `--compare` | ✅ PASS · real scan quality 91 (39/15/1/3), 18 finding events, gate PASS, fingerprint deterministic across 2 runs; visual-match example.com vs example.org 100% match (screenshots+sharp) | 2026-07-08 |
 
+### Evidence Ledger — 2026-07-29 re-certification (release provenance)
+
+> The 2026-07-08 entries above record the state at that date and are left as they stand. These rows
+> were measured from a FRESH CLONE of the release candidate, not from a working tree — the distinction
+> is the whole reason this section exists.
+
+| # | Evidence | Command | Result | Date |
+|---|---|---|---|---|
+| R1 | Full suite from a fresh clone | `git clone <rc> && node testing/run-all.js` | ✅ PASS · **58/58 suites** (was 48/52 from committed state before provenance was restored) | 2026-07-29 |
+| R2 | Release gate, release tier | `SGEN_RELEASE_GATE=1 node testing/release-gate.js` | ✅ PASS · 10/10 · clean checkout · suite re-run from a clone of the committed artifact | 2026-07-29 |
+| R3 | Repository integrity | `node testing/repo-integrity.test.js` | ✅ PASS · 9/9 · every relative require resolves to a TRACKED path | 2026-07-29 |
+| R4 | Coverage ≥95% | `node testing/coverage.js 95` | ✅ PASS · **98.4%** (built-in V8, 0 external deps) | 2026-07-29 |
+| R5 | Security self-audit | `node testing/security-audit.js` | ✅ PASS · 0 findings · 6 threat classes · 35 files. T2 no longer flags network tokens inside comments; executable detection proven intact 9/9 | 2026-07-29 |
+| R6 | Score declaration integrity (ADR-0011) | `SGEN_P0_PRINT=1 node score-declaration.test.js` | ✅ PASS · 45/45 · trio honest **79** / inflated **90** / shipped **80** | 2026-07-29 |
+| R7 | Coverage declaration reaches the product | stored `report.json` of a real run | ✅ PASS · `evaluationDeclared: true`; advisory suites carry real scores (crossbrowser 57, console 18) — not false 100s | 2026-07-29 |
+| R8 | Golden byte-parity (A1 provider contract) | `node inventory/contract-parity.test.js` | ✅ PASS · 33/33 · golden unmoved | 2026-07-29 |
+| R9 | ADR-0008 on-disk oracle | 31-file store digest | ✅ PASS · `a0f727d8ca5028834cdc922d63387bbbb557addf20c445e760c13a0fd60246d3` unmoved | 2026-07-29 |
+| R10 | Version authority | `version-authority.js` | ✅ PASS · release-metadata agrees with version.js and engine/package.json · **0** duplicate declarations | 2026-07-29 |
+| R11 | Application starts from committed code | `node sgen-qa-serve.js` in a fresh clone | ✅ PASS · server started (`[engines] firefox+webkit present`) | 2026-07-29 |
+
 ## 5 · Technical Debt Register
 Explicit, owned debt — so no "temporary" bridge silently becomes permanent.
 | ID | Description | Severity | Blocks Prod | Introduced | Planned removal | Owner | Status | Evidence |
