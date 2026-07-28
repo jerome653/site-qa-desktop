@@ -92,16 +92,22 @@ if (!RELEASE_TIER) {
   const dirty = git('diff --name-only HEAD').split('\n').filter(Boolean);
   ok(dirty.length === 0, `release: the checkout is CLEAN — nothing shipped exists only on this disk${dirty.length ? '\n      ' + dirty.join('\n      ') : ''}`);
 
-  // 4b · extract the committed artifact and run the suite THERE. This is the whole point: the numbers
-  // that certify a release must come from the tree a customer can obtain, not from this directory.
+  // 4b · obtain the committed artifact the way a customer would, and run the suite THERE. The numbers
+  // that certify a release must come from a tree anyone can obtain, not from this directory.
+  //
+  // CLONE, not `git archive`. An archive is a bare directory with no .git, so repo-integrity.test.js and
+  // this gate's own structural tier both die with `fatal: not a git repository` — two of the very gates
+  // the release depends on would be silently unrunnable at exactly the moment they matter most.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sgen-release-'));
   const head = git('rev-parse --short HEAD').trim();
   try {
-    cp.execSync(`git archive HEAD | tar -x -C ${JSON.stringify(tmp)}`, { cwd: REPO, maxBuffer: 1 << 28, shell: 'bash' });
+    const dest = path.join(tmp, 'repo');
+    cp.execSync(`git clone --quiet --no-checkout ${JSON.stringify(REPO)} ${JSON.stringify(dest)}`, { cwd: REPO, maxBuffer: 1 << 28 });
+    cp.execSync(`git checkout --quiet --detach ${git('rev-parse HEAD').trim()}`, { cwd: dest, maxBuffer: 1 << 28 });
     const env = Object.assign({}, process.env, { NODE_PATH: path.join(REPO, 'engine', 'node_modules') });
     delete env.SGEN_RELEASE_GATE;   // the child must not recurse into this tier
     const out = cp.execSync('node testing/run-all.js', {
-      cwd: path.join(tmp, 'engine', 'lib', 'site-qa'), env, maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: path.join(dest, 'engine', 'lib', 'site-qa'), env, maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'],
     }).toString();
     const m = out.match(/ALL SUITES PASS — (\d+)\/(\d+)/);
     ok(!!m, `release: the suite passes from the COMMITTED artifact ${head}${m ? ` (${m[1]}/${m[2]})` : '\n' + out.split('\n').filter(l => l.includes('✗')).map(l => '      ' + l.trim()).join('\n')}`);
