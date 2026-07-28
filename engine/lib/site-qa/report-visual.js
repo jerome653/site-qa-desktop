@@ -190,11 +190,94 @@ window.copyMD=function(btn){var md=decodeURIComponent(btn.getAttribute('data-md'
 function done(ok){var t=btn.innerHTML;btn.textContent=ok?'Copied \\u2713':'Copy failed';btn.classList.add(ok?'ok':'err');setTimeout(function(){btn.innerHTML=t;btn.classList.remove('ok','err');},1400);}
 function fallback(){var ta=document.createElement('textarea');ta.value=md;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();var ok=false;try{ok=document.execCommand('copy');}catch(e){}document.body.removeChild(ta);done(ok);}
 if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(md).then(function(){done(true);},function(){fallback();});}else fallback();};
+// v5 re-rate — a RECORDED server re-score. Collects the ids of every UNCHECKED (ignored) finding row,
+// POSTs { id, profile, excludeIds } to /api/visual-rerate, then paints back ONLY what the server returns
+// (fidelity number + tier tiles + a "was X -> now Y" delta). The score is never recomputed in the browser.
+window.rerateBuild=function(btn){
+  if(!btn||btn.disabled) return;
+  var id=btn.getAttribute('data-runid'); if(!id) return;
+  var sel=document.getElementById('vr-profile'); var profile=sel?sel.value:'balanced';
+  var excludeIds=[]; var rows=document.querySelectorAll('.vg-find');
+  for(var i=0;i<rows.length;i++){ var cb=rows[i].querySelector('.vg-keep'); if(cb&&!cb.checked){ var fid=rows[i].getAttribute('data-fid'); if(fid) excludeIds.push(fid); } }
+  var delta=document.getElementById('vr-delta'); var orig=btn.textContent;
+  btn.disabled=true; btn.textContent='Re-rating...'; if(delta){delta.style.color='var(--ink-soft)';delta.textContent='';}
+  fetch('/api/visual-rerate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:id,profile:profile,excludeIds:excludeIds})})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      btn.disabled=false; btn.textContent=orig;
+      if(!j||!j.ok){ if(delta){delta.style.color='var(--fail)';delta.textContent='re-rate failed';} return; }
+      var fEl=document.getElementById('vr-fidelity');
+      if(fEl&&j.fidelity!=null){ fEl.textContent=j.fidelity; fEl.style.color=j.fidelity>=90?'var(--pass)':(j.fidelity>=75?'var(--warn)':'var(--fail)'); }
+      if(j.tiers){ for(var k in j.tiers){ var t=j.tiers[k]; if(!t) continue; var tile=document.querySelector('.vg-tile[data-tier="'+k+'"]'); if(!tile) continue; var c=tile.querySelector('.vg-count'); if(c&&t.count!=null) c.textContent=t.count; var ig=tile.querySelector('.vg-ig'); if(ig){ var ic=t.ignored!=null?t.ignored:0; if(ic>0){ig.textContent=ic+' ignored';ig.hidden=false;}else{ig.hidden=true;} } } }
+      if(delta&&j.fidelity!=null){ delta.style.color='var(--ink-soft)'; delta.textContent='was '+(j.before!=null?j.before:'?')+' -> now '+j.fidelity; }
+    })
+    .catch(function(){ btn.disabled=false; btn.textContent=orig; if(delta){delta.style.color='var(--fail)';delta.textContent='re-rate failed (network)';} });
+};
 ${TOTOP_JS}
 // Standalone-tab case only — initToTop() no-ops when the shell frames this report (the shell's arrow
 // owns the scroll there). This page runs ~2400px on a real comparison with its scrollbars hidden.
 initToTop(window);
 `;
+
+// ── v5 build-fidelity (data.graded) ─────────────────────────────────────────────────────────────
+// Additive + fully null-guarded: an OLD stored report has no data.graded, so gradedSection() returns ''
+// and the hero fidelity block is skipped — those reports render byte-for-byte as before. The score is
+// NEVER recomputed in the browser: the "Re-rate build" control POSTs to /api/visual-rerate (a recorded
+// server re-score) and only paints back the number the server returns.
+function gradedColor(score) {
+  return score >= 90 ? 'var(--pass)' : score >= 75 ? 'var(--warn)' : 'var(--fail)';
+}
+// worst -> best, matching the engine's tier severity order (MISSING high … IMPROVEMENT acceptable).
+const GRADE_TIERS = ['MISSING', 'DEFECT', 'SPACING', 'IMPROVEMENT'];
+const GRADE_TIER_LABEL = { MISSING: 'Missing', DEFECT: 'Design defect', SPACING: 'Spacing', IMPROVEMENT: 'Improvement' };
+const GRADE_TIER_CLASS = { MISSING: 'fail', DEFECT: 'warn', SPACING: 'muted', IMPROVEMENT: 'pass' };
+
+function gradedSection(data) {
+  const g = data.graded;
+  if (!g) return '';                                     // old report → render nothing new
+  const tiles = GRADE_TIERS.map(k => {
+    const t = (g.tiers && g.tiers[k]) || {};
+    const count = t.count != null ? t.count : 0;
+    const ignored = t.ignored != null ? t.ignored : 0;
+    const label = t.label || GRADE_TIER_LABEL[k];
+    const cls = GRADE_TIER_CLASS[k] || 'muted';
+    return `<div class="vg-tile" data-tier="${k}">
+        <div class="vg-count vg-${cls}">${count}</div>
+        <div class="vg-tl">${esc(label)}</div>
+        <div class="vg-ig"${ignored > 0 ? '' : ' hidden'}>${ignored} ignored</div>
+      </div>`;
+  }).join('');
+  const findings = Array.isArray(g.findings) ? g.findings : [];   // already sorted worst-first by the engine
+  const findRows = findings.map(f => {
+    const kept = !f.ignored;                             // checked = KEPT; an already-ignored finding renders unchecked
+    const cls = GRADE_TIER_CLASS[f.tier] || 'muted';
+    const vps = Array.isArray(f.viewports) ? f.viewports.filter(Boolean).join(', ') : '';
+    return `<label class="vg-find" data-fid="${esc(f.id)}">
+        <input type="checkbox" class="vg-keep"${kept ? ' checked' : ''}>
+        <span class="vg-badge vg-b-${cls}">${esc(f.tier || '')}</span>
+        <span class="vg-fl">${esc(f.label)}</span>
+        <span class="vg-fp vm-sec">${esc(f.page || '')}</span>
+        ${vps ? `<span class="vg-fv vm-sec">${esc(vps)}</span>` : ''}
+      </label>`;
+  }).join('');
+  const profile = g.profile || 'balanced';
+  const opts = ['strict', 'balanced', 'lenient'].map(p => `<option value="${p}"${p === profile ? ' selected' : ''}>${p}</option>`).join('');
+  // data.id is what the recorded server re-rate keys on. If the serve layer did not attach it (an old
+  // in-memory result, or a stored report re-opened), the button is disabled — a re-run is required.
+  const hasId = data.id != null && data.id !== '';
+  const rerate = `<div class="vg-rerate">
+      <label class="vg-rl">Strictness <select id="vr-profile">${opts}</select></label>
+      <button id="vr-run" class="vg-btn" data-runid="${esc(data.id || '')}"${hasId ? '' : ' disabled'} onclick="event.preventDefault();rerateBuild(this)">Re-rate build</button>
+      ${hasId ? '' : '<span class="vg-note">re-run required</span>'}
+      <span id="vr-delta" class="vg-delta"></span>
+    </div>`;
+  return `<section class="vg">
+    <div class="vg-h"><span class="vg-eyebrow">Build fidelity · ${esc(g.model || 'sgen-visual-fidelity-v1')} · four-tier breakdown</span></div>
+    <div class="vg-tiles">${tiles}</div>
+    ${rerate}
+    ${findRows ? `<div class="vg-findings">${findRows}</div>` : '<p class="vm-sub" style="margin-top:10px">No graded findings — nothing to keep or ignore.</p>'}
+  </section>`;
+}
 
 function render(data, outDir) {
   const overallColor = data.overall >= 90 ? 'var(--pass)' : data.overall >= 75 ? 'var(--warn)' : 'var(--fail)';
@@ -245,6 +328,34 @@ function render(data, outDir) {
     .cmd{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer;vertical-align:middle;margin-left:8px;white-space:nowrap}
     .cmd:hover{color:var(--ink);border-color:var(--line-strong)}
     .cmd.ok{color:var(--pass);border-color:var(--pass-line)}.cmd.err{color:var(--fail);border-color:var(--fail-line)}
+    /* v5 build-fidelity — four-tier breakdown + recorded re-rate. Reuses the file's status tokens. */
+    .vg{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);padding:14px 16px}
+    .vg-h{margin:0 0 12px}
+    .vg-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint);font-weight:700}
+    .vg-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    .vg-tile{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-height:74px;display:flex;flex-direction:column;gap:6px}
+    .vg-count{font-family:var(--mono);font-size:26px;font-weight:730;line-height:1;font-variant-numeric:tabular-nums}
+    .vg-fail{color:var(--fail)}.vg-warn{color:var(--warn)}.vg-pass{color:var(--pass)}.vg-muted{color:var(--ink-soft)}
+    .vg-tl{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint)}
+    .vg-ig{font-family:var(--mono);font-size:10px;color:var(--ink-faint)}
+    .vg-rerate{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 2px}
+    .vg-rl{font-family:var(--mono);font-size:11px;color:var(--ink-soft);display:inline-flex;align-items:center;gap:7px}
+    .vg-rl select{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:5px 9px}
+    .vg-btn{font-family:var(--mono);font-size:11.5px;font-weight:600;color:#fff;background:var(--brand-solid);border:1px solid var(--brand-solid);border-radius:7px;padding:6px 13px;cursor:pointer}
+    .vg-btn:hover{opacity:.9}.vg-btn[disabled]{opacity:.4;cursor:not-allowed}
+    .vg-note{font-family:var(--mono);font-size:10.5px;color:var(--warn)}
+    .vg-delta{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft)}
+    .vg-findings{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+    .vg-find{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:8px 11px;cursor:pointer}
+    .vg-find input{flex:none;cursor:pointer}
+    .vg-badge{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;border-radius:5px;padding:2px 7px;flex:none}
+    .vg-b-fail{color:var(--fail);background:var(--fail-bg);border:1px solid var(--fail-line)}
+    .vg-b-warn{color:var(--warn);background:var(--warn-bg);border:1px solid var(--warn-line)}
+    .vg-b-pass{color:var(--pass);background:var(--pass-bg);border:1px solid var(--pass-line)}
+    .vg-b-muted{color:var(--ink-soft);background:var(--surface);border:1px solid var(--line)}
+    .vg-fl{flex:1;min-width:0;font-size:12.5px;color:var(--ink)}
+    .vg-fp,.vg-fv{flex:none}
+    @media(max-width:560px){.vg-tiles{grid-template-columns:1fr 1fr}}
   </style></head><body>
   <div class="wrap">
     <div class="vm-hero">
@@ -253,6 +364,7 @@ function render(data, outDir) {
         <p class="vm-sub">Reference: ${esc(data.reference)} · ${data.pairs} page(s) paired · ${data.viewports.length} viewports · ${redesign ? 'structural only (redesign mode)' : (data.sharp ? 'pixel + structural' : 'structural only (sharp missing)')}</p>
         <p class="vm-sub" style="margin-top:4px">${esc(verdictLine(data.overall, redesign))} Any issue below has a <b>Copy MD</b> button — it copies a ready-to-forward ticket (page, exact element, what differs, evidence screenshots) for the dev team.</p></div>
       <div style="text-align:right;display:flex;gap:22px;align-items:flex-start">
+        ${data.graded ? `<div><div class="vm-score" id="vr-fidelity" style="color:${data.graded.score != null ? gradedColor(data.graded.score) : 'var(--ink-soft)'}">${data.graded.score != null ? data.graded.score : '&mdash;'}</div><div class="vm-sub">build fidelity</div></div>` : ''}
         ${data.quality != null ? `<div><div class="vm-score" style="color:${data.quality >= 90 ? 'var(--pass)' : data.quality >= 75 ? 'var(--warn)' : 'var(--fail)'}">${data.quality}</div><div class="vm-sub">quality score</div></div>` : ''}
         <div><div class="vm-score">${data.overall}%</div><div class="vm-sub">${redesign ? 'structural match' : 'overall match'}</div></div>
       </div>
@@ -263,6 +375,7 @@ function render(data, outDir) {
         ? 'The two sites are meant to look different, so the pixel diff is switched off — on a redesign it measures the intent, not a defect. This score is the <b>structural</b> match only: what the old site had vs what the new build still has. Screenshots for both sides are still captured below.'
         : 'Same design, new platform — so the pixel diff applies and is scored. Expect 1–3% from antialiasing and font rasterisation alone; carousels, live dates, A/B buckets and lazy-load timing add more. Treat the number as a pointer to the screenshots, not a verdict. Comparing a <b>redesign</b>? Switch the mode in Settings — this pass is noise there.'}
     </div>
+    ${gradedSection(data)}
     ${data.unmatchedRef && data.unmatchedRef.length ? `<div class="vm-err" style="margin-top:14px">${data.unmatchedRef.length} reference page(s) had no matching path on SGEN: ${data.unmatchedRef.slice(0, 12).map(esc).join(', ')}${data.unmatchedRef.length > 12 ? ' …' : ''}</div>` : ''}
     <div style="margin-top:22px">${pages || '<p class="vm-sub">No pages paired — check the two URLs share paths, or pass an old→new URL map.</p>'}</div>
   </div><script>${CLIENT}</script></body></html>`;

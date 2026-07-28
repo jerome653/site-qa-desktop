@@ -313,6 +313,36 @@ const STYLE = `
 .ig{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--ink-faint);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer;white-space:nowrap;flex:none}
 .ig:hover{color:var(--ink);border-color:var(--line-strong)}
 .iss-empty{font-family:var(--mono);font-size:12px;color:var(--ink-faint);background:var(--surface);border:1px dashed var(--line-strong);border-radius:10px;padding:16px;text-align:center}
+/* 4.4.0 merged list: the section's own copy-summary strip, and the priority chips sharing a row with
+   the report-level copy button. margin-left:auto on the copy button pushes it (and the un-ignore
+   button after it) to the right edge, away from the filter segment. */
+.sec-tools{display:flex;justify-content:flex-end;padding:6px 12px 0}
+.iss-ctl > .cmd{margin-left:auto}
+.iss-ctl > .cmd + .iss-un{margin-left:8px}
+/* An open finding inside a section keeps its card look; a passed/review row stays the lighter tree
+   row. Both live in .rows now, so give the issue card a little breathing room from the plain rows. */
+.rows .iss{margin:6px 10px}
+/* Inline evidence on the flat Issues row. The row already HOLDS target/detail/meta/items (the same
+   fields the per-section row renders) — it just never printed them, so every issue needed a jump to
+   per-section detail to learn anything. Collapsed by default; the row is the toggle, and "detail ->"
+   survives for the deep jump into the per-section tree.
+   flex-wrap is LOAD-BEARING, not cosmetic: .iss is display:flex and was nowrap above 700px, so a
+   flex:1 0 100% child does NOT move to its own row — it competes on the same line and squeezes every
+   sibling to zero width (measured: .iss-t went to 0px wide while the row grew to 412px tall, i.e. an
+   expanded issue rendered with an invisible title). Wrapping gives the panel its own line and leaves
+   the collapsed row untouched: display:none takes it out of flow, so the one-line layout is byte-
+   identical until you open a row. */
+.iss{cursor:pointer;flex-wrap:wrap}
+.iss-x{font-family:var(--mono);font-size:10px;color:var(--ink-faint);flex:none;width:12px;text-align:center;transition:transform .13s ease;user-select:none}
+.iss.open .iss-x{transform:rotate(90deg)}
+.iss-ev{flex:1 0 100%;order:10;display:none;cursor:auto;margin:9px 0 2px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px}
+.iss.open .iss-ev{display:block}
+.ie-r{display:flex;gap:9px;align-items:flex-start;margin:0 0 5px;font-size:11.5px;line-height:1.5}
+.ie-r:last-child{margin-bottom:0}
+.ie-k{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);flex:none;width:74px;padding-top:2px}
+.ie-v{color:var(--ink);min-width:0;word-break:break-word}
+.ie-v.mono{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+.ie-none{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
 /* Reduced-view disclosure. A clean-looking report that quietly hides failures is the most dangerous
    output this tool produces — so the moment ignore hides anything, the report says so, visibly. */
 .integ{display:flex;gap:11px;align-items:flex-start;background:var(--fail-bg);border:1px solid var(--fail-line);border-left:3px solid var(--fail);border-radius:10px;padding:11px 14px;margin:0 0 11px;font-size:12.5px;line-height:1.55;color:var(--ink-soft)}
@@ -346,6 +376,34 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);display
    match there (verified: the element stays display:block under that emulation). That path is guarded
    separately in JS by the print=1 flag. Both guards are required; neither one covers the other. */
 @media print{#totop{display:none!important}}
+/* CHANGE (4.3.0) — PAGE COVERAGE section. Lists WHICH pages were audited vs skipped, so the operator
+   sees coverage (the summary only ever showed a count). Reuses the report's surface/line/ink tokens and
+   the inverted status palette (--pass = audited OK, --fail = errored). Long lists SCROLL inside their own
+   max-height container so a 100+ page site never blows out the page. Additive; rendered only when
+   data.pageCoverage is present (older report.json without it is byte-for-byte unaffected). */
+.pcov{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 16px}
+.pcov-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 12px}
+.pcov-h h2{font-size:11px;font-family:var(--mono);letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint);margin:0;font-weight:700}
+.pcov-body{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pcov-body.solo{grid-template-columns:1fr}
+.pcov-col{min-width:0}
+.pcov-lbl{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint);font-weight:700;margin:0 0 8px;display:flex;align-items:center;gap:7px}
+.pcov-lbl .pcov-n{font-size:10px;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:1px 8px}
+.pcov-list{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.pcov-row{display:flex;align-items:center;gap:9px;padding:7px 11px;border-bottom:1px solid var(--line);font-size:12.5px;text-decoration:none;color:var(--ink);min-width:0}
+.pcov-row:last-child{border-bottom:0}
+a.pcov-row:hover{background:var(--surface)}
+.pcov-ck{width:15px;height:15px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--pass-bg);color:var(--pass)}
+.pcov-ck svg{width:9px;height:9px}
+.pcov-p{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+a.pcov-row:hover .pcov-p{color:var(--ink)}
+.pcov-badge{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--fail);background:var(--fail-bg);border:1px solid var(--fail-line);border-radius:6px;padding:2px 8px;flex:none}
+.pcov-note{font-family:var(--mono);font-size:10px;color:var(--ink-faint);flex:none;white-space:nowrap}
+.pcov-more{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);padding:7px 11px}
+.pcov-empty{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);padding:12px 11px}
+.pcov-foot{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);margin-top:11px;line-height:1.5}
+.pcov-foot code{background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--ink-soft)}
+@media (max-width:700px){.pcov-body{grid-template-columns:1fr}}
 `;
 
 // Back-to-top installer, shared verbatim by the shell (sgen-qa-serve.js) and both report renderers.
@@ -476,58 +534,79 @@ return '<details class="drill drill2"><summary>&#9656; show '+items.length+' occ
 // suite, checks order fail -> warn -> manual -> pass. Both use a stable sort over an {item,index}
 // wrapper so the ORIGINAL index is kept for the chk-s{si}c{ci} id (dashboard gotoIssue targets stay valid).
 var CK_RANK={fail:0,warn:1,manual:2,pass:3};function ckRank(c){var r=CK_RANK[c.status];return r==null?4:r;}
-document.getElementById('results').innerHTML=D.suites.map(function(su,si){return {su:su,si:si};}).sort(function(a,b){return ((a.su.fail||a.su.warn)?0:1)-((b.su.fail||b.su.warn)?0:1);}).map(function(o){var su=o.su,si=o.si;var t=su.pass+su.warn+su.fail+su.manual;var w=worst(su);var badge=w==='fail'?'<span class="badge fail">'+su.fail+' failed</span>':w==='warn'?'<span class="badge warn">'+su.warn+' warning'+(su.warn>1?'s':'')+'</span>':w==='manual'?'<span class="badge manual">needs review</span>':'<span class="badge pass">all passing</span>';
-var rows=su.checks.map(function(c,ci){return {c:c,ci:ci};}).sort(function(a,b){return ckRank(a.c)-ckRank(b.c);}).map(function(o){var c=o.c,ci=o.ci;var canCopy=(c.status==='fail'||c.status==='warn')&&c._md;return '<div class="row" id="chk-s'+si+'c'+ci+'" data-status="'+c.status+'"><span class="st">'+GLYPH[c.status]+'</span><div class="rbody"><div class="rname">'+esc(c.name)+(canCopy?' '+copyBtn(c._md,'\\u29C9 Copy for dev'):'')+'</div>'+(c._why?'<div class="rwhy">'+esc(c._why)+'</div>':'')+(c.target?'<div class="rtarget">'+esc(c.target)+'</div>':'')+(c.detail?'<div class="rdetail">'+esc(c.detail)+'</div>':'')+drill(c.items,c)+'</div><span class="rmeta">'+esc(c.meta||'')+'</span></div>';}).join('');
-// 3.0.0 restructure: the per-section detail list (incl. passed tests) starts COLLAPSED — the score
-// dashboard + per-section summary is the only thing expanded. Was: open whenever a suite had a
-// fail/warn. Issues now live in their own flat section above; this is the drill-down destination
-// (gotoIssue opens the target suite on demand).
-// The collapsed bar is the ONLY view of a section until you open it — the 3.0.0 restructure put the
-// detail list behind a collapse, which left a STATIC suite description ("internal links · redirects")
-// as the whole story for a closed section. It described the suite, never this run: a section with 3
-// broken links read exactly like a clean one, so the bar could not be scanned and every section had to
-// be opened to find out. Summarise what actually went wrong instead — real check names, fail before
-// warn — so a closed bar answers "what is wrong in here". Names come from the same c.name the rows
-// render, so the bar cannot disagree with the list underneath it. The ratio and badge stay: they are
-// counts, this is the substance. Falls back to the description only when there is nothing to report.
-var bad=su.checks.filter(function(c){return c.status==='fail'||c.status==='warn';}).sort(function(a,b){return ckRank(a)-ckRank(b);});
-var sub=bad.length
-  ? bad.slice(0,2).map(function(c){return esc(c.name);}).join(' &middot; ')+(bad.length>2?' &middot; +'+(bad.length-2)+' more':'')
-  // Gate the all-clear on su.pass > 0, NOT on manual: a suite with nothing scorable (0/0 — Cross-Browser
-  // when the extra engines did not run) would otherwise render "All 0 checks passed", which is a green
-  // claim about a section that measured nothing. No passes => say what the section is, never that it passed.
-  : (su.pass > 0 ? 'All '+su.pass+' check'+(su.pass===1?'':'s')+' passed' : esc(su.desc));
-var open='';
-return '<details class="suite" data-worst="'+w+'"'+open+'><summary><span class="sicon"><svg viewBox="0 0 24 24">'+ICONS[su.icon]+'</svg></span><span class="sname"><b>'+esc(su.name)+'</b><div class="sub">'+sub+'</div></span><span class="sratio">'+su.pass+'/'+(su.pass+su.warn+su.fail)+'</span>'+badge+'<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="rows">'+rows+'</div></details>';}).join('');
+/* eslint-disable */
+// ============ FINDINGS — ONE table: filter, group by section, expand in place ====================
+// (4.4.0) Replaces the split "Issues" (flat, fail|warn only) + "Passed tests & per-section detail"
+// (tree, everything) pair with a single list. Owner: "merge the two tables into one, then add
+// another for Passed — All / Blockers / Major / Polish / Passed — each section collapsible, copy
+// summary or issue, option to ignore, expanded views instead of scrolling to locations, and the
+// evidence table last."
+//
+// WHY THE MERGE IS SAFE: both old views rendered the SAME rows from D.suites — the flat list just
+// filtered to fail|warn and the tree showed everything. Collapsing them into one filtered list
+// removes a place where the two could disagree, and removes the reason "detail ->" existed at all
+// (it was a jump BETWEEN the two views of the same row).
+//
+// PASSED AND REVIEW ARE SEPARATE CHIPS, DELIBERATELY. Manual and never-ran rows are NOT passes, and
+// folding them under "Passed" would restate this engine's oldest defect — a check that never looked
+// reading as a check that passed — in the UI, one release after score.js killed it in the maths.
+// notRun ⊆ manual, so those rows land in REVIEW where they say what they are.
+var PRI_NAME={1:'BLOCKER',2:'MAJOR',3:'POLISH'};
+var FILT='all', IGN=Object.create(null), OPN=Object.create(null), SOPEN=Object.create(null);
+function kindOf(c){return (c.status==='fail'||c.status==='warn')?'open':(c.status==='pass'?'pass':'review');}
+// Every check, once, carrying its stable anchor. si/ci stay the ORIGINAL indices so chk-s{si}c{ci}
+// (gotoIssue targets, dashboard deep-links, report URLs already shared) keep resolving.
+function allRows(){var out=[];
+  D.suites.forEach(function(su,si){su.checks.forEach(function(c,ci){
+    out.push({c:c,su:su,si:si,ci:ci,key:'chk-s'+si+'c'+ci,kind:kindOf(c),
+      tier:(c.tier==null?3:c.tier),untiered:c.tier==null});});});
+  return out;}
+function rowMatches(x){
+  if(FILT==='all')return true;
+  if(FILT==='pass')return x.kind==='pass';
+  if(FILT==='review')return x.kind==='review';
+  return x.kind==='open'&&String(x.tier)===FILT;}
+// Open findings sort by launch tier then by what they cost; passed/review rows sort by name so a
+// long clean section reads alphabetically instead of in registry order.
+function rowSort(a,b){
+  if(a.kind!==b.kind)return (a.kind==='open'?0:a.kind==='review'?1:2)-(b.kind==='open'?0:b.kind==='review'?1:2);
+  if(a.kind==='open')return a.tier-b.tier||((b.c.deduction||0)-(a.c.deduction||0));
+  return String(a.c.name).localeCompare(String(b.c.name));}
+// The passed / manual / not-run row. Same fields the old per-section tree printed (name, why,
+// target, detail, occurrences, meta) — these rows have no launch tier, no deduction and nothing to
+// triage, so they carry no priority badge, no cost and no ignore button. Anchor id is kept.
+function detailRow(x){var c=x.c;var canCopy=c._md;
+  return '<div class="row" id="'+x.key+'" data-status="'+c.status+'"><span class="st">'+GLYPH[c.status]+'</span><div class="rbody"><div class="rname">'+esc(c.name)+(canCopy?' '+copyBtn(c._md,'\\u29C9 Copy for dev'):'')+'</div>'+(c._why?'<div class="rwhy">'+esc(c._why)+'</div>':'')+(c.target?'<div class="rtarget">'+esc(c.target)+'</div>':'')+(c.detail?'<div class="rdetail">'+esc(c.detail)+'</div>':'')+drill(c.items,c)+'</div><span class="rmeta">'+esc(c.meta||'')+'</span></div>';}
+// The collapsed section bar must answer "what is wrong in here" without being opened — a static suite
+// description ("internal links · redirects") made a section with 3 broken links read exactly like a
+// clean one. Names come from the same c.name the rows render, so the bar cannot disagree with the
+// list underneath it.
+// Gate the all-clear on su.pass > 0, NOT on manual: a suite with nothing scorable (Cross-Browser when
+// the extra engines never ran) would otherwise say "All 0 checks passed" — a green claim about a
+// section that measured nothing.
+function secSub(su){
+  var bad=su.checks.filter(function(c){return c.status==='fail'||c.status==='warn';}).sort(function(a,b){return ckRank(a)-ckRank(b);});
+  return bad.length
+    ? bad.slice(0,2).map(function(c){return esc(c.name);}).join(' &middot; ')+(bad.length>2?' &middot; +'+(bad.length-2)+' more':'')
+    : (su.pass>0?'All '+su.pass+' check'+(su.pass===1?'':'s')+' passed':esc(su.desc));}
 
-// Unified quality dashboard — ONE section: per-suite score card whose rows ARE the clickable issues.
-// Clean suites collapse into a single line; no separate suite-strip / issue-list duplication.
-window.gotoIssue=function(id){var el=document.getElementById(id);if(!el)return;var su=el.closest('details.suite');if(su)su.open=true;var f=document.querySelector('.tab.all');if(f)filt('all',f);if(su)su.open=true;el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');};
+// (The per-section Score dashboard was removed 2026-07-17 — see the note before the Issues render below.)
+// The header now carries one overall quality score; the last-scan comparison panel is unchanged.
+// One list now, so "jump to this row" means: widen the filter to ALL (the row may be filtered out of
+// the current view), re-render, open its section, then scroll. The re-render is why the lookup runs
+// after it and not before — the old element is gone by then.
+window.gotoIssue=function(id){
+  if(FILT!=='all'){FILT='all';SOPEN=Object.create(null);renderIssues();}
+  var el=document.getElementById(id);if(!el)return;
+  var su=el.closest('details.suite');
+  if(su&&!su.open){su.open=true;SOPEN[su.getAttribute('data-si')]=true;}
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+  el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');};
 // Grade color: 95+ = full SGEN red (a pass); below that it lightens toward pale as the grade drops.
 function gcol(s){s=+s||0;if(s>=95)return'#C8181C';var t=Math.max(0,Math.min(1,(95-s)/60));return'rgb('+Math.round(200+55*t)+','+Math.round(24+150*t)+','+Math.round(28+150*t)+')';}
-(function(){var el=document.getElementById('qscore');if(!el)return;
-function col(s){return gcol(s);}
-var SEVR={critical:0,high:1,medium:2,low:3};
-var bySuiteKey={};D.suites.forEach(function(su,si){bySuiteKey[su.key]=bySuiteKey[su.name]={su:su,si:si};});
-var cats=(D.quality?D.quality.categories:D.suites.map(function(s){return {key:s.key,name:s.name,score:null,deductions:[]};}));
-var cards=[],clean=[],totalIssues=0,blockers=[];
-D.suites.forEach(function(su,si){su.checks.forEach(function(ch,ci){if((ch.status==='fail'||ch.status==='warn')&&ch.tier===1)blockers.push({su:su.name,si:si,ci:ci,ch:ch});});});
-cats.forEach(function(c){var m=bySuiteKey[c.key]||bySuiteKey[c.name];if(!m)return;
-var rows=[];m.su.checks.forEach(function(ch,ci){if(ch.status==='fail'||ch.status==='warn')rows.push({ch:ch,ci:ci});});
-rows.sort(function(a,b){var s=(a.ch.status==='fail'?0:1)-(b.ch.status==='fail'?0:1);if(s)return s;return (SEVR[a.ch.severity]!=null?SEVR[a.ch.severity]:4)-(SEVR[b.ch.severity]!=null?SEVR[b.ch.severity]:4);});
-if(!rows.length){clean.push({name:c.name,score:c.score});return;}
-totalIssues+=rows.length;
-// 3.0.0 restructure — the dashboard is a SUMMARY: per-section score + bar + an issue count that jumps
-// to the Issues section. It used to inline up-to-5 clickable issue rows per card; the flat Issues
-// section above now owns that list (with priority filter, ignore and the dev ticket), so inlining them
-// here is duplication and stops this being "one dashboard with per each section scores" (owner's ask).
-var rhtml='<button class="qi qi-more" onclick="gotoIssues()" title="See these in the Issues section">'+rows.length+' issue'+(rows.length>1?'s':'')+' \\u2192</button>';
-cards.push({score:c.score,html:'<div class="qcat"><div class="top"><span class="nm">'+esc(c.name)+'</span>'+(c.score!=null?'<span class="sc" style="color:'+col(c.score)+'">'+c.score+'</span>':'')+'</div>'+(c.score!=null?'<div class="track"><i style="width:'+c.score+'%;background:'+col(c.score)+'"></i></div>':'')+rhtml+'</div>'});});
-cards.sort(function(a,b){return (a.score==null?101:a.score)-(b.score==null?101:b.score);});
-var cleanHtml=clean.length?'<div class="qclean">Clean: '+clean.map(function(x){return '<span class="qclean-chip">'+esc(x.name)+(x.score!=null?' '+x.score:'')+'</span>';}).join('')+'</div>':'';
-var head='<div class="qs-head"><h2>Score dashboard \\u00b7 per-section summary \\u00b7 '+totalIssues+' issue'+(totalIssues===1?'':'s')+'</h2>'+(D.quality?'<span class="ov" style="color:'+col(D.quality.overall)+'">'+D.quality.overall+'</span>':'')+'</div><div class="sec-sub">Quality score per section (0\\u2013100) \\u2014 not a pass/fail; the verdict is up top. Every issue is listed in full in the Issues section below.</div>';
-var blockHtml=blockers.length?'<div class="qblock"><div class="qblock-h">\\ud83d\\udd34 Fix first \\u2014 break'+(blockers.length===1?'s':'')+' the site \\u00b7 '+blockers.length+' launch blocker'+(blockers.length>1?'s':'')+'</div>'+blockers.map(function(x){var n=(x.ch.items||[]).length;return '<button class="qi qb" data-status="'+x.ch.status+'" onclick="gotoIssue(\\'chk-s'+x.si+'c'+x.ci+'\\')"><span class="d-st">'+GLYPH[x.ch.status]+'</span><span class="qi-name">'+esc(x.ch.name)+'</span><span class="qi-n">'+esc(x.su)+(n?' \\u00b7 '+n+'\\u00d7':'')+'</span><span class="d-go">\\u2192</span></button>';}).join('')+'</div>':'';
-el.innerHTML=head+blockHtml+'<div class="qs-grid">'+cards.map(function(x){return x.html;}).join('')+'</div>'+cleanHtml;})();
+// Per-section "Score dashboard / per-section summary" removed 2026-07-17 (owner request): the report now
+// shows one overall quality score in the header ring plus the last-scan comparison; the flat Issues
+// section below still lists every finding. gotoIssue + gcol (above) remain in use elsewhere.
 
 // ============ ISSUES — the new flat top section (3.0.0 restructure) =================================
 // Owner: "add a new top section to list issues aside from the per section list ... which can be filtered
@@ -557,30 +636,46 @@ el.innerHTML=head+blockHtml+'<div class="qs-grid">'+cards.map(function(x){return
 // capability — it belongs server-side in score.js's excludeRules, on a re-run, where it gets recorded.
 // Ignored rows are MARKED, never removed: you can always see (and undo) what you triaged away.
 // Fail closed — hide from the list, never from the verdict.
-var PRI_NAME={1:'BLOCKER',2:'MAJOR',3:'POLISH'};
-var PRIO='all', IGN=Object.create(null);
-// Flatten every open finding (fail|warn — report-contract's definition of "an actual problem") out of
-// the per-section tree. key = the existing chk-s{si}c{ci} anchor, so ignore is per-ISSUE and each row
-// still deep-links into its per-section detail (evidence, occurrences, element locators).
-function issueList(){var out=[];
-  D.suites.forEach(function(su,si){su.checks.forEach(function(c,ci){
-    if(c.status!=='fail'&&c.status!=='warn')return;
-    // tier null = no registry rule resolved for this row; surfaced as POLISH per the mockup's
-    // (r.tier||3) default, but labelled UNTIERED so we never silently assert a priority we lack.
-    out.push({c:c,su:su.name,key:'chk-s'+si+'c'+ci,tier:(c.tier==null?3:c.tier),untiered:c.tier==null});});});
-  out.sort(function(a,b){return a.tier-b.tier||((b.c.deduction||0)-(a.c.deduction||0));});
-  return out;}
-function issueRow(x){var c=x.c,ig=!!IGN[x.key],n=(c.items||[]).length;
-  return '<div class="iss'+(ig?' ignored':'')+'" data-prio="'+x.tier+'" data-key="'+x.key+'">'
+// (PRI_NAME / FILT / IGN / OPN / SOPEN and the row model are declared with the merged renderer above.)
+// (issueList() — the old fail|warn-only flattener — is gone: allRows() above is the single row model
+// for the merged list, and tier null still surfaces as POLISH but labelled UNTIERED so a priority we
+// do not have is never silently asserted.)
+// The evidence a row is already holding. c.target / c.detail / c.meta / c.items are the SAME fields the
+// per-section row renders (see the .rtarget/.rdetail/drill() row builder above) — the flat list simply
+// never printed them, so "24 open" was 24 rule names and an occurrence COUNT with no page, no observed
+// value and no selector. Reuses drill() rather than re-implementing occurrences: it already groups by
+// page, renders the dev block, caps at 500 and carries the per-occurrence Copy button.
+function issPg(u){if(!u||u==='\\u2014')return '';if(!/^https?:/i.test(u))return esc(u);
+  return '<a class="pglink" href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(u)+'</a>';}
+function issEvidence(c){var b='';
+  // c.target is a page URL on per-page checks but an aggregate ("12 affected") on site-wide ones.
+  // Label what it actually IS — calling a count "Page" asserts a location the row does not have.
+  if(c.target)b+='<div class="ie-r"><span class="ie-k">'+(/^https?:/i.test(c.target)?'Page':'Scope')+'</span><span class="ie-v">'+issPg(c.target)+'</span></div>';
+  if(c.detail)b+='<div class="ie-r"><span class="ie-k">Observed</span><span class="ie-v">'+esc(c.detail)+'</span></div>';
+  if(c.meta)b+='<div class="ie-r"><span class="ie-k">Measured</span><span class="ie-v mono">'+esc(c.meta)+'</span></div>';
+  var d=drill(c.items,c);
+  if(d)b+='<div class="ie-r"><span class="ie-k">Occurrences</span><div class="ie-v">'+d+'</div></div>';
+  // Never render an empty panel that implies evidence was collected and withheld. Say it is absent.
+  if(!b)b='<div class="ie-none">No evidence recorded for this check \\u2014 the full record is in report.json.</div>';
+  return '<div class="iss-ev">'+b+'</div>';}
+function issueRow(x){var c=x.c,ig=!!IGN[x.key],n=(c.items||[]).length,op=!!OPN[x.key];
+  return '<div class="iss'+(ig?' ignored':'')+(op?' open':'')+'" data-prio="'+x.tier+'" data-key="'+x.key+'" onclick="issToggle(event,\\''+x.key+'\\')" title="Click this row to show its evidence">'
     +'<span class="pri pri-'+x.tier+'" title="Launch tier '+(x.untiered?'unknown':x.tier)+'">'+(x.untiered?'UNTIERED':PRI_NAME[x.tier])+'</span>'
     +'<span class="iss-rid">'+esc(c.ruleId||'\\u2014')+'</span>'
     +'<div class="iss-b"><div class="iss-t">'+esc(c.name)+'</div>'
-    +'<div class="iss-m">'+esc(x.su)+' \\u00b7 '+esc(c.status)+(c.method?' \\u00b7 '+esc(c.method):'')+(n?' \\u00b7 '+n+' occurrence'+(n>1?'s':''):'')+'</div>'
+    // x.su is the SUITE OBJECT in the merged row model (allRows) — the old flat list stored su.name
+    // here, and printing the object rendered a literal "[object Object]" in every row's meta line.
+    +'<div class="iss-m">'+esc(x.su&&x.su.name||x.su||'')+' \\u00b7 '+esc(c.status)+(c.method?' \\u00b7 '+esc(c.method):'')+(n?' \\u00b7 '+n+' occurrence'+(n>1?'s':''):'')+'</div>'
     +(c._why?'<div class="iss-why">'+esc(c._why)+'</div>':'')+'</div>'
     +'<span class="iss-cost" title="points this rule costs its section score">'+(c.deduction?'\\u2212'+c.deduction:'\\u2014')+'</span>'
-    +'<button class="iss-go" onclick="gotoIssue(\\''+x.key+'\\')" title="Open this issue in the per-section detail — evidence, every occurrence, element locators">detail \\u2192</button>'
+    +'<span class="iss-x" aria-hidden="true">\\u25B8</span>'
+    // "detail ->" is gone with the merge. It existed to jump from the flat Issues list INTO the
+    // separate per-section tree; with one list the row already sits in its section and its evidence
+    // opens in place, so the button would scroll you to yourself. gotoIssue() survives for the
+    // dashboard deep-links that still call it.
     +(c._md?copyBtn(c._md,'\\u29C9 Copy for dev'):'')
     +'<button class="ig" onclick="tgIgnore(\\''+x.key+'\\')" title="Triage this row out of the list. VIEW FILTER ONLY — the score and the launch verdict do not change.">'+(ig?'\\u2713 ignored':'ignore')+'</button>'
+    +issEvidence(c)
     +'</div>';}
 // Reduced-view disclosure (mockup: renderIntegrity). A clean-looking report that quietly hides failures
 // is the most dangerous output this tool produces. A waived blocker is still counted, and is disclosed
@@ -591,19 +686,88 @@ function ignDisclosure(all){var ig=all.filter(function(x){return IGN[x.key];});i
     +'Ignore is a <b>view filter only</b>: the quality score, the check tally and the launch verdict above are <b>unchanged</b>, and report.json still carries every finding.'
     +(blk.length?' <b>'+blk.length+' of them '+(blk.length>1?'are tier-1 launch blockers':'is a tier-1 launch blocker')+' \\u2014 waiving does NOT clear the launch gate.</b>':'')
     +'</div></div>';}
-function pbtn(v,label,n){return '<button class="pbtn" data-p="'+v+'" aria-pressed="'+(PRIO===v?'true':'false')+'" onclick="issPrio(\\''+v+'\\')">'+label+' <span class="c">'+n+'</span></button>';}
-window.renderIssues=function(){var host=document.getElementById('issec');if(!host)return;
-  var all=issueList(),byTier={1:0,2:0,3:0},nIg=0;
-  all.forEach(function(x){byTier[x.tier]++;if(IGN[x.key])nIg++;});
-  var vis=all.filter(function(x){return PRIO==='all'||String(x.tier)===PRIO;});
-  var ct='\\u00b7 '+(all.length-nIg)+' open'+(nIg?' \\u00b7 '+nIg+' ignored':'')+(PRIO!=='all'?' \\u00b7 showing '+vis.length+' of '+all.length:'');
-  host.innerHTML='<div class="iss-hd"><h2>Issues \\u2014 every open finding, flattened out of the per-section tree</h2><span class="iss-ct">'+esc(ct)+'</span></div>'
-    +'<div class="iss-note">Priority is the launch tier from the rule registry: <b>BLOCKER</b> vetoes go-live \\u00b7 <b>MAJOR</b> is a real user-facing defect \\u00b7 <b>POLISH</b> is advisory. Every row carries its dev handover ticket and deep-links to its evidence.</div>'
-    +'<div class="iss-ctl">'+'<div class="pseg" role="group" aria-label="Filter issues by priority">'+pbtn('all','ALL',all.length)+pbtn('1','BLOCKERS',byTier[1])+pbtn('2','MAJOR',byTier[2])+pbtn('3','POLISH',byTier[3])+'</div>'
+function pbtn(v,label,n){return '<button class="pbtn" data-p="'+v+'" aria-pressed="'+(FILT===v?'true':'false')+'" onclick="issPrio(\\''+v+'\\')">'+label+' <span class="c">'+n+'</span></button>';}
+// ---- copy summary -------------------------------------------------------------------------------
+// "Copy summary" is the whole section (or the whole report) as one Markdown block, for pasting into a
+// ticket or a handover. Distinct from the per-row "Copy for dev", which is ONE finding's ticket.
+// Ignored rows are listed under their own heading rather than dropped: a summary that silently omits
+// what the reader triaged away is the same reduced-view lie the on-screen disclosure exists to stop.
+function mdRow(x){var c=x.c;
+  return '- **'+(x.kind==='open'?(x.untiered?'UNTIERED':PRI_NAME[x.tier]):c.status.toUpperCase())+'** '+String(c.name).replace(/\\|/g,'\\\\|')
+    +(c.ruleId?' \`'+c.ruleId+'\`':'')
+    +(c.target?' — '+String(c.target).replace(/\\|/g,'\\\\|'):'')
+    +(c.meta?' ('+String(c.meta).replace(/\\|/g,'\\\\|')+')':'');}
+function summaryMD(rows,title){
+  var open=rows.filter(function(x){return x.kind==='open'&&!IGN[x.key];});
+  var ign=rows.filter(function(x){return x.kind==='open'&&IGN[x.key];});
+  var rev=rows.filter(function(x){return x.kind==='review';});
+  var np=rows.filter(function(x){return x.kind==='pass';}).length;
+  var L=['# '+title,'','- Site: '+D.host,'- Scanned: '+D.generated,'- Verdict: '+D.verdict
+    +(D.quality&&D.quality.overall!=null?' · quality '+D.quality.overall:'')];
+  if(D.skipped&&D.skipped.names&&D.skipped.names.length)
+    L.push('- **Sections NOT RUN: '+D.skipped.names.join(', ')+'** — unknown, not clean.');
+  L.push('- '+open.length+' open · '+np+' passed · '+rev.length+' need review'+(ign.length?' · '+ign.length+' ignored':''),'');
+  if(open.length){L.push('## Open findings');open.forEach(function(x){L.push(mdRow(x));});L.push('');}
+  if(rev.length){L.push('## Needs review / not run');rev.forEach(function(x){L.push(mdRow(x));});L.push('');}
+  if(ign.length){L.push('## Ignored (triaged out of the view — score and launch verdict unchanged)');ign.forEach(function(x){L.push(mdRow(x));});L.push('');}
+  return L.join('\\n');}
+// ---- the one list -------------------------------------------------------------------------------
+window.renderIssues=function(){var host=document.getElementById('findsec');if(!host)return;
+  var all=allRows(),byTier={1:0,2:0,3:0},nPass=0,nRev=0,nIg=0,nOpen=0;
+  all.forEach(function(x){
+    if(x.kind==='open'){nOpen++;byTier[x.tier]++;if(IGN[x.key])nIg++;}
+    else if(x.kind==='pass')nPass++;else nRev++;});
+  var vis=all.filter(rowMatches);
+  var ct='\\u00b7 '+(nOpen-nIg)+' open \\u00b7 '+nPass+' passed \\u00b7 '+nRev+' need review'+(nIg?' \\u00b7 '+nIg+' ignored':'')
+    +(FILT!=='all'?' \\u00b7 showing '+vis.length+' of '+all.length:'');
+  // Group the filtered rows back under their section. Sections with nothing in the current filter are
+  // dropped entirely rather than rendered empty — an empty "SEO (0)" bar under BLOCKERS reads as "SEO
+  // has no blockers" when it may simply not be in this view.
+  var bySec={},order=[];
+  vis.slice().sort(rowSort).forEach(function(x){if(!bySec[x.si]){bySec[x.si]=[];order.push(x.si);}bySec[x.si].push(x);});
+  order.sort(function(a,b){var A=D.suites[a],B=D.suites[b];return ((A.fail||A.warn)?0:1)-((B.fail||B.warn)?0:1);});
+  var secs=order.map(function(si){var su=D.suites[si],rows=bySec[si];
+    var w=worst(su);
+    var badge=w==='fail'?'<span class="badge fail">'+su.fail+' failed</span>':w==='warn'?'<span class="badge warn">'+su.warn+' warning'+(su.warn>1?'s':'')+'</span>':w==='manual'?'<span class="badge manual">needs review</span>':'<span class="badge pass">all passing</span>';
+    // Default open state. A narrowed filter opens everything (you asked to see those rows). Under ALL
+    // a section opens IF IT HAS SOMETHING OPEN IN IT, and clean sections stay shut.
+    // Collapsing everything under ALL was tried and is wrong: the merged list replaced a flat Issues
+    // table that put the failures on screen the moment the report loaded, and landing on ten closed
+    // bars means a blocker is one click further away than it was before the merge. Collapse is for
+    // the 26 passed checks — the noise — not for the thing you opened the report to read.
+    // SOPEN overrides once you touch a section, so ignoring a row never re-collapses what you opened.
+    var hasOpen=rows.some(function(x){return x.kind==='open';});
+    var isOpen=SOPEN[si]!=null?SOPEN[si]:(FILT!=='all'||hasOpen);
+    var body=rows.map(function(x){return x.kind==='open'?issueRow(x):detailRow(x);}).join('');
+    return '<details class="suite" data-worst="'+w+'"'+(isOpen?' open':'')+' data-si="'+si+'" ontoggle="secToggle('+si+',this)">'
+      +'<summary><span class="sicon"><svg viewBox="0 0 24 24">'+ICONS[su.icon]+'</svg></span>'
+      +'<span class="sname"><b>'+esc(su.name)+'</b><div class="sub">'+secSub(su)+'</div></span>'
+      +'<span class="sratio">'+rows.length+(FILT!=='all'?' shown':'')+'</span>'+badge
+      +'<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>'
+      +'<div class="sec-tools">'+copyBtn(summaryMD(su.checks.map(function(c,ci){return {c:c,su:su,si:si,ci:ci,key:'chk-s'+si+'c'+ci,kind:kindOf(c),tier:(c.tier==null?3:c.tier),untiered:c.tier==null};}),su.name+' \\u2014 section summary'),'\\u29C9 Copy section summary')+'</div>'
+      +'<div class="rows">'+body+'</div></details>';}).join('');
+  host.innerHTML='<div class="iss-hd"><h2>Findings \\u2014 every check, filtered and grouped by section</h2><span class="iss-ct">'+esc(ct)+'</span></div>'
+    +'<div class="iss-note">Priority is the launch tier from the rule registry: <b>BLOCKER</b> vetoes go-live \\u00b7 <b>MAJOR</b> is a real user-facing defect \\u00b7 <b>POLISH</b> is advisory. <b>PASSED</b> is a check that ran and was clean; <b>REVIEW</b> is one a machine cannot certify or that never ran \\u2014 neither of which is a pass. Click a row to expand its evidence in place; open a section to see its rows.</div>'
+    +'<div class="iss-ctl"><div class="pseg" role="group" aria-label="Filter findings">'
+      +pbtn('all','ALL',all.length)+pbtn('1','BLOCKERS',byTier[1])+pbtn('2','MAJOR',byTier[2])+pbtn('3','POLISH',byTier[3])
+      +pbtn('pass','PASSED',nPass)+pbtn('review','REVIEW',nRev)+'</div>'
+    +copyBtn(summaryMD(all,'Site QA summary \\u2014 '+D.host),'\\u29C9 Copy summary')
     +(nIg?'<button class="iss-un" onclick="clearIgnored()">un-ignore all ('+nIg+')</button>':'')+'</div>'
-    +ignDisclosure(all)
-    +(vis.length?vis.map(issueRow).join(''):'<div class="iss-empty">No '+(PRIO==='all'?'':esc(PRI_NAME[PRIO].toLowerCase())+' ')+'issues \\u2014 nothing open in this filter.</div>');};
-window.issPrio=function(p){PRIO=p;renderIssues();};
+    +ignDisclosure(all.filter(function(x){return x.kind==='open';}))
+    +(secs||'<div class="iss-empty">Nothing in this filter.</div>');};
+window.issPrio=function(p){FILT=p;SOPEN=Object.create(null);renderIssues();};
+window.secToggle=function(si,el){SOPEN[si]=el.open;};
+// Row click = show/hide that issue's evidence. Guarded so the controls the row already carries keep
+// their own behaviour: a click on any button (detail -> / Copy for dev / ignore), on a link, or
+// anywhere inside the open evidence panel is NOT a toggle. Toggles the class in place rather than
+// re-rendering, so expanding an issue never moves the page under you; OPN keeps the state so a
+// priority filter or an ignore (both of which rebuild innerHTML) does not silently collapse it.
+window.issToggle=function(ev,key){
+  var t=ev&&ev.target;
+  if(t&&t.closest&&(t.closest('button')||t.closest('a')||t.closest('.iss-ev')))return;
+  if(OPN[key])delete OPN[key];else OPN[key]=true;
+  var el=document.querySelector('.iss[data-key="'+key+'"]');
+  if(el)el.classList.toggle('open',!!OPN[key]);};
 window.tgIgnore=function(key){if(IGN[key])delete IGN[key];else IGN[key]=true;renderIssues();};
 window.clearIgnored=function(){IGN=Object.create(null);renderIssues();};
 renderIssues();
@@ -635,21 +799,25 @@ window.lensGo=function(name,btn){
   var lt=document.querySelector('.lens-tabs');if(lt)window.scrollTo({top:lt.getBoundingClientRect().top+window.scrollY-70,behavior:'smooth'});
 };
 
-(function(){var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;var tot=D.tally.pass+D.tally.warn+D.tally.fail;var segs=[['var(--pass)',D.tally.pass],['var(--warn)',D.tally.warn],['var(--fail)',D.tally.fail]];var acc=0,html='';segs.forEach(function(s){var len=tot?s[1]/tot*C:0;html+='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+s[0]+'" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="'+(-acc)+'"></circle>';acc+=len;});document.getElementById('ringsegs').innerHTML=html;var el=document.getElementById('score');if(el)el.style.color=gcol(D.score);if(reduce){el.textContent=D.score+'%';return;}var n=0,step=Math.max(1,Math.round(D.score/28));var iv=setInterval(function(){n+=step;if(n>=D.score){n=D.score;clearInterval(iv);}el.textContent=n+'%';},22);})();
+(function(){var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;var hasQ=D.quality&&D.quality.overall!=null;var val=hasQ?D.quality.overall:D.score;var suffix=hasQ?'':'%';var html='';if(hasQ){var qlen=Math.max(0,Math.min(100,val))/100*C;html='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+gcol(val)+'" stroke-dasharray="'+qlen+' '+(C-qlen)+'"></circle>';}else{var tot=D.tally.pass+D.tally.warn+D.tally.fail;var segs=[['var(--pass)',D.tally.pass],['var(--warn)',D.tally.warn],['var(--fail)',D.tally.fail]];var acc=0;segs.forEach(function(s){var len=tot?s[1]/tot*C:0;html+='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+s[0]+'" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="'+(-acc)+'"></circle>';acc+=len;});}document.getElementById('ringsegs').innerHTML=html;var el=document.getElementById('score');if(el)el.style.color=gcol(val);if(reduce){if(el)el.textContent=val+suffix;return;}var n=0,step=Math.max(1,Math.round(val/28));var iv=setInterval(function(){n+=step;if(n>=val){n=val;clearInterval(iv);}if(el)el.textContent=n+suffix;},22);})();
 
 document.querySelectorAll('[data-count]').forEach(function(el){var target=+el.getAttribute('data-count');if(matchMedia('(prefers-reduced-motion:reduce)').matches){el.textContent=target;return;}var n=0,step=Math.max(1,Math.round(target/26));var iv=setInterval(function(){n+=step;if(n>=target){n=target;clearInterval(iv);}el.textContent=n;},24);});
 
-window.filt=function(mode,btn){document.querySelectorAll('.tab').forEach(function(t){t.setAttribute('aria-pressed',t===btn?'true':'false');});document.querySelectorAll('.suite').forEach(function(su){var any=false;su.querySelectorAll('.row').forEach(function(r){var show=mode==='all'||r.getAttribute('data-status')===mode;r.classList.toggle('hidden',!show);if(show)any=true;});su.classList.toggle('hidden',!any);if(mode!=='all'&&any)su.open=true;if(mode==='all')su.open=false;});
-  /* Evidence belongs to the WHOLE scan, not to a filtered slice. The screenshot gallery is per
-     page+viewport — it is not filtered by finding status, so leaving it on screen under "Failed"
-     implies those shots ARE the failures. They are not. Show it only under All. */
-  var ev=document.querySelector('.shotsec');if(ev)ev.classList.toggle('hidden',mode!=='all');};
-// Score-summary tiles (beside the ring) are clickable: filter the detailed results to that status + scroll there.
-window.gotoStatus=function(mode){var sel={all:'.tab.all',fail:'.tab.fail',warn:'.tab.warn',pass:'.tab.pass',manual:'.tab.manual'}[mode]||'.tab.all';var tab=document.querySelector(sel);if(tab)filt(mode,tab);var bar=document.querySelector('.tabs');if(bar)window.scrollTo({top:bar.getBoundingClientRect().top+window.scrollY-80,behavior:'smooth'});};
+// The old status tab-bar (All/Failed/Warnings/Passed/Manual) is gone with the merge — one control
+// strip now owns filtering. filt() survives as a thin alias because the header tiles and older
+// deep-links call it; it maps the status vocabulary onto the merged chips.
+//   fail|warn have no single chip (a failure can be any launch tier), so both widen to ALL rather
+//   than silently showing a subset — showing "blockers" for a click that asked for "failed" would
+//   hide the major/polish failures behind a label that claims to be all of them.
+window.filt=function(mode){
+  var map={all:'all',fail:'all',warn:'all',pass:'pass',manual:'review'};
+  issPrio(map[mode]||'all');};
+// Score-summary tiles (beside the ring) are clickable: filter the findings list + scroll there.
+window.gotoStatus=function(mode){filt(mode);var bar=document.querySelector('.iss-ctl');if(bar)window.scrollTo({top:bar.getBoundingClientRect().top+window.scrollY-80,behavior:'smooth'});};
 window.gotoShots=function(){var s=document.querySelector('.shotsec');if(s){window.scrollTo({top:s.getBoundingClientRect().top+window.scrollY-80,behavior:'smooth'});}else{gotoStatus('all');}};
 // 3.0.0 — the dashboard's per-section "N issues →" chip jumps to the flat Issues section (which owns
 // the full list + priority filter + ignore), instead of re-listing those rows inside the dashboard.
-window.gotoIssues=function(prio){var s=document.getElementById('issec');if(!s)return;if(prio)issPrio(String(prio));window.scrollTo({top:s.getBoundingClientRect().top+window.scrollY-70,behavior:'smooth'});};
+window.gotoIssues=function(prio){var s=document.getElementById('findsec');if(!s)return;if(prio)issPrio(String(prio));window.scrollTo({top:s.getBoundingClientRect().top+window.scrollY-70,behavior:'smooth'});};
 document.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('tile')){e.preventDefault();document.activeElement.click();}});
 
 // screenshot lightbox — click to preview, arrows / buttons to step
@@ -762,6 +930,62 @@ function renderReport(data, outDir, opts = {}) {
     return `<span class="rlabel ${tone}"${scope ? ` title="${esc(scope)}"` : ''}>${esc(label)}</span>`;
   })();
 
+  // CHANGE (4.3.0) — PAGE COVERAGE. The crawl already fetched every page (url + status) and holds the
+  // sitemap URL list + a capped flag, but the report only ever exposed a COUNT (the "Pages crawled"
+  // tile), so the operator could not see WHICH pages were audited vs skipped. This section lists them
+  // from data.pageCoverage: audited (200 + html), errored (fetched but not audited — non-200 / non-html),
+  // and not-reached (in the sitemap but past the maxPages cap). FULLY NULL-GUARDED — absent on an older
+  // report.json, in which case it renders '' and the old report is unchanged. Server-rendered (no client
+  // JS) so it survives in the standalone/printable copy too. Reuses esc() + the new URL(u).pathname idiom.
+  const pageCovHtml = (() => {
+    const pc = data.pageCoverage;
+    if (!pc) return '';
+    const A = Array.isArray(pc.audited) ? pc.audited : [];
+    const E = Array.isArray(pc.errored) ? pc.errored : [];
+    const N = Array.isArray(pc.notReached) ? pc.notReached : [];
+    const counts = pc.counts || {};
+    const nA = typeof counts.audited === 'number' ? counts.audited : A.length;
+    const nD = typeof counts.discovered === 'number' ? counts.discovered : (A.length + E.length + N.length);
+    const maxP = typeof pc.maxPages === 'number' ? pc.maxPages : null;
+    const capped = pc.capped === true;
+    // Visible label = the path (fall back to the raw url); the full url is the link href + title.
+    const pcPath = (u) => { try { return new URL(u).pathname || '/'; } catch (e) { return String(u == null ? '' : u); } };
+    // Cap each list so a pathological sitemap can't inflate the HTML; overflow noted, full set in report.json.
+    const LIST_CAP = 500;
+    const moreNote = (arr) => arr.length > LIST_CAP
+      ? `<div class="pcov-more">+${arr.length - LIST_CAP} more (full list in report.json)</div>` : '';
+    const okGlyph = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const auditedRows = A.slice(0, LIST_CAP).map(u =>
+      `<a class="pcov-row ok" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}"><span class="pcov-ck">${okGlyph}</span><span class="pcov-p">${esc(pcPath(u))}</span></a>`).join('');
+    const erroredRows = E.slice(0, LIST_CAP).map(e => {
+      const u = (e && e.url != null) ? e.url : '';
+      const st = (e && e.status != null) ? e.status : '—';
+      return `<a class="pcov-row err" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}"><span class="pcov-p">${esc(pcPath(u))}</span><span class="pcov-badge">${esc(st)}</span></a>`;
+    }).join('');
+    const cappedNote = maxP != null ? `not reached (capped at ${esc(maxP)})` : 'not reached';
+    const notReachedRows = N.slice(0, LIST_CAP).map(u =>
+      `<div class="pcov-row miss"><span class="pcov-p">${esc(pcPath(u))}</span><span class="pcov-note">${cappedNote}</span></div>`).join('');
+    const hasNot = E.length > 0 || N.length > 0;
+    const notCol = hasNot ? `<div class="pcov-col">
+          <div class="pcov-lbl">Not audited <span class="pcov-n">${E.length + N.length}</span></div>
+          <div class="pcov-list">${erroredRows}${notReachedRows}${moreNote(E)}${moreNote(N)}</div>
+        </div>` : '';
+    const cappedFoot = capped
+      ? `<div class="pcov-foot">More pages exist beyond the ${maxP != null ? esc(maxP) + '-page ' : ''}cap — raise <code>maxPages</code> to audit them.</div>`
+      : '';
+    return `<section class="pcov">
+      <div class="pcov-h"><h2>Pages audited — ${esc(nA)} of ${esc(nD)} discovered</h2></div>
+      <div class="pcov-body${hasNot ? '' : ' solo'}">
+        <div class="pcov-col">
+          <div class="pcov-lbl">Audited <span class="pcov-n">${A.length}</span></div>
+          <div class="pcov-list">${auditedRows || '<div class="pcov-empty">No pages audited.</div>'}${moreNote(A)}</div>
+        </div>
+        ${notCol}
+      </div>
+      ${cappedFoot}
+    </section>`;
+  })();
+
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SGEN Site QA — ${esc(data.host)}</title><style>${STYLE}</style></head><body>
 <div class="brand-wm" aria-hidden="true"><b>SGEN</b></div>
 <div class="bar"><div class="bar-in">
@@ -773,8 +997,8 @@ function renderReport(data, outDir, opts = {}) {
   ${opts.scopePanel || ''}
   <section class="summary">
     <div class="verdict" style="--vc:${vmap[0]};--vcb:${vmap[1]};--vcl:${vmap[2]}">
-      <div class="ring"><svg width="118" height="118" viewBox="0 0 128 128"><circle cx="64" cy="64" r="52" fill="none" stroke="var(--line)" stroke-width="11"></circle><g id="ringsegs"></g></svg><div class="center"><div class="big num" id="score">0</div><div class="sm">checks passing</div></div></div>
-      <div class="vtext"><div class="veyebrow">Overall result — the bottom line</div><span class="vlabel">${esc(data.verdict)}</span>${rdBadge}<h1>${esc(failLine)}</h1><p>${graded} automated checks across ${data.suites.length} suites · ${data.tally.manual} item(s) flagged for manual review. The scores below are 0–100 quality reads, not separate pass/fail verdicts.</p></div>
+      <div class="ring"><svg width="118" height="118" viewBox="0 0 128 128"><circle cx="64" cy="64" r="52" fill="none" stroke="var(--line)" stroke-width="11"></circle><g id="ringsegs"></g></svg><div class="center"><div class="big num" id="score">0</div><div class="sm">${data.quality && data.quality.overall != null ? 'quality score' : 'checks passing'}</div></div></div>
+      <div class="vtext"><div class="veyebrow">Overall result — the bottom line</div><span class="vlabel">${esc(data.verdict)}</span>${rdBadge}<h1>${esc(failLine)}</h1><p>${graded} automated checks across ${data.suites.length} suites · ${data.tally.manual} item(s) flagged for manual review.${data.quality && data.quality.overall != null ? ' The score shown is an overall 0–100 quality read.' : ''}</p></div>
     </div>
     <div class="tiles">
       <div class="tile pass" onclick="gotoStatus('pass')" role="button" tabindex="0" title="Show passed checks"><div class="v num" data-count="${data.tally.pass}">0</div><div class="l"><span class="dot"></span>Passed</div></div>
@@ -812,23 +1036,22 @@ function renderReport(data, outDir, opts = {}) {
       <span class="lg"><i style="background:var(--man)"></i> Grey = manual review</span>
     </div>
   </section>
+  ${pageCovHtml}
   ${opts.comparePanel || ''}
+  <!-- Section order: verdict -> coverage -> trend -> WHAT IS BROKEN -> the drill-down it links into.
+       Issues previously sat BELOW Inspector lenses (a summary view), and the screenshot gallery sat
+       between Issues and the per-section detail — so every "detail ->" jumped the reader past a full
+       image gallery to reach the row they had just clicked. Lenses and the gallery are supporting
+       views: they now follow the actionable list instead of interrupting it. -->
+  <!-- 4.4.0: ONE findings list. Was two sections rendering the same rows — a flat "Issues" list of
+       fail|warn above, and a "Passed tests & per-section detail" tree below with its own status
+       tab-bar — so every "detail ->" was a jump between two views of the SAME row, and the reader
+       held two tables in their head to answer one question. Now: filter (All / Blockers / Major /
+       Polish / Passed / Review), grouped by section, each row expanding its evidence in place.
+       Supporting views (lenses, then the evidence gallery) follow the actionable list. -->
+  <section class="issec" id="findsec"></section>
   <section class="lenses" id="lenses"></section>
-  <section class="qscore" id="qscore"></section>
-  <section class="issec" id="issec"></section>
   ${shotHtml}
-  <section class="detsec">
-    <h2>Passed tests &amp; per-section detail</h2>
-    <div class="sec-sub">Every check grouped by section — passed, warnings, failures and manual items, each with its evidence, occurrences and element locators. Collapsed by default: open a section to drill in, or use "detail →" on any issue above.</div>
-    <div class="tabs" role="group" aria-label="Filter">
-      <button class="tab all" aria-pressed="true" onclick="filt('all',this)">All <span class="c num">${graded + data.tally.manual}</span></button>
-      <button class="tab fail" aria-pressed="false" onclick="filt('fail',this)">Failed <span class="c num">${data.tally.fail}</span></button>
-      <button class="tab warn" aria-pressed="false" onclick="filt('warn',this)">Warnings <span class="c num">${data.tally.warn}</span></button>
-      <button class="tab pass" aria-pressed="false" onclick="filt('pass',this)">Passed <span class="c num">${data.tally.pass}</span></button>
-      <button class="tab manual" aria-pressed="false" onclick="filt('manual',this)">Manual <span class="c num">${data.tally.manual}</span></button>
-    </div>
-    <section class="results" id="results"></section>
-  </section>
   <footer><span>SGEN Site QA · ${esc(data.host)} · ${esc(data.generated)}</span><span>Chromium render · ${data.render.rendered}/${data.render.total} pages · ${data.suites.length} suites</span></footer>
 </div>
 ${lightbox}

@@ -1,5 +1,5 @@
 {
-  "packageVersion": "4.5.0",
+  "packageVersion": "4.6.0",
   "engineVersion": "2.4.0",
   "registryVersion": "1.13.0",
   "contractVersion": "1.0",
@@ -12,14 +12,14 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "Annotate + annotated PDF export extended to Site Audit runs (one-pane sheets), reusing the comparison store/renderer/exporter unchanged",
+  "release": "Score declaration integrity (ADR-0011): the Quality Score no longer inflates when the coverage declaration is dropped in transport. Release provenance restored: the report merged-findings table (REPORT 1.4.0), visual-match background-restyle detection and empty-comparison diagnosis are now in the shipped artifact.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
     "STB-004 broken fonts",
     "near-duplicate content"
   ],
-  "generatedAt": "2026-07-15T08:21:48.870Z",
-  "gitTag": "v4.5.0",
-  "buildBaseCommit": "7103c82"
+  "generatedAt": "2026-07-28T22:12:30.367Z",
+  "gitTag": "v4.6.0",
+  "buildBaseCommit": "f938244"
 }

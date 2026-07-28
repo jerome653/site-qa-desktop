@@ -3,7 +3,7 @@
 > A living airworthiness/ISO-style record of the **current production state of the product** (not a session log).
 > Rule: **nothing is `PASS` without an evidence-ledger entry.** `Production Ready = every Production Gate PASS`.
 > Regenerate the Evidence Ledger by running the gates; update this file only when state changes.
-> Last state change: 2026-07-08.
+> Last state change: 2026-07-29 (release provenance restored; release gate added; suite 52 -> 58).
 
 ---
 
@@ -11,9 +11,10 @@
 | Field | Value |
 |---|---|
 | Product | SGEN Site Auditor |
-| Engine version | 2.1.0 |
-| Registry version | 1.3.1 (95 rules · 10 scored suites + Suite 11 Best Practices advisory/weight-0) |
-| Report version | 1.1.0 |
+| Engine version | 2.4.0 |
+| Registry version | 1.13.0 (142 rules · 13 suites = 10 scored + 3 advisory/weight-0) |
+| Report version | 1.4.0 |
+| Package version | 4.5.0 (engine/package.json — agrees with release-metadata.json packageVersion) |
 | Schema version | 1.0 (rule · finding · report-summary, frozen) |
 | **Certification status** | **PRODUCTION (GA)** — all 10 gates PASS; no High/Critical debt; live-validated end-to-end (E9, real scans) |
 | **Maturity milestone** | **GA** — production certified; live-validated 2026-07-08 (real scan of example.com + visual-match example.com vs example.org; 3 integration bugs found live + fixed) |
@@ -58,13 +59,13 @@ Objective release gates. **Production = ALL PASS.** No interpretation.
 | Gate | State | Definition of PASS |
 |---|---|---|
 | Architecture | ✅ PASS | registry sole authority + native rule IDs + no bridges (TD-001 CLOSED, matchTitle 0 refs) — awaiting WP-002 Freeze seal |
-| Registry | ✅ PASS | 95 rules, invariants enforced (weights total 100), 100% registry tests |
+| Registry | ✅ PASS | 142 rules, invariants enforced (weights total 100), 100% registry tests |
 | Audit Engine | ✅ PASS | every rule deterministic, registry-driven scoring, parity holds |
 | History | ✅ PASS | Scan Store (WP-003, E11) + Finding Store (WP-004, E12) + Timeline Engine (WP-005, E13) + Regression Engine (WP-006, E14): append-only stores · lifecycle · lineage · diff · timeline · policy gate · integrity · recovery — all reproducible |
 | Reporting | ✅ PASS | HTML+score+drill-down+screenshots (frozen `report.js`) + exec-summary + scan-diff renderers (`reporting/`, E17). PDF = browser print of the self-contained HTML (no separate engine) |
 | Performance | ✅ PASS | measured @ 10k scans / 10k findings (E7): scan save 4.4 ms · verify 0.5 ms/scan · rebuild 2.7 ms/scan · timeline 0.6 ms/scan · gate 16 ms |
 | Security | ✅ PASS | deterministic offline self-audit (E8): 6 threat classes — dynamic-exec · network-in-core · secrets · path-traversal · proto-pollution · integrity — 0 findings across 35 core files |
-| Testing | ✅ PASS | one-command run (`testing/run-all.js`) — 9 suites green; built-in V8 line coverage **97.6% ≥ 95%** (E6) |
+| Testing | ✅ PASS | one-command run (`testing/run-all.js`) — **58 suites** green; built-in V8 line coverage **97.9% ≥ 95%** (E6). Includes the repository-integrity and release-provenance gates, and the security self-audit, which was previously written but never registered |
 | Documentation | ✅ PASS | ARCHITECTURE · CHARTER · ROADMAP · CERTIFICATION · CHANGELOG · ADR-0001/0002 + DEVELOPER · OPERATIONS · TROUBLESHOOTING · UPGRADE guides + capabilities/checks/integration docs |
 | Operations | ✅ PASS | config loader + tamper-evident backup/verify/restore with restored-store integrity (`ops/`, E16) |
 | **PRODUCTION** | **✅ GA** | all 10 gates PASS · no High/Critical debt · Freeze held · **E9 live-validated** (real scan of example.com + visual-match example.com vs example.org, 2026-07-08). Ongoing: production-scale load tuning + wider real-site validation (operational, not a gate) |
@@ -99,6 +100,26 @@ All objective evidence in one place. Re-run to refresh; date each result.
 | E17 | Reporting depth (summary/diff) | `node reporting/reporting.test.js` | ✅ PASS · 15/15 · deterministic exec-summary + scan-diff, self-contained escaped HTML | 2026-07-08 |
 | Eall | Full suite run | `node testing/run-all.js` | ✅ PASS · 9/9 suites green | 2026-07-08 |
 | E9 | Live pipeline run (real scan + visual-match) | `node sgen-qa-full.js https://example.com` · `--compare` | ✅ PASS · real scan quality 91 (39/15/1/3), 18 finding events, gate PASS, fingerprint deterministic across 2 runs; visual-match example.com vs example.org 100% match (screenshots+sharp) | 2026-07-08 |
+
+### Evidence Ledger — 2026-07-29 re-certification (release provenance)
+
+> The 2026-07-08 entries above record the state at that date and are left as they stand. These rows
+> were measured from a FRESH CLONE of the release candidate, not from a working tree — the distinction
+> is the whole reason this section exists.
+
+| # | Evidence | Command | Result | Date |
+|---|---|---|---|---|
+| R1 | Full suite from a fresh clone | `git clone <rc> && node testing/run-all.js` | ✅ PASS · **58/58 suites** (was 48/52 from committed state before provenance was restored) | 2026-07-29 |
+| R2 | Release gate, release tier | `SGEN_RELEASE_GATE=1 node testing/release-gate.js` | ✅ PASS · 10/10 · clean checkout · suite re-run from a clone of the committed artifact | 2026-07-29 |
+| R3 | Repository integrity | `node testing/repo-integrity.test.js` | ✅ PASS · 9/9 · every relative require resolves to a TRACKED path | 2026-07-29 |
+| R4 | Coverage ≥95% | `node testing/coverage.js 95` | ✅ PASS · **98.4%** (built-in V8, 0 external deps) | 2026-07-29 |
+| R5 | Security self-audit | `node testing/security-audit.js` | ✅ PASS · 0 findings · 6 threat classes · 35 files. T2 no longer flags network tokens inside comments; executable detection proven intact 9/9 | 2026-07-29 |
+| R6 | Score declaration integrity (ADR-0011) | `SGEN_P0_PRINT=1 node score-declaration.test.js` | ✅ PASS · 45/45 · trio honest **79** / inflated **90** / shipped **80** | 2026-07-29 |
+| R7 | Coverage declaration reaches the product | stored `report.json` of a real run | ✅ PASS · `evaluationDeclared: true`; advisory suites carry real scores (crossbrowser 57, console 18) — not false 100s | 2026-07-29 |
+| R8 | Golden byte-parity (A1 provider contract) | `node inventory/contract-parity.test.js` | ✅ PASS · 33/33 · golden unmoved | 2026-07-29 |
+| R9 | ADR-0008 on-disk oracle | 31-file store digest | ✅ PASS · `a0f727d8ca5028834cdc922d63387bbbb557addf20c445e760c13a0fd60246d3` unmoved | 2026-07-29 |
+| R10 | Version authority | `version-authority.js` | ✅ PASS · release-metadata agrees with version.js and engine/package.json · **0** duplicate declarations | 2026-07-29 |
+| R11 | Application starts from committed code | `node sgen-qa-serve.js` in a fresh clone | ✅ PASS · server started (`[engines] firefox+webkit present`) | 2026-07-29 |
 
 ## 5 · Technical Debt Register
 Explicit, owned debt — so no "temporary" bridge silently becomes permanent.
