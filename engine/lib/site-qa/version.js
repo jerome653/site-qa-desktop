@@ -24,7 +24,12 @@
 // pattern is what the rest of this file now follows.
 const { REGISTRY_VERSION } = require('./rules/registry');
 module.exports = {
-  ENGINE_VERSION: '2.3.0',   // V2 Phase 1: Finding Contract + Evidence Providers + Developer Locator Objects + 32 rules
+  // 2.4.0 (ADR-0011) — SCORE DECLARATION INTEGRITY. The first user-visible behavioural change since
+  // 2.3.0: the Quality Score on the report now reflects only what was actually evaluated, so scores
+  // FALL on sites where rules did not run. Measured across the stored corpus: 9/9 runs were inflated,
+  // mean -8.1, median -10. Minor, not major: the score's shape, model tag and every other stream are
+  // unchanged — only the number is corrected.
+  ENGINE_VERSION: '2.4.0',   // ADR-0011 score declaration integrity (was 2.3.0: V2 Phase 1 contract + providers + 32 rules)
   REPORT_VERSION: '1.4.0',   // merged findings list (Issues + per-section detail -> one filtered, section-grouped table)
   REGISTRY_VERSION,          // rule metadata version (owned by the registry)
 

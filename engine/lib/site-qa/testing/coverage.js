@@ -25,11 +25,34 @@ const INCLUDE = [
   'content-artifacts/checks.js', 'content-artifacts/index.js',
   'ops/config.js', 'ops/backup.js', 'ops/index.js',
   'reporting/summary.js', 'reporting/index.js',
+  // ADR-0004..0010 acquisition + persistence infrastructure. Added by the D1 remediation: these are the
+  // SAME CLASS as the stores above — pure, deterministic, unit-tested — and were missing only because
+  // this list is maintained by hand. They were fully tested and entirely invisible to the gate.
+  //
+  // The live-scan runtime (audit / checks / report / capture / visual-match / tls / cross-browser) stays
+  // OUT, per this file's own documented scope: it is covered by golden + integration + live evidence,
+  // not unit tests. That exclusion predates this change and is not a percentage decision.
+  'inventory/collection.js',
+  'immutable-store/index.js',
+  'collection-store/index.js',
+  'evidence-ledger/index.js',
+  'replay/index.js',
+  'collectors/network.js',
+  'collectors/document.js',
+  'version-authority.js',
 ];
 const SUITES = [
   'rules/registry.test.js', 'testing/foundation.test.js', 'scan-store/scan-store.test.js', 'finding-store/finding-store.test.js',
   'timeline/timeline.test.js', 'regression/regression.test.js', 'best-practices/best-practices.test.js',
   'content-artifacts/content-artifacts.test.js', 'spelling/spelling.test.js', 'ops/ops.test.js', 'reporting/reporting.test.js', 'pipeline.test.js', 'inventory/inventory.test.js',
+  // D1 remediation. inventory/providers.js was already in INCLUDE and read 71.4% because the two
+  // suites that exercise its ADR-0005/0006 providers were absent here. network-ledger and
+  // document-assets each launch real Chromium, so coverage now costs more wall-clock -- accepted:
+  // measuring the real thing beats measuring quickly.
+  'immutable-store/immutable-store.test.js', 'collection-store/collection-store.test.js',
+  'collection-store/producer.test.js', 'evidence-ledger/evidence-ledger.test.js',
+  'replay/replay.test.js', 'version-authority.test.js',
+  'inventory/contract-parity.test.js', 'inventory/network-ledger.test.js', 'inventory/document-assets.test.js',
 ];
 
 function toAbs(u) { try { return path.normalize(u.startsWith('file:') ? new URL(u).pathname.replace(/^\/([A-Za-z]:)/, '$1') : u); } catch (_) { return u; } }

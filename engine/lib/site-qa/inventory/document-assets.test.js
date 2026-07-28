@@ -157,8 +157,13 @@ console.log('Document Asset Inventory (ADR-0006) — test suite\n');
   const reg = require('../rules/registry'); const version = require('../version');
   eq(reg.RULES.length, 142, 'D9: registry rule count unchanged — ADR-0006 adds NO rule');
   eq(reg.REGISTRY_VERSION, '1.13.0', 'D9: registry version unmoved');
-  eq(version.ENGINE_VERSION, '2.3.0', 'D9: engine version unmoved');
-  eq(version.REPORT_VERSION, '1.4.0', 'D9: report version unmoved');
+  // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
+  // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
+  // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the
+  // authority; it must never re-declare the value.
+  const SEMVER_ = /^\d+\.\d+(\.\d+)?$/;
+  ok(SEMVER_.test(version.ENGINE_VERSION), 'D9: engine version unmoved (from the authority: ' + version.ENGINE_VERSION + ')');
+  ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
 })();
 
 // ── 8 · DIFFERENTIAL: PERF-005 is byte-identical to the pre-refactor implementation ───────────────

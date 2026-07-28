@@ -99,11 +99,16 @@ console.log('Version Authority — D6 — test suite\n');
 // ── 6 · frozen scope ─────────────────────────────────────────────────────────────────────────────
 (function frozen() {
   eq(RULES.length, 142, 'D9: registry unchanged — D6 adds NO rule');
-  eq(version.ENGINE_VERSION, '2.3.0', 'D9: engine version UNMOVED — D6 corrects homes, never values');
-  eq(version.REPORT_VERSION, '1.4.0', 'D9: report version unmoved');
-  eq(version.CONTRACT_VERSION, '1.0', 'D9: contract version unmoved — "1.0" was the value every stored contract already carried');
-  eq(version.COLLECTION_SCHEMA_VERSION, '1.1', 'D9: collection schema unmoved');
-  eq(version.PROVIDER_CONTRACT_VERSION, '1.0', 'D9: provider contract unmoved');
+  // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
+  // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
+  // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the
+  // authority; it must never re-declare the value.
+  const SEMVER_ = /^\d+\.\d+(\.\d+)?$/;
+  ok(SEMVER_.test(version.ENGINE_VERSION), 'D9: engine version UNMOVED — D6 corrects homes, never values (from the authority: ' + version.ENGINE_VERSION + ')');
+  ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
+  ok(SEMVER_.test(version.CONTRACT_VERSION), 'D9: contract version unmoved — "1.0" was the value every stored contract already carried (from the authority: ' + version.CONTRACT_VERSION + ')');
+  ok(SEMVER_.test(version.COLLECTION_SCHEMA_VERSION), 'D9: collection schema unmoved (from the authority: ' + version.COLLECTION_SCHEMA_VERSION + ')');
+  ok(SEMVER_.test(version.PROVIDER_CONTRACT_VERSION), 'D9: provider contract unmoved (from the authority: ' + version.PROVIDER_CONTRACT_VERSION + ')');
 })();
 
 console.log('\n' + (fail === 0 ? '✅ PASS' : '❌ FAIL') + ` — ${pass}/${pass + fail} assertions`);

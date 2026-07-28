@@ -14,6 +14,7 @@
 // runAudit is injectable (opts.auditFn) so the flow is testable offline without a live crawl.
 const { runAudit } = require('./audit');
 const { compute } = require('./score');
+const { RULES } = require('./rules/registry');   // ADR-0011: advisory rule sets derived from the registry, never hand-listed
 const { runBestPractices } = require('./best-practices');
 const { scanContentArtifacts } = require('./content-artifacts');
 const { scanSpelling } = require('./spelling');
@@ -28,7 +29,20 @@ const path = require('path');
 
 // Re-derive tally + score + verdict + quality after the advisory passes change the suites.
 // Uses the SAME formulas as audit.js (pass/graded ratio + registry-driven compute()).
-function rescore(suites) {
+// ── ADR-0011 · SCORE DECLARATION INTEGRITY ────────────────────────────────────────────────────────
+// `evaluatedRules` is the coverage DECLARATION: the registry rules whose detection code provably ran.
+// audit.js computes an honest, declared score with it; this function used to call `compute(suites)`
+// with NO OPTIONS, which score.js correctly reads as its LEGACY shape — "assume every rule ran" — and
+// the merge below then OVERWROTE the honest number with that one.
+//
+// Measured on a real site, ordinary --no-render run, before this change:
+//     audit.js  79  (declared)      ->      shipped  90  (undeclared)     +11 points
+//     crossbrowser  null -> 100  ·  console  null -> 100   (both measured NOTHING)
+// Two suites that evaluated not one rule scored a perfect 100 and banked their full registry weight.
+//
+// score.js is NOT the bug and is untouched: its model was always right. The declaration was lost in
+// TRANSPORT between two call sites.
+function rescore(suites, opts = {}) {
   for (const s of suites) {
     const c = { pass: 0, warn: 0, fail: 0, manual: 0 };
     for (const r of s.checks) c[r.status] = (c[r.status] || 0) + 1;
@@ -39,8 +53,31 @@ function rescore(suites) {
   const score = graded ? Math.round(tally.pass / graded * 100) : 0;
   const verdict = tally.fail > 0 ? 'NEEDS ATTENTION' : (tally.warn > 0 ? 'PASSED WITH WARNINGS' : 'ALL PASSING');
   const ready = tally.fail === 0;
-  const quality = compute(suites);
+  // A caller with a declaration passes it; one without (a legacy caller, a fixture) omits it and gets
+  // exactly the previous behaviour. Absence is still honoured as "undeclared" — never invented.
+  const quality = Array.isArray(opts.evaluatedRules)
+    ? compute(suites, { evaluatedRules: opts.evaluatedRules })
+    : compute(suites);
   return { tally, graded, score, verdict, ready, quality };
+}
+
+// The rules each advisory pass EVALUATES. Derived from the registry by suite rather than hand-listed,
+// so a rule added to Best Practices or Copy Review is covered automatically and this map cannot drift
+// from the registry (ADR-0011 risk R5). FUNC-008/009 are single-rule passes and are named directly
+// because they live in a SCORED suite alongside rules these passes do not evaluate.
+//
+// Why this exists at all: audit.js builds its declaration BEFORE the advisory passes run, so these 14
+// rules genuinely execute and are absent from it. Threading the declaration through unchanged
+// therefore subtracts them from `functional`'s denominator while that suite carries open risk —
+// measured at 79 against a correct 80. The fix is not to thread it; it is to COMPLETE it.
+function advisoryEvaluatedRules() {
+  const bySuite = (suite) => RULES.filter(r => r.suite === suite).map(r => r.id);
+  return {
+    contentArtifacts: ['FUNC-008'],
+    spelling: ['FUNC-009'],
+    bestPractices: bySuite('best-practices'),
+    copyReview: bySuite('copy'),
+  };
 }
 
 // Merge the advisory passes into a raw runAudit result. Returns a NEW result (does not mutate input).
@@ -49,7 +86,10 @@ function rescore(suites) {
 function applyAdvisory(result, opts = {}) {
   const pages = result.pages || [];
   const suites = result.suites.map(s => ({ ...s, checks: s.checks.slice() }));
-  let changed = suites.some(s => s.key === 'visual'); // a folded visual suite already counts as a change
+  let changed = suites.some(s => s.key === 'visual');
+  // Did the ADVISORY passes actually run this call? A folded visual suite also sets `changed`, and in
+  // that case no advisory rule was evaluated -- so the two must not share one flag.
+  let ranAdvisory = false; // a folded visual suite already counts as a change
 
   if (pages.length && opts.advisory !== false) {
     // FUNC-008 → Functional suite (scored). One row aggregating all content artifacts across pages.
@@ -70,12 +110,45 @@ function applyAdvisory(result, opts = {}) {
     if (!suites.some(s => s.key === 'copy')) {
       suites.push({ key: 'copy', name: 'Copy Review', desc: 'Advisory · AI flags & copy artifacts', icon: 'cursor', advisory: true, checks: scanCopyReview(pages) });
     }
+    ranAdvisory = true;
     changed = true;
   }
 
   if (!changed) { const m = { ...result, suites }; delete m.pages; return m; }
-  const scored = rescore(suites);
-  const merged = { ...result, suites, ...scored };
+
+  // ── ADR-0011 · complete the declaration, then re-score with it ──────────────────────────────────
+  // This module is the ONLY place that knows which advisory passes actually executed, so it is the
+  // only place that can complete the declaration audit.js started. `coverage` survives the merge
+  // (verified), so the input is available right here.
+  let evaluatedRules = null;
+  let coverage = result.coverage;
+  if (coverage && Array.isArray(coverage.evaluatedRules)) {
+    const adv = advisoryEvaluatedRules();
+    const ran = ranAdvisory ? [...adv.contentArtifacts, ...adv.spelling, ...adv.bestPractices, ...adv.copyReview] : [];
+    const set = new Set([...coverage.evaluatedRules, ...ran]);
+    evaluatedRules = [...set].sort();
+    // Keep the RECORD and the SCORE in agreement: a coverage block that disagreed with the number
+    // computed from it would be a second source of truth for the same fact.
+    coverage = {
+      ...coverage,
+      evaluatedRules,
+      notEvaluatedRules: (coverage.notEvaluatedRules || []).filter(id => !set.has(id)),
+      counts: { ...coverage.counts, rulesEvaluated: evaluatedRules.length, rulesNotEvaluated: (coverage.notEvaluatedRules || []).filter(id => !set.has(id)).length },
+    };
+  }
+
+  const scored = rescore(suites, evaluatedRules ? { evaluatedRules } : {});
+
+  // ── THE GUARD ──────────────────────────────────────────────────────────────────────────────────
+  // A recompute may NEVER downgrade a declared score to an undeclared one. That downgrade is exactly
+  // how this defect shipped: an honest number was silently replaced by one that credits every rule
+  // that never ran. Fail loudly instead — the same discipline as registry.validate() and
+  // assertTransition(). This is the part that stops the defect CLASS, not just this instance.
+  if (result.quality && result.quality.evaluationDeclared === true && scored.quality.evaluationDeclared !== true) {
+    throw new Error('pipeline: refusing to replace a coverage-declared Quality Score with an undeclared one — the declaration was lost in transport (ADR-0011). This is the defect that inflated every shipped score; it must never regress silently.');
+  }
+
+  const merged = { ...result, suites, ...scored, ...(coverage ? { coverage } : {}) };
   delete merged.pages; // don't persist raw HTML into the immutable record
   return merged;
 }

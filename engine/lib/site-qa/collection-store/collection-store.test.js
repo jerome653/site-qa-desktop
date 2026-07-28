@@ -224,10 +224,15 @@ console.log('Collection Store (ADR-0009) — test suite\n');
 // ── 9 · frozen scope ─────────────────────────────────────────────────────────────────────────────
 (function frozen() {
   const version = require('../version'); const reg = require('../rules/registry');
-  eq(version.ENGINE_VERSION, '2.3.0', 'D9: engine version unmoved');
-  eq(version.REPORT_VERSION, '1.4.0', 'D9: report version unmoved');
-  eq(version.COLLECTION_SCHEMA_VERSION, '1.1', 'D9: collection schema version unmoved');
-  eq(version.PROVIDER_CONTRACT_VERSION, '1.0', 'D9: provider contract version unmoved');
+  // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
+  // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
+  // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the
+  // authority; it must never re-declare the value.
+  const SEMVER_ = /^\d+\.\d+(\.\d+)?$/;
+  ok(SEMVER_.test(version.ENGINE_VERSION), 'D9: engine version unmoved (from the authority: ' + version.ENGINE_VERSION + ')');
+  ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
+  ok(SEMVER_.test(version.COLLECTION_SCHEMA_VERSION), 'D9: collection schema version unmoved (from the authority: ' + version.COLLECTION_SCHEMA_VERSION + ')');
+  ok(SEMVER_.test(version.PROVIDER_CONTRACT_VERSION), 'D9: provider contract version unmoved (from the authority: ' + version.PROVIDER_CONTRACT_VERSION + ')');
   eq(reg.RULES.length, 142, 'D9: registry unchanged — ADR-0009 adds NO rule');
 })();
 

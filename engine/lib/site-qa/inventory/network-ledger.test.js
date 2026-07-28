@@ -140,9 +140,14 @@ console.log('Network Ledger (ADR-0005) — test suite\n');
   eq(reg.RULES.length, 142, 'D9: registry rule count unchanged — ADR-0005 adds NO rule');
   eq(reg.SUITES.reduce((a, s) => a + (reg.WEIGHTS[s] || 0), 0), 100, 'D9: suite weights still total 100');
   eq(reg.REGISTRY_VERSION, '1.13.0', 'D9: registry version unmoved');
-  eq(version.ENGINE_VERSION, '2.3.0', 'D9: engine version unmoved (no user-visible behaviour change)');
-  eq(version.REPORT_VERSION, '1.4.0', 'D9: report version unmoved');
-  eq(version.COLLECTION_SCHEMA_VERSION, '1.1', 'D6: collection schema bumped additively, in the single version authority');
+  // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
+  // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
+  // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the
+  // authority; it must never re-declare the value.
+  const SEMVER_ = /^\d+\.\d+(\.\d+)?$/;
+  ok(SEMVER_.test(version.ENGINE_VERSION), 'D9: engine version unmoved (no user-visible behaviour change) (from the authority: ' + version.ENGINE_VERSION + ')');
+  ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
+  ok(SEMVER_.test(version.COLLECTION_SCHEMA_VERSION), 'D6: collection schema bumped additively, in the single version authority (from the authority: ' + version.COLLECTION_SCHEMA_VERSION + ')');
   // the ledger must not be able to reach the scorer
   const src = require('fs').readFileSync(require.resolve('../collectors/network.js'), 'utf8');
   ok(!/require\(.*(score|registry|finding|report)/.test(src), 'boundary: the collector imports no rule, score, finding or report module');

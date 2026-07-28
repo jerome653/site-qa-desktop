@@ -205,8 +205,13 @@ console.log('Provider contract parity (ADR-0004 A1) — test suite\n');
   const reg = require('../rules/registry');
   eq(reg.RULES.length, 142, 'D9: registry rule count unchanged');
   eq(reg.SUITES.reduce((a, s) => a + (reg.WEIGHTS[s] || 0), 0), 100, 'D9: suite weights still total 100');
-  eq(version.ENGINE_VERSION, '2.3.0', 'D9: engine version unmoved (A1 changes no behaviour)');
-  eq(version.REPORT_VERSION, '1.4.0', 'D9: report version unmoved');
+  // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
+  // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
+  // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the
+  // authority; it must never re-declare the value.
+  const SEMVER_ = /^\d+\.\d+(\.\d+)?$/;
+  ok(SEMVER_.test(version.ENGINE_VERSION), 'D9: engine version unmoved (A1 changes no behaviour) (from the authority: ' + version.ENGINE_VERSION + ')');
+  ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
   ok(!!version.PROVIDER_CONTRACT_VERSION && !!version.COLLECTION_SCHEMA_VERSION, 'D6: the two new boundary streams are owned by version.js');
 })();
 

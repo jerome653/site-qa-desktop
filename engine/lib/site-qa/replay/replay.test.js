@@ -209,8 +209,13 @@ console.log('Replay Engine (ADR-0010) — test suite\n');
   eq(reg.RULES.length, rulesBefore, 'frozen: replay does not mutate the registry');
   eq(PROVIDERS.length, providersBefore, 'frozen: replay does not mutate the provider set');
   eq(reg.RULES.length, 142, 'D9: registry unchanged — ADR-0010 adds NO rule');
-  eq(version.ENGINE_VERSION, '2.3.0', 'D9: engine version unmoved');
-  eq(version.REPORT_VERSION, '1.4.0', 'D9: report version unmoved');
+  // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
+  // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
+  // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the
+  // authority; it must never re-declare the value.
+  const SEMVER_ = /^\d+\.\d+(\.\d+)?$/;
+  ok(SEMVER_.test(version.ENGINE_VERSION), 'D9: engine version unmoved (from the authority: ' + version.ENGINE_VERSION + ')');
+  ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
   const src = fs.readFileSync(require.resolve('./index.js'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
   ok(!/require\(.*(\.\.\/score|\.\.\/report|rules\/registry|\.\.\/audit)/.test(src), 'boundary: replay imports no score, report, registry or audit module');
   ok(!/severity|deduction|verdict/i.test(src), 'boundary: no scoring or verdict logic');
