@@ -15,6 +15,10 @@ const fs = require('fs');
 const path = require('path');
 const { buildRecord, recordForDigest } = require('./record');
 const { sha256 } = require('./digest');
+// ADR-0008: the durable-commit primitives (temp->fsync->rename record write, manifest append,
+// index append) live ONCE in immutable-store/. The byte sequence they perform is unchanged -- that
+// is the point of the extraction, and it is proven by an on-disk parity oracle, not asserted.
+const { writeRecordAtomic, appendLine, appendLines } = require('../immutable-store');
 
 const INDEX_NAMES = ['by-target', 'by-date', 'by-rule', 'by-severity', 'by-project', 'by-engine', 'by-digest', 'by-fingerprint'];
 
@@ -42,24 +46,14 @@ class ScanStore {
     }
     // 1) Write the immutable record atomically (temp → fsync → rename). A crash before rename
     //    leaves only a .tmp file, never a half-written record.
-    const p = this.recordPath(rec.scanId);
-    const tmp = p + '.tmp';
-    const fd = fs.openSync(tmp, 'w');
-    try {
-      fs.writeSync(fd, JSON.stringify(rec, null, 2));
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
-    fs.renameSync(tmp, p);
+    writeRecordAtomic(this.recordPath(rec.scanId), rec);
     // 2) Commit: append the manifest line (the durable "this scan exists" marker).
-    const line = JSON.stringify({
+    appendLine(this.manifestPath, {
       scanId: rec.scanId, fingerprint: rec.fingerprint, digest: rec.digest,
       ts: rec.timestamp, engine: rec.versions.engine, registry: rec.versions.registry,
       target: rec.target, host: rec.host, environment: rec.environment,
       project: rec.project, parent: rec.parentScanId,
     });
-    fs.appendFileSync(this.manifestPath, line + '\n');
     // 3) Project into indexes (append-only; rebuildable).
     this._appendIndexes(rec);
     return { scanId: rec.scanId, fingerprint: rec.fingerprint, digest: rec.digest, duplicate: false, parentScanId: rec.parentScanId };
@@ -111,7 +105,7 @@ class ScanStore {
       (buckets[name] || (buckets[name] = [])).push(JSON.stringify({ key, scanId: id }));
     }
     for (const name of Object.keys(buckets)) {
-      fs.appendFileSync(this.indexPath(name), buckets[name].join('\n') + '\n');
+      appendLines(this.indexPath(name), buckets[name]);
     }
   }
 

@@ -31,9 +31,16 @@ ok(bus.fire('page.completed', {}) === bus, 'events: fire() is chainable (returns
 ok(createBus().fire('scan.completed', {}) instanceof AuditBus, 'events: fire with no listener is a no-op');
 
 // version.js
-eq(version.ENGINE_VERSION, '2.3.0', 'version: engine 2.3.0');
-eq(version.REPORT_VERSION, '1.3.0', 'version: report 1.3.0');
+// D6 (ADR-0004 §D6). These assertions used to RESTATE the version literals, which made this test a
+// second authority: REPORT_VERSION moved to 1.4.0 with the 4.4.0 release and this file kept asserting
+// 1.3.0, so the suite sat red for weeks on a stale copy rather than on a defect. A test may assert
+// the SHAPE of a stream and that consumers agree with the authority -- it must not re-declare the value.
+const SEMVER = /^\d+\.\d+(\.\d+)?$/;
+for (const k of ['ENGINE_VERSION', 'REPORT_VERSION', 'REGISTRY_VERSION', 'COLLECTION_SCHEMA_VERSION', 'PROVIDER_CONTRACT_VERSION', 'CONTRACT_VERSION']) {
+  ok(SEMVER.test(version[k]), `version: ${k} present and well-formed (${version[k]})`);
+}
 eq(version.REGISTRY_VERSION, REGISTRY_VERSION, 'version: registry version mirrors the registry');
+eq(require('../contract').CONTRACT_VERSION, version.CONTRACT_VERSION, 'version: contract.js consumes the authority, never its own literal');
 
 console.log('\n' + (fail === 0 ? '✅ PASS' : '❌ FAIL') + ` — ${pass}/${pass + fail} assertions`);
 if (fail) { console.log('Failures:\n' + failures.map(f => '  - ' + f).join('\n')); process.exit(1); }

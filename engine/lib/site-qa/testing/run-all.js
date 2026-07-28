@@ -14,11 +14,22 @@ const ROOT = path.join(__dirname, '..');
 const SUITES = [
   'rules/registry.test.js',
   'evidence-name.test.js',
+  // The no-hang gate. Registered here because the failure it covers is invisible to every other suite:
+  // a wedged run produces no output to assert against, so nothing else in this list can fail on it.
+  'deadline.test.js',
   'consent.test.js',
   'blocking-overlay.test.js',
   'contract.test.js',
   'readiness.test.js',
   'font-checks.test.js',
+  // v5 reference-fidelity scorer + its background-image sensor. Pure functions, no browser: grade()
+  // turns structural facts into tier-graded findings + a score; structDelta()'s bg axis is the only
+  // sensor for backgrounds on a redesign-mode run, so both are gated here against fixtures.
+  'visual-match/grade.test.js',
+  'visual-match/structdelta-bg.test.js',
+  // diagnoseEmpty(): a 0-pair comparison (blocked/unreachable reference or candidate, or no shared paths)
+  // must report the REASON, never complete as a silent ok:true/pairs:0 "success". Pure, no browser.
+  'visual-match/diagnose.test.js',
   'pass-label-reachability.test.js',
   // The render pass must never report a check it did not run as a check that passed. Real Chromium +
   // the real stored sgen.com runs — it re-derives the cost of axe-core's silence (a11y 66 vs an honest
@@ -39,12 +50,31 @@ const SUITES = [
   'lib/seo.test.js',
   'lib/stability.test.js',
   'lib/lenses.test.js',
+  // D6 (ADR-0004 §D6). Scans the WHOLE tree -- test files included -- for any file that re-declares a
+  // version stream, and proves the scanner can catch one. A restated literal is a second authority;
+  // that is exactly how foundation.test.js sat red for weeks on a stale REPORT_VERSION.
+  'version-authority.test.js',
   'testing/foundation.test.js',
   // Boots the real server and parses the client script it SERVES. The dashboard is ~66 KB of JS
   // inside a template literal, so `node --check` passes while the emitted script is unparseable and
   // every tool on the page is dead. Nothing else in this list can see that.
   'testing/ui-script.test.js',
+  // ADR-0008 infrastructure. Runs BEFORE the five stores that now depend on it: if the shared
+  // primitives are broken, the store suites' failures would be symptoms and this one names the cause.
+  // Asserts every store's digest resolves to the SAME function object, not merely an equal value.
+  'immutable-store/immutable-store.test.js',
   'scan-store/scan-store.test.js',
+  // ADR-0009. The Collection Store is a RecordStore SUBCLASS — the suite asserts inheritance by
+  // prototype identity, so "configuration, not a sixth implementation" is measurable rather than a
+  // claim. Placed after immutable-store so a broken primitive names itself first.
+  'collection-store/collection-store.test.js',
+  // ADR-0010. Replays sealed collections through the deterministic PROVIDER layer (not the rules
+  // layer — that is still page-first, and the suite asserts the engine claims no findings/score).
+  'replay/replay.test.js',
+  // Phase 3 producer wiring. Drives the REAL runAudit against a REAL local server twice -- with and
+  // without collection persistence -- and asserts the audit result is byte-identical. The only two
+  // fields that ever differed were the run timestamp and a Date.now() duration, both normalised.
+  'collection-store/producer.test.js',
   'finding-store/finding-store.test.js',
   'timeline/timeline.test.js',
   'regression/regression.test.js',
@@ -55,7 +85,27 @@ const SUITES = [
   'ops/ops.test.js',
   'reporting/reporting.test.js',
   'inventory/inventory.test.js',
+  // ADR-0004 acceptance evidence A1. The provider contract widened to enumerate(collection, ctx); this
+  // is the gate proving the seven existing providers produce byte-identical output through it. A golden
+  // hash captured from the code BEFORE the widening — a fixture cannot agree with a regression here.
+  'inventory/contract-parity.test.js',
+  // ADR-0005 evidence. Collector -> Collection -> Provider, including a REAL Chromium end-to-end
+  // against a local server: a fake page cannot demonstrate ADR-0004 acceptance criterion 3, and an
+  // end-to-end that silently skips is worse than one that fails.
+  'inventory/network-ledger.test.js',
+  // ADR-0006 evidence. Collector -> Collection -> Provider, plus a DIFFERENTIAL of the refactored
+  // PERF-005 against a verbatim copy of its pre-refactor implementation across an 11-document corpus
+  // (quirk cases included). That differential is the only thing that makes the refactor safe.
+  'inventory/document-assets.test.js',
+  // ADR-0007 evidence. Content-addressing, dedup, references, tamper-evidence — with dedup MEASURED on
+  // the repository's own stored screenshots rather than a fixture, and a proof that a run with no
+  // artifacts emits a byte-identical finding contract.
+  'evidence-ledger/evidence-ledger.test.js',
   'inventory/qualification.js',
+  // buildPageCoverage(): the Site Audit report must LIST which pages were audited, which errored
+  // (fetched but non-200/non-html), and which the sitemap listed but the crawl never reached (capped).
+  // Pure, no browser — guarded so an old result without pageCoverage yields empty arrays, not a throw.
+  'page-coverage.test.js',
   'pipeline.test.js',
 ];
 

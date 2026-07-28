@@ -18,6 +18,18 @@ const { evidenceName } = require('../site-qa/evidence-name');
 const { dismissOverlays, detectBlockingOverlay } = require('../site-qa/consent');
 const { DESCRIBE_ELEMENTS } = require('../site-qa/lib/evidence-providers');
 const { runFontChecks } = require('../site-qa/font-checks');
+// ADR-0005 Network Ledger. The collector attaches its OWN listeners and mutates nothing this file
+// owns: totalBytes, reqCount, failed and consoleErr are untouched, so no finding can move. It retains
+// the per-request records these listeners have observed and discarded on every scan since 2.0.
+const { attachNetworkCollector, createNetworkSink } = require('../site-qa/collectors/network');
+// ADR-0006 Document Collector. Runs on the RENDERED DOM (page.content()), which is a different
+// document from the raw HTML the static pass parses: scripts injected after load exist here and not
+// there. Acquisition only - no rule, no finding, no classification.
+const { collectDocumentAssets } = require('../site-qa/collectors/document');
+// ADR-0007 Evidence Ledger. Artifacts written by this pass are content-addressed as they are created,
+// so identical bytes collapse onto one id and a finding can reference evidence by content rather than
+// by a filename that stops resolving when a report directory is moved. Nothing is copied or relocated.
+const { EvidenceLedger } = require('../site-qa/evidence-ledger');
 
 // axe-core (free, MIT) — the industry-standard WCAG engine. Loaded once if installed; if absent the
 // render pass skips it and reports A11Y-001 as UNVERIFIED (see `unverified` below) — never a fake pass.
@@ -268,7 +280,7 @@ function groupViewports(list) {
 // reported `activeViewports.map(v => v.label)` — what was ASKED FOR — and the report printed "no
 // horizontal overflow across 13 viewports — clean" for a page that broke by 186px on all five phones
 // and rendered on none of them. A viewport that did not sweep must not be counted as swept.
-async function sweepViewport(page, v, { url, screensDir, runContrast, out, log = () => {} }) {
+async function sweepViewport(page, v, { url, screensDir, runContrast, out, ledger = null, log = () => {} }) {
   try {
     await page.setViewportSize({ width: v.width, height: v.height });
     await page.waitForTimeout(350);
@@ -295,6 +307,14 @@ async function sweepViewport(page, v, { url, screensDir, runContrast, out, log =
           // The emulation itself is untouched — only the capture density changes.
           await page.locator(r.selector).first().screenshot({ path: issueFile, timeout: 2500, scale: 'css' });
           finding.evidence = issueFile;
+          // ADR-0007: content-address the artifact and stamp its id on the finding. Guarded — a
+          // ledger failure must never retract a measurement that genuinely happened.
+          try {
+            if (ledger) {
+              const reg = ledger.putFile(issueFile, { page: slug(url), section: r.section, component: r.selector, issue: r.check, viewport: v.label });
+              finding.evidenceArtifactId = reg.artifactId;
+            }
+          } catch (e) { /* evidence stands without its content address */ }
           out.shots.push({ label: `${v.label} · ${r.check}`, file: issueFile, issue: r.check, section: r.section || '', component: r.selector });
           issueShots++;
         } catch (e) { /* element gone/off-screen — finding stands without its close-up */ }
@@ -310,7 +330,11 @@ async function sweepViewport(page, v, { url, screensDir, runContrast, out, log =
       // canonical capture: fonts + image-decode + deterministic lazy-load scroll pass before the shot,
       // so below-the-fold images/404s load and surface in the network + broken-asset checks.
       const cap = await stableCapture(page, { fullPage: true, path: file, engine: 'chromium' });
-      out.shots.push({ label: v.label, file, capture: cap });
+      // ADR-0007: register the full-page artifact, carrying stableCapture's provenance into the
+      // record rather than recomputing it.
+      let artifactId = null;
+      try { if (ledger) artifactId = ledger.putFile(file, { page: slug(url), section: 'page', component: 'full', viewport: v.label, capture: cap }).artifactId; } catch (e) {}
+      out.shots.push({ label: v.label, file, capture: cap, ...(artifactId ? { artifactId } : {}) });
     } catch (e) {
       log(`    ! ${v.label}: swept, but full-page capture failed (${(e.message || e).toString().slice(0, 120)}) — findings stand without the shot`);
     }
@@ -361,6 +385,14 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
   catch (e) { log(`Playwright launch failed (${e.message}) — skipping render pass. Run: npx playwright install chromium`); return { findings: [], shots: {}, rendered: 0, sampled: 0, total: pageUrls.length, error: e.message }; }
 
   let rendered = 0;
+  // Pages where the PRIMARY (Chromium) navigation did not complete. See the push site below.
+  const navFailures = [];
+  // One ledger for the whole run; each record is stamped with its document URL + observing context.
+  const networkSink = createNetworkSink();
+  // One document record per rendered page, in crawl order.
+  const documents = [];
+  // One ledger per run. In-memory (no root): this pass registers what it writes; persistence is ADR-0008.
+  const ledger = new EvidenceLedger();
   for (const url of targets) {
     // Per-label buffers. Context groups run in group order; findings and screenshots are EMITTED in
     // matrix order below, so the report ordering is identical to the single-context version.
@@ -377,7 +409,9 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
     // context already saw (`raw:false`), so re-observing the same error across 6 navigations cannot
     // inflate CON-001's count; the metrics context still pushes raw, duplicates and all, exactly as before.
     const addErr = (s, raw) => { if (raw) { consoleErr.push(s); seenErr.add(s); } else if (!seenErr.has(s)) { consoleErr.push(s); seenErr.add(s); } };
-    function watchPage(pg, { raw, weigh }) {
+    function watchPage(pg, { raw, weigh, context = null }) {
+      // Collector layer (ADR-0004 §D3) — acquisition only, no rule, no finding, no score.
+      try { attachNetworkCollector(pg, networkSink, { context, documentUrl: url }); } catch (_) { /* never break a scan to collect */ }
       pg.on('console', m => { if (m.type() === 'error') addErr(m.text().slice(0, 200), raw); });
       pg.on('pageerror', e => addErr('[pageerror] ' + (e.message || '').slice(0, 200), raw));
       pg.on('requestfailed', r => failed.push(`${r.method()} ${r.url().slice(0, 120)} — ${r.failure()?.errorText || '?'}`));
@@ -397,12 +431,21 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
     const ctx = await browser.newContext({ viewport: { ...METRICS_VIEWPORT } });
     await ctx.addInitScript(CWV_INIT);
     const page = await ctx.newPage();
-    watchPage(page, { raw: true, weigh: true });
+    watchPage(page, { raw: true, weigh: true, context: 'metrics' });
 
     try {
       await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
       await page.waitForTimeout(1200);
-    } catch (e) { consoleErr.push('[navigation] ' + (e.message || '').slice(0, 160)); }
+    } catch (e) {
+      consoleErr.push('[navigation] ' + (e.message || '').slice(0, 160));
+      // ALSO recorded structurally. Buried in consoleErr this was invisible as what it is: the PRIMARY
+      // engine failing to finish navigating. Measured 2026-07-20 — the same page timed out here and was
+      // swallowed into a console line, while the cross-browser suite turned the identical timeout into
+      // a tier-1 LAUNCH BLOCKER against WebKit. Same failure, two verdicts, and the loud one blamed the
+      // wrong thing: a slow page read as a Safari incompatibility. audit.js uses this to attribute the
+      // cross-browser row honestly. Additive — no finding, no rule, no scoring change.
+      navFailures.push({ url, err: (e.message || '').split('\n')[0].slice(0, 160) });
+    }
 
     // consent-class overlays (cookie banner / age gate / T&C modal): dismiss deterministically so the
     // audit sees the real page. Everything clicked is recorded; a STILL-blocking overlay is flagged —
@@ -420,6 +463,14 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
         : `paints over ${Math.round(blocked.cover * 100)}% of the viewport`;
       findings.push(F('CON-003', 'blocking-overlay', '10 Technical', `overlay ${blocked.selector} ${how} and could not be auto-dismissed — findings + screenshots for this page reflect the gated view; review manually`, url, blocked.selector));
     }
+
+    // ADR-0006: capture the RENDERED document once per page, after consent overlays are dismissed so
+    // the DOM is the real one. Guarded like every other collector - acquisition must never break the
+    // run it observes.
+    try {
+      const renderedHtml = await page.content();
+      documents.push(collectDocumentAssets(renderedHtml, { documentUrl: url, source: 'rendered' }));
+    } catch (e) { /* a page torn down mid-scan yields no document record - never a fake one */ }
 
     // axe-core deep WCAG pass (once per page, at desktop viewport)
     if (AXE_SRC) {
@@ -468,7 +519,7 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
     // Entries that need no emulation (1920 · Desktop + every breakpoint probe) sweep right here, on the
     // metrics context — same options, so they are free.
     for (const v of (groups.get(PRIMARY_GROUP) || [])) {
-      if (await sweepViewport(page, v, { url, screensDir, runContrast: v.label === contrastLabel, out: swept.get(v.label), log })) sweptThisPage.add(v.label);
+      if (await sweepViewport(page, v, { url, screensDir, runContrast: v.label === contrastLabel, out: swept.get(v.label), ledger, log })) sweptThisPage.add(v.label);
     }
     // CWV has to be READ while this context is still open; it is EMITTED further down, in its original
     // position relative to the other findings.
@@ -492,7 +543,7 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
       try {
         gctx = await browser.newContext(contextOptionsFor(entries[0]));
         const gpage = await gctx.newPage();
-        watchPage(gpage, { raw: false, weigh: false });
+        watchPage(gpage, { raw: false, weigh: false, context: key });
         try {
           await gpage.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
           await gpage.waitForTimeout(1200);
@@ -503,7 +554,7 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
         // it is still emitted exactly once per page.
         try { await dismissOverlays(gpage); } catch (e) {}
         for (const v of entries) {
-          if (await sweepViewport(gpage, v, { url, screensDir, runContrast: v.label === contrastLabel, out: swept.get(v.label), log })) sweptThisPage.add(v.label);
+          if (await sweepViewport(gpage, v, { url, screensDir, runContrast: v.label === contrastLabel, out: swept.get(v.label), ledger, log })) sweptThisPage.add(v.label);
         }
       } catch (e) {
         // Non-fatal, but NEVER silent. This catch was empty: a context that failed to create (or a
@@ -613,6 +664,16 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
     sweepFailures,
     axeRan, axeAvailable: !!AXE_SRC,
     unverified,
+    navFailures,
+    // ADR-0005: the raw acquisition channel. Additive — no existing consumer reads it, and nothing
+    // downstream of the determinism boundary judges it here.
+    network: networkSink.drain(),
+    networkCapped: networkSink.capped,
+    // ADR-0006: the document acquisition channel. Additive - no consumer reads it.
+    documents,
+    // ADR-0007: content-addressed artifact manifest for this run. Additive - report.js still reads
+    // screenshots from `shots[].file` exactly as before.
+    evidence: ledger.manifest(),
   };
 }
 

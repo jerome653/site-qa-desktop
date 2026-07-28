@@ -9,6 +9,7 @@
 // owns the per-finding canonical model and its serializations.
 
 const { toContract } = require('../contract');
+const { CONTRACT_VERSION } = require('../version');   // D6: the authority, never a restated literal
 const { domProvider } = require('./evidence-providers');
 
 // ---- CHANGE C: plain-language "what it means" sentence ------------------------------------------
@@ -178,7 +179,10 @@ function projectFindings(suites, ctx = {}) {
           const locator = it.descriptor ? domProvider.enrich(it.descriptor) : null;
           const c = toContract(check, {
             url: it.page, section: it.section, viewport: it.viewport, selector: it.id && it.id !== '(whole page)' ? it.id : null,
-            value: it.value, screenshot: it.evidence || null, locator,
+            // ADR-0007: pass the content-addressed artifact reference through when the run registered
+            // one. Undefined when absent, so toContract omits the field entirely and the contract is
+            // byte-identical for runs with no artifacts.
+            value: it.value, screenshot: it.evidence || null, artifactId: it.artifactId || undefined, locator,
             observed: check.detail, observedAt: ctx.generated || null,
           });
           it._md = contractToMarkdown(c, ctx);
@@ -219,7 +223,9 @@ function projectFindings(suites, ctx = {}) {
   const projectionMs = Date.now() - t0;
   return {
     findings,
-    metrics: { contractVersion: (findings[0] && findings[0].contractVersion) || '1.0', count: findings.length, projectionMs },
+    // D6: the fallback was a hardcoded '1.0' — a THIRD declaration of the contract stream. It now
+    // reads the authority, so it can never disagree with what the contracts themselves carry.
+    metrics: { contractVersion: (findings[0] && findings[0].contractVersion) || CONTRACT_VERSION, count: findings.length, projectionMs },
   };
 }
 

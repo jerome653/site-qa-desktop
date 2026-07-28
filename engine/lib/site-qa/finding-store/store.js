@@ -6,6 +6,10 @@
 const fs = require('fs');
 const path = require('path');
 const { sha256 } = require('./digest');
+// ADR-0008: the durable-commit primitives (temp->fsync->rename record write, manifest append,
+// index append) live ONCE in immutable-store/. The byte sequence they perform is unchanged -- that
+// is the point of the extraction, and it is proven by an on-disk parity oracle, not asserted.
+const { writeRecordAtomic, appendLine, appendLines } = require('../immutable-store');
 const { buildRecord, findingIdentity, normalizeEvidence, recordForDigest } = require('./record');
 const { assertTransition } = require('./lifecycle');
 
@@ -28,18 +32,13 @@ class FindingStore {
 
   // ---- low-level append (one lifecycle event) ------------------------------
   _write(rec) {
-    const p = this.recordPath(rec.recordId);
-    const tmp = p + '.tmp';
-    const fd = fs.openSync(tmp, 'w');
-    try { fs.writeSync(fd, JSON.stringify(rec, null, 2)); fs.fsyncSync(fd); }
-    finally { fs.closeSync(fd); }
-    fs.renameSync(tmp, p);
-    fs.appendFileSync(this.manifestPath, JSON.stringify({
+    writeRecordAtomic(this.recordPath(rec.recordId), rec);
+    appendLine(this.manifestPath, {
       recordId: rec.recordId, findingId: rec.findingId, seq: rec.seq, fingerprint: rec.fingerprint,
       digest: rec.digest, ruleId: rec.ruleId, target: rec.target, targetDigest: rec.targetDigest,
       severity: rec.severity, state: rec.newState, prev: rec.previousState,
       scanId: rec.scanRef.scanId, ts: rec.timestamp, parent: rec.parentRecordId,
-    }) + '\n');
+    });
     this._appendIndexes(rec);
     return rec;
   }
@@ -107,7 +106,7 @@ class FindingStore {
   _appendIndexes(rec) {
     const buckets = {};
     for (const [name, key, id] of this._indexRows(rec)) (buckets[name] || (buckets[name] = [])).push(JSON.stringify({ key, recordId: id }));
-    for (const name of Object.keys(buckets)) fs.appendFileSync(this.indexPath(name), buckets[name].join('\n') + '\n');
+    for (const name of Object.keys(buckets)) appendLines(this.indexPath(name), buckets[name]);
   }
   rebuildIndexes() {
     for (const n of INDEX_NAMES) { const p = this.indexPath(n); if (fs.existsSync(p)) fs.unlinkSync(p); }

@@ -8,7 +8,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const PREFIX = { page: 'PAGE', section: 'SECTION', component: 'COMP', global: 'GLOBAL', asset: 'ASSET', form: 'FORM', behavior: 'BEHAVIOR' };
+// `network` added by ADR-0005. Additive only: an existing prefix is never renamed or reused, because
+// minted IDs are append-only and permanent — PAGE-001 must mean the same logical object forever.
+// A type absent from this map throws at mint (see prefixFor): the registry refuses to invent an ID
+// scheme on the fly, which is what caught NetworkProvider arriving before its prefix did.
+const PREFIX = { page: 'PAGE', section: 'SECTION', component: 'COMP', global: 'GLOBAL', asset: 'ASSET', form: 'FORM', behavior: 'BEHAVIOR', network: 'NET', document: 'DOC' };
 
 class IdRegistry {
   constructor(persistPath) {

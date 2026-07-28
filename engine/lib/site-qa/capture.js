@@ -9,8 +9,25 @@
 // v1.0.1 evidence-capture hardening. Modifies capture ONLY — no certification / registry / algorithm change.
 
 const CAPTURE_SCHEMA = '1.0';
-let ENGINE_VERSION = '1.0.1';
-try { ENGINE_VERSION = require('./inventory/versions').SCHEMA.migrationQaEngine; } catch (_) {}
+// D6 (ADR-0004 §D6): renamed from `ENGINE_VERSION`. It never held the engine version -- it holds the
+// CAPTURE pipeline's own version -- but the name collided with the authority's stream in version.js,
+// which both misled readers and made duplicate-declaration detection impossible. Local rename only:
+// the emitted `engineVersion` field below is unchanged, so capture provenance is byte-identical.
+let CAPTURE_ENGINE_VERSION = '1.0.1';
+try { CAPTURE_ENGINE_VERSION = require('./inventory/versions').SCHEMA.migrationQaEngine; } catch (_) {}
+
+const { withDeadline } = require('./deadline');
+// page.evaluate() has NO timeout in Playwright — an expression that never settles inside the page hangs
+// the caller for the life of the browser. `document.fonts.ready` is exactly that expression, and this
+// engine already knows these sites ship fonts that never load (cross-browser.js records an icon font
+// that never loaded, on the same host that wedged two runs on 2026-07-21).
+//
+// Every in-page step below therefore gets a deadline and degrades to the value it ALREADY returns when
+// it fails — false / 0 / no-trim. Nothing new is claimed: the capture still happens, it just stops
+// waiting, and the metadata still says whether the step completed.
+const STEP_BUDGET_MS = 20000;    // one in-page read (fonts, decode, document height, content bottom)
+const SCROLL_BUDGET_MS = 40000;  // the lazy-load pass — many small evaluates down a long page
+const SHOT_BUDGET_MS = 60000;    // the screenshot itself (Playwright's own default is 30s)
 
 // document.fonts.ready — resolves when all @font-face are loaded; false if the API is unavailable.
 async function settleFonts(page) {
@@ -81,12 +98,12 @@ async function measureContentBottom(page) {
 // Canonical capture. Caller must have already navigated (networkidle). Returns additive metadata.
 async function stableCapture(page, { fullPage = true, path: shotPath, engine = 'chromium', navigation = 'networkidle', settleMs = 400 } = {}) {
   const t0 = Date.now();
-  const fontsLoaded = await settleFonts(page);
-  const imageDecode = await decodeImages(page);
-  const lazyLoadPass = await lazyScroll(page);
+  const fontsLoaded = await withDeadline(settleFonts(page), STEP_BUDGET_MS, false);
+  const imageDecode = await withDeadline(decodeImages(page), STEP_BUDGET_MS, false);
+  const lazyLoadPass = await withDeadline(lazyScroll(page), SCROLL_BUDGET_MS, false);
   await page.waitForTimeout(settleMs);                 // final stabilization (≈300–500ms)
   let documentHeight = 0;
-  try { documentHeight = await page.evaluate(() => document.documentElement.scrollHeight); } catch (_) {}
+  try { documentHeight = await withDeadline(page.evaluate(() => document.documentElement.scrollHeight), STEP_BUDGET_MS, 0); } catch (_) {}
   const vp = (page.viewportSize && page.viewportSize()) || {};
   let trimmedTrailingBlank = null;
   if (shotPath) {
@@ -104,14 +121,14 @@ async function stableCapture(page, { fullPage = true, path: shotPath, engine = '
     // stays true, so srcset / image-set / retina asset fetching are still genuinely exercised — we
     // keep the emulation and drop only the pixels nobody reads. Evidence shots are for a human to
     // look at; they do not need 3x density.
-    await page.screenshot({ path: shotPath, fullPage, scale: 'css' });
+    await page.screenshot({ path: shotPath, fullPage, scale: 'css', timeout: SHOT_BUDGET_MS });
     // Trim trailing blank on full-page shots: the fullPage capture is the whole scrollHeight, which often
     // includes a tall empty run of body background below the last real element. Crop the PNG down to the
     // measured content bottom (+ small pad). Guarded so real content is never cut: only when the blank gap
     // is large AND no element extends into it; any failure leaves the original shot untouched.
     if (fullPage && documentHeight > 0) {
       try {
-        const contentBottom = await measureContentBottom(page);
+        const contentBottom = await withDeadline(measureContentBottom(page), STEP_BUDGET_MS, 0);
         if (contentBottom > 0 && (documentHeight - contentBottom) > 120) {
           const sharp = require('sharp');
           const meta = await sharp(shotPath).metadata();
@@ -161,7 +178,7 @@ async function stableCapture(page, { fullPage = true, path: shotPath, engine = '
     trimmedTrailingBlank,
     capturedAt: new Date().toISOString(),
     captureDurationMs: Date.now() - t0,
-    engineVersion: ENGINE_VERSION,
+    engineVersion: CAPTURE_ENGINE_VERSION,
     captureSchema: CAPTURE_SCHEMA,
   };
 }
