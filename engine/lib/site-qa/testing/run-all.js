@@ -12,6 +12,10 @@ const ROOT = path.join(__dirname, '..');
 // Explicit, ordered suite list (foundation → history → advisory → self). Explicit beats globbing:
 // the run fails loudly if a known suite file goes missing, instead of silently covering less.
 const SUITES = [
+  // REPOSITORY INTEGRITY — runs FIRST because every other suite in this list validates the WORKING
+  // TREE, and this one validates what is actually COMMITTED. Those differed, and the difference was a
+  // release blocker: two runtime sources were never committed while committed code required them.
+  'testing/repo-integrity.test.js',
   'rules/registry.test.js',
   'evidence-name.test.js',
   // The no-hang gate. Registered here because the failure it covers is invisible to every other suite:
