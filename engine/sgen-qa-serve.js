@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// sgen qa-serve — local web UI for the SGEN Site QA suite. FOUR independent tools, one browser app,
+// sgen qa-serve — local web UI for the SGEN Site QA suite. FIVE independent tools, one browser app,
 // bound to 127.0.0.1 only. No AI at runtime; no fake results. Every button POSTs to the SAME frozen
 // engines the CLIs use — this file is UI-exposure ONLY and modifies none of them:
 //
@@ -492,7 +492,9 @@ function appPage() {
   .top .brand .bv{font-size:10px;font-weight:500;color:var(--ink-faint);letter-spacing:.02em;font-family:var(--mono)}
   .hdr-actions{display:flex;align-items:center;gap:8px;margin-left:auto;min-width:0}
   .top .env{font-family:var(--mono);font-size:11px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* full-width tool tab bar — four equal quarters; active carries a red underline + surface lift */
+  /* full-width tool tab bar — five equal columns; active carries a red underline + surface lift.
+     Below 560px it becomes a horizontal scroller (see the media query) rather than wrapping: five
+     items wrapped to THREE rows with the last stretched full-width, which four never did. */
   .tabbar{display:flex;background:var(--surface);border-bottom:1px solid var(--line-strong)}
   .tabbar button{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px;padding:12px 18px;cursor:pointer;background:transparent;border:0;border-right:1px solid var(--line);border-bottom:2px solid transparent;color:var(--ink-soft);font-family:inherit;text-align:left;transition:background .12s ease,border-color .12s ease,color .12s ease}
   .tabbar button:last-child{border-right:0}
@@ -1240,8 +1242,8 @@ function appPage() {
     // per browser; reopen via ? Help). Each step: {tab, target selector, title, body}.
     var WK_KEY='sgenqa_onboarded_v2';
     var TOUR=[
-      {tab:'audit',target:null,lbl:'Welcome',title:'SGEN Site QA',body:"Four offline tools to check any website's quality — audit, compare, verify a migration, and review reports. Nothing leaves this machine. Let me show you around."},
-      {tab:'audit',target:'.tabbar',lbl:'Navigation',title:'Four tools, one app',body:'Switch tools here — the header and these tabs stay locked in place as you scroll. Site Audit checks one site · Visual Comparison diffs old vs new · Post-Deployment Check verifies a migration · Reports holds past runs.'},
+      {tab:'audit',target:null,lbl:'Welcome',title:'SGEN Site QA',body:"Five offline tools to check any website's quality — audit, compare, verify a migration, check SEO, and review reports. Nothing leaves this machine. Let me show you around."},
+      {tab:'audit',target:'.tabbar',lbl:'Navigation',title:'Five tools, one app',body:'Switch tools here — the header and these tabs stay locked in place as you scroll. On a narrow screen the bar scrolls sideways and keeps the selected tab in view. Site Audit checks one site (technical suites) · Visual Comparison diffs old vs new · Post-Deployment Check verifies a migration · SEO scores SEO on its own · Reports holds past runs.'},
       {tab:'audit',target:'#a-url',lbl:'Tool 1 · Site Audit',title:'Enter any site URL',body:'Point it at a live site and run it — that is the whole dashboard. How it scans (max pages, browser render, viewports, which checks score) lives behind Settings, and the URLs you type are saved automatically, so you never re-enter them next launch.'},
       {tab:'audit',target:'#a-btn',lbl:'Tool 1 · Site Audit',title:'Read the result at a glance',body:'The report opens with one clear OVERALL pass/fail up top; the other numbers are 0–100 quality reads, not separate verdicts. The summary cards are clickable — jump straight to the failing checks — and a colour key explains that red means passing.'},
       {tab:'visual',target:'#v-ref',lbl:'Tool 2 · Visual Comparison',title:'Old vs new, side by side',body:'Give a reference URL and a target URL. Every paired page is compared at each viewport on two axes: pixel match and structural diff (missing / extra / moved / restyled elements).'},
@@ -1361,7 +1363,7 @@ function appPage() {
     })();
 
     // ================= PER-TOOL SETTINGS =========================================================
-    // A gear on each of the 4 tools opens THIS tool's settings. Three rules hold the design together:
+    // A gear on each of the tools that has settings opens THIS tool's settings. Three rules hold the design together:
     //
     //  1. ONE SOURCE OF TRUTH. Every field either BINDS to the real control the runner already reads
     //     (a-max, a-render, a-vps, v-scope, ...) or has no DOM twin at all (scope, reports.limit).
@@ -2294,6 +2296,6 @@ const ensureEngines = () => {
 ensureEngines();
 
 server.listen(PORT, '127.0.0.1', () => {
-  process.stderr.write(`\nSGEN Site QA → http://127.0.0.1:${PORT}\n(4 tools: Site Audit · Visual Comparison · Post-Deployment Check · Reports. Ctrl+C to stop.)\n`);
+  process.stderr.write(`\nSGEN Site QA → http://127.0.0.1:${PORT}\n(5 tools: Site Audit · Visual Comparison · Post-Deployment Check · SEO · Reports. Ctrl+C to stop.)\n`);
   if (arg('open', false)) { try { spawn(process.platform === 'win32' ? 'cmd' : 'sh', process.platform === 'win32' ? ['/c', 'start', '', `http://127.0.0.1:${PORT}`] : ['-c', `xdg-open http://127.0.0.1:${PORT}`], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {} }
 });
