@@ -11,7 +11,8 @@
 // output => the CLIs and every existing caller are unchanged). Scope is a SCORING decision only:
 // this file never asks the engine to skip a check, so findings/evidence/tally/verdict/readiness stay
 // whole-site and a de-scoped run still reports every problem it found.
-//   1. Site Audit          -> runAudit + renderReport                (/api/run)
+//   1. Site Audit          -> runAudit + renderReport, SEO skipped   (/api/run)
+//   4. SEO                -> runAudit, seo suite ONLY              (/api/seo)
 //   2. Visual Comparison   -> visual-match.run + report-visual.render (/api/visual)
 //   3. Post-Deployment Check (engine: migration certification) -> discoverPages + certifyMigration (/api/certify)
 //   4. Reports             -> lists _ui-runs + qualification portfolio (/api/reports)
@@ -579,7 +580,8 @@ function appPage() {
   .rlist{display:flex;flex-direction:column;gap:8px}
   .ritem{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);font-size:13px}
   .ritem .tag{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.04em}
-  .tag.audit{background:#2A3A55;color:#BcD}.tag.visual{background:#3A2A55;color:#DcF}.tag.cert{background:#553A2A;color:#FDc}.tag.case{background:#2A5541;color:#cFD}
+  .tag.audit{background:#2A3A55;color:#BcD}.tag.visual{background:#3A2A55;color:#DcF}.tag.cert{background:#553A2A;color:#FDc}
+.tag.seo{background:#2A4A55;color:#cEF}.tag.case{background:#2A5541;color:#cFD}
   .ritem .nm{flex:1;font-family:var(--mono);color:var(--ink)}.ritem .when{color:var(--ink-faint);font-size:11.5px}
   .ritem a{color:var(--brand);font-weight:600;font-size:12.5px}
   .hint{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
@@ -792,10 +794,11 @@ function appPage() {
       </div>
     </div>
     <nav class="tabbar" role="tablist" aria-label="Tools">
-      <button data-t="audit" class="on" onclick="tab('audit')"><b>1 · Site Audit</b><span class="nd">quality-check one site</span></button>
+      <button data-t="audit" class="on" onclick="tab('audit')"><b>1 · Site Audit</b><span class="nd">technical quality — SEO is tool 4</span></button>
       <button data-t="visual" onclick="tab('visual')"><b>2 · Visual Comparison</b><span class="nd">old vs new, side by side</span></button>
       <button data-t="cert" onclick="tab('cert')"><b>3 · Post-Deployment Check</b><span class="nd">did everything make it across?</span></button>
-      <button data-t="reports" onclick="tab('reports');loadReports()"><b>4 · Reports</b><span class="nd">past runs · HTML · PDF</span></button>
+      <button data-t="seo" onclick="tab('seo')"><b>4 · SEO</b><span class="nd">titles · meta · canonical · schema</span></button>
+      <button data-t="reports" onclick="tab('reports');loadReports()"><b>5 · Reports</b><span class="nd">past runs · HTML · PDF</span></button>
     </nav>
   </header>
   <div class="wrap">
@@ -918,6 +921,26 @@ function appPage() {
     </section>
 
     <!-- 4 REPORTS -->
+    <!-- 4 SEO — standalone. Deliberately the SAME element vocabulary as Site Audit (-btn/-cancel/
+         -retry/-pbar/-pfill/-status/-link/-frame/-ph) because stream(), setProg(), showCtl() and
+         showReport() dereference those ids by prefix WITHOUT null guards. Reusing the contract is
+         what lets this tool share every runner behaviour — cancel, retry, progress, notification,
+         embedded report — instead of reimplementing five of them slightly differently. -->
+    <section class="panel" id="p-seo">
+      <div class="tthead"><h2 class="tt">SEO</h2></div>
+      <p class="sub">Titles, meta descriptions, canonicals, social meta, schema, hreflang, indexability, robots.txt and sitemap — scored on their own. Site Audit covers the technical suites and no longer includes SEO, so neither score can prop up the other.</p>
+      <div class="toolgrid">
+        <div class="col-left"><div class="card">
+          <div class="cfg">
+            <div class="cfg-row"><label for="s-url">Site URL</label><input id="s-url" placeholder="https://example.com"></div>
+            <div class="cfg-row"><label for="s-max">Max pages</label><input id="s-max" type="number" min="1" value="1"></div>
+          </div>
+          <div class="cfg-action"><button class="run" id="s-btn" onclick="runSeo()">Run SEO audit</button><button class="run ghost" id="s-cancel" onclick="cancelScan('s')" style="display:none">Cancel</button><button class="run retry" id="s-retry" onclick="retryScan('s')" style="display:none">Retry</button></div>
+        </div></div>
+      </div>
+      <div class="pbar" id="s-pbar"><div class="pfill" id="s-pfill"></div></div><div class="status" id="s-status"></div><div class="cmplink" id="s-link"></div><div id="s-frame"></div>
+      <div class="placeholder" id="s-ph"><b>SEO results appear here</b>Run an SEO audit to see the SEO score, findings and the full report preview.</div>
+    </section>
     <section class="panel" id="p-reports">
       <div class="tthead"><h2 class="tt">Reports</h2><button class="gear" id="gear-reports" onclick="openSettings('reports')" title="Reports settings" aria-label="Reports settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div><p class="sub">Review previous runs. Select one to preview its report; open the HTML or save it as a PDF to share.</p>
       <div class="rgrid">
@@ -1124,6 +1147,18 @@ function appPage() {
         var cmp='';if(m.comparison)cmp=' · <a href="/compare/'+m.id+'" target="_blank">open comparison ↗</a>';$('a-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full report</a>'+cmp;
         showReport('a','/report/'+m.id,'report');});}
 
+    // 4 SEO — standalone. Posts to /api/seo, which runs the seo suite and skips the other nine.
+    // The status line states the SCOPE rather than listing nine 'NOT RUN' sections: for this tool the
+    // narrow scope is the tool's identity, not a narrowing of a wider promise. It still says so out
+    // loud — a score whose coverage is unstated is exactly what ADR-0011 exists to prevent.
+    function runSeo(){var url=$('s-url').value.trim();if(!url){$('s-status').textContent='Enter a site URL.';return;}
+      stream('/api/seo',{url:url,maxPages:+$('s-max').value||1,render:false},'s',function(m){
+        if(!m.ok){$('s-status').textContent='SEO audit failed: '+(m.error||'unknown');return;}
+        var q=(m.quality!=null?' · SEO quality '+m.quality:'');
+        $('s-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · pass '+m.tally.pass+' / warn '+m.tally.warn+' / fail '+m.tally.fail+' / manual '+m.tally.manual+' · <b>scope: SEO suite only</b> · saved to history';
+        $('s-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full SEO report</a>';
+        showReport('s','/report/'+m.id,'report');});}
+
     // 2 Visual Comparison
     // Three-axis compare object {pixel,background,typography} read from the #v-ax checkboxes. A key with
     // no checkbox defaults ON — matching the engine's "absent / all-true => today's behaviour" axes
@@ -1172,7 +1207,7 @@ function appPage() {
         html+='<div class="rgroup"><div class="rghead">'+host+' <span class="rgc">'+items.length+'</span></div>';
         items.forEach(function(x){
           var route=x.kind==='visual'?'/visual/'+x.id:(x.kind==='cert'?'/certify/'+x.id:'/report/'+x.id);
-          html+='<div class="ritem" data-route="'+route+'" data-json="'+route+'/'+x.json+'" onclick="selectReport(this)"><span class="tag '+(x.kind==='visual'?'visual':x.kind==='cert'?'cert':'audit')+'">'+(x.kind==='visual'?'Visual':x.kind==='cert'?'Post-Deploy':'Audit')+'</span><span class="nm">'+x.when+'</span></div>';
+          html+='<div class="ritem" data-route="'+route+'" data-json="'+route+'/'+x.json+'" onclick="selectReport(this)"><span class="tag '+(x.kind==='visual'?'visual':x.kind==='cert'?'cert':x.kind==='seo'?'seo':'audit')+'">'+(x.kind==='visual'?'Visual':x.kind==='cert'?'Post-Deploy':x.kind==='seo'?'SEO':'Audit')+'</span><span class="nm">'+x.when+'</span></div>';
         });
         html+='</div>';
       });
@@ -1207,7 +1242,8 @@ function appPage() {
       // node measures 0x0, so spotlighting it would frame nothing in the corner of the screen.
       {tab:'visual',target:'#gear-visual',lbl:'Tool 2 · Settings',title:'Real devices, really emulated',body:'Open Settings to choose what a comparison does: like-for-like or redesign, how many pages, and the viewports. Ten current devices — Desktop, MacBook Air, iPad Air/mini, iPhone, Galaxy S — each checked against the vendor spec and emulated with real touch and pixel density, not just a narrow window. Below the line sit three framework boundary probes: width only, honestly labelled, because a layout breaks exactly on a breakpoint. Every tool has its own gear.'},
       {tab:'cert',target:'#c-src',lbl:'Tool 3 · Post-Deployment Check',title:'Did everything make it across?',body:'After a migration, this inventories every page, section, image, menu and form on the source and verifies each exists intact on the new build — with a PASS / MINOR / FAIL verdict.'},
-      {tab:'reports',target:'[data-t=reports]',lbl:'Tool 4 · Reports',title:'Every run, grouped by site',body:'Past runs are grouped by site, newest first, with a search box and a date filter. Preview any run, open its HTML, or save it as a PDF to hand off. Runs stay on this machine.'},
+      {tab:'seo',target:'[data-t=seo]',lbl:'Tool 4 · SEO',title:'SEO on its own',body:'Titles, meta descriptions, canonicals, sitemap, schema and indexability — scored on their own. Site Audit no longer includes SEO, so this score is not diluted by unrelated technical checks and a technical score is not propped up by good SEO.'},
+      {tab:'reports',target:'[data-t=reports]',lbl:'Tool 5 · Reports',title:'Every run, grouped by site',body:'Past runs are grouped by site, newest first, with a search box and a date filter. Preview any run, open its HTML, or save it as a PDF to hand off. Runs stay on this machine.'},
       {tab:'audit',target:'#upd-btn',lbl:'Updates',title:'Automatic check, manual apply',body:'The app checks for updates on its own — this button turns red and a toast appears when one is ready. Click it to download, then Restart: a one-second in-app update, no installer.'},
       {tab:'audit',target:'#logs-btn',lbl:'Logs & support',title:'Version log + diagnostics',body:'Open Logs to see what changed in each version and your update history. “Generate diagnostics” builds a detailed report you can download and send over if anything looks off.'},
       {tab:'audit',target:'#help-btn',lbl:'Done',title:"That's the tour",body:"Reopen it anytime from ? Help. Enter a URL and run your first audit whenever you're ready."}
@@ -1898,8 +1934,11 @@ function listRuns(limit) {
     let kind = 'audit', json = 'report.json';
     if (fs.existsSync(path.join(dir, 'visual-match.html'))) { kind = 'visual'; json = 'visual-match.json'; }
     else if (id.includes('-cert-')) { kind = 'cert'; json = 'report.json'; }
+    // Tool 4. An SEO run is a full report.json from the same renderer; only its SCOPE differs, so it
+    // needs its own report type in the list rather than being filed as a Site Audit.
+    else if (id.includes('-seo-')) { kind = 'seo'; json = 'report.json'; }
     let when = ''; try { when = new Date(fs.statSync(dir).mtimeMs).toISOString().replace('T', ' ').slice(0, 16); } catch (_) {}
-    const host = id.replace(/-(vis|cert)-\d+$/, '').replace(/-\d{10,}$/, '');
+    const host = id.replace(/-(vis|cert|seo)-\d+$/, '').replace(/-\d{10,}$/, '');
     return { id, kind, host, when, json, mtime: (() => { try { return fs.statSync(dir).mtimeMs; } catch (_) { return 0; } })() };
   }).sort((a, b) => b.mtime - a.mtime).slice(0, cap);
 }
@@ -1949,6 +1988,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/api/annotate-pdf') return await apiAnnotatePdf(req, res, u);
     if (req.method === 'GET' && p === '/api/annotate-pdf-file') return apiAnnotatePdfFile(res, u);
     if (req.method === 'POST' && p === '/api/run') return await apiRun(req, res);
+    // Tool 4 — SEO, standalone. Same handler, complementary scope (see apiRun's mode param).
+    if (req.method === 'POST' && p === '/api/seo') return await apiRun(req, res, 'seo');
     if (req.method === 'POST' && p === '/api/visual') return await apiVisual(req, res);
     if (req.method === 'POST' && p === '/api/visual-rerate') return await apiVisualRerate(req, res);
     if (req.method === 'POST' && p === '/api/certify') return await apiCertify(req, res);
@@ -1958,12 +1999,23 @@ const server = http.createServer(async (req, res) => {
 });
 
 // 1 — Site Audit (unchanged engine path)
-async function apiRun(req, res) {
+// mode: 'audit' (tool 1, the nine technical suites) | 'seo' (tool 4, the seo suite alone).
+//
+// ONE handler, two scopes, because the split runs along a seam audit.js already has. `skipSuites` does
+// not merely hide a suite: normalizeSkip/isSkipped mean it is NEVER EXECUTED, is absent from `suites`,
+// and its registry rules are declared NOT EVALUATED so score.js drops them from BOTH sides of the
+// ratio. That is what makes a nine-suite score honest rather than a ten-suite score with a hole in it —
+// SEO's risk leaves the denominator with it, so removing SEO cannot buy Site Audit a single point.
+// Forking this into a second scan function would have duplicated the report/record/scope path and given
+// the two tools two different definitions of a score.
+async function apiRun(req, res, mode = 'audit') {
   let opts; try { opts = JSON.parse(await readBody(req) || '{}'); } catch (e) { return send(res, 400, 'application/json', JSON.stringify({ ok: false, error: 'bad json' })); }
   if (!opts || typeof opts !== 'object' || Array.isArray(opts)) opts = {}; // guard null/array/scalar JSON
   const url = norm(opts.url); if (!url) return send(res, 400, 'application/json', JSON.stringify({ ok: false, error: 'pass a site URL' }));
   let host; try { host = new URL(url).host; } catch (e) { return send(res, 400, 'application/json', JSON.stringify({ ok: false, error: 'invalid URL' })); }
-  const id = safe(host) + '-' + Date.now(), outDir = path.join(RUNS, id);
+  // '-seo-' marks the run directory the same way '-cert-' already marks a Post-Deployment run, so
+  // listRuns() classifies it from the id with no second index to keep in sync.
+  const id = safe(host) + (mode === 'seo' ? '-seo-' : '-') + Date.now(), outDir = path.join(RUNS, id);
   res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-cache', 'x-accel-buffering': 'no' });
   trackScan(res);
   const emit = (o) => { try { res.write(JSON.stringify(o) + '\n'); } catch (e) {} };
@@ -1995,11 +2047,27 @@ async function apiRun(req, res) {
     const wantExcluded = (Array.isArray(opts.excludeRules) ? opts.excludeRules : [])
       .filter((id) => typeof id === 'string' && SCOPE_RULE_IDS.has(id));
     const wantSet = new Set(wantExcluded);
-    const skipSuites = SCOPE_CATALOG.suites
+    const operatorSkips = SCOPE_CATALOG.suites
       .map((s) => s.key)
       .filter((k) => { const rs = SCOPE_CATALOG.rules.filter((r) => r.suite === k); return rs.length > 0 && rs.every((r) => wantSet.has(r.id)); });
+    // THE SPLIT. Site Audit is now purely technical: 'seo' is skipped unconditionally, on top of
+    // whatever the operator switched off. The SEO tool is the exact COMPLEMENT — every other suite
+    // skipped — so it runs the seo suite and nothing else, and its score is an SEO score rather than a
+    // whole-site score that happens to be mostly SEO. normalizeSkip() refuses an all-off list, and 9 of
+    // 10 is not all-off. SCOPE_CATALOG is built from audit.js's own SUITES, so this cannot drift from
+    // what runAudit() actually assembles.
+    const ALL_SUITE_KEYS = SCOPE_CATALOG.suites.map((s) => s.key);
+    const skipSuites = mode === 'seo'
+      ? ALL_SUITE_KEYS.filter((k) => k !== 'seo')
+      : [...new Set(operatorSkips.concat('seo'))];
     const raw = await runAudit(url, { maxPages, render: opts.render !== false, renderSample: Math.min(maxPages, 25), viewports, screensDir: path.join(outDir, 'screenshots'), log: () => {}, progress, collectPages: true, skipSuites, collectionRoot: COLLECTION_ROOT });
-    const data = applyAdvisory(raw);
+    // The ADVISORY pass (Best Practices, Copy Review — weight-0) belongs to Site Audit, the whole-site
+    // tool. Running it for the SEO tool too was MEASURED by seo-split.test.js: the SEO report came back
+    // as ["seo","best-practices","copy"] and declared BP-*/COPY-*/FUNC-008/009 as evaluated. Weight-0
+    // means the SCORE was never wrong — but "SEO standalone" that also returns eight best-practice
+    // findings is not standalone, and the same advisory findings would appear twice for anyone running
+    // both tools.
+    const data = mode === 'seo' ? raw : applyAdvisory(raw);
     emit({ t: 'p', pct: 99, phase: 'writing report' });
     // CHANGE E: auto-compare this scan against the most recent PRIOR recorded scan for this host and
     // embed a "vs previous scan" panel near the top. loadLatestRecord() runs BEFORE recordScan() below,
@@ -2054,7 +2122,7 @@ async function apiRun(req, res) {
     let comparison = false, cmp = null;
     if (opts.save) saveBaseline(data, opts.save);
     if (opts.baseline) { try { const base = loadResult(opts.baseline); base.data._label = opts.baseline; data._label = 'current'; const d = diff(base.data, data); renderCompare(d, outDir); comparison = true; cmp = d.counts; } catch (e) {} }
-    emit({ t: 'done', ok: true, id, verdict: data.verdict, score: data.score, tally: data.tally, comparison, cmp,
+    emit({ t: 'done', ok: true, id, mode, verdict: data.verdict, score: data.score, tally: data.tally, comparison, cmp,
       quality: data.quality ? data.quality.overall : null,
       scopedOut: (excludeRules.length || 0) + SCOPE_CATALOG.rules.filter((r) => skipSet.has(r.suite)).length,
       notRunSuites: SCOPE_CATALOG.suites.filter((s) => skipSet.has(s.key)).map((s) => s.name),
