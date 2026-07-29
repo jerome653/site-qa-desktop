@@ -456,8 +456,9 @@ function normalizeSkip(skipSuites) {
   return out;
 }
 
-async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 12, render = true, viewports = null, screensDir, log = () => {}, progress = () => {}, bus = createBus(), collectPages = false, skipSuites = [], collectionRoot = null } = {}) {
+async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 12, render = true, viewports = null, screensDir, log = () => {}, progress = () => {}, bus = createBus(), collectPages = false, skipSuites = [], collectionRoot = null, singlePage = false, notApplicableChecks = [] } = {}) {
   const host = new URL(url).host;
+  const naChecks = new Set(Array.isArray(notApplicableChecks) ? notApplicableChecks : []);
   const skipped = normalizeSkip(skipSuites);
   const isSkipped = (k) => skipped.has(k);
   const skipCheck = (id) => isSkipped(STATIC_SUITE[id]);
@@ -532,7 +533,15 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   // 3) link + form audits
   log(`Auditing internal links...`);
   progress(36, 'checking links');
-  const links = await linkAudit(htmlPages, host, concurrency);
+  // linkAudit() extracts every same-host <a href> from the audited pages and FETCHES each one
+  // (followChain -> http.getText). That is the LINKS suite work — but it ran unconditionally, even when
+  // the operator had switched the links suite off. Measured by seo-split.test.js: a THIS PAGE SEO audit
+  // of a page carrying three nav links fetched /a, /b and /c, so a run the user asked to be a single
+  // page still crawled the site. A skipped suite must not do work; "suite off = did not run" was
+  // already the documented rule, this call simply sat outside it.
+  const links = isSkipped('links')
+    ? { totalInternal: 0, totalExternal: 0, brokenInternal: [], brokenExternal: [], chains: [], capped: false, skipped: true }
+    : await linkAudit(htmlPages, host, concurrency);
   const forms = formAudit(htmlPages);
   progress(44, 'links checked');
 
@@ -623,7 +632,13 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
 
   // static -> rows (one row per distinct problem-title, carrying EVERY occurrence as drill-down items)
   for (const id of Object.keys(STATIC_SUITE)) {
-    if (NOT_APPLICABLE.has(id)) continue;
+    // NOT_APPLICABLE is the STATIC set. notApplicableChecks is the per-RUN one: a check that cannot
+    // mean anything for this run shape. duplicate-title/duplicate-description compare ACROSS pages, so
+    // on a one-page run they cannot find a duplicate and would be DECLARED EVALUATED and banked as
+    // clean — a pass nobody could have earned. Excluding them from the SCORE is not enough: the
+    // coverage declaration is what banks the risk, so they must not enter it.
+    // OPT-IN, empty by default — Site Audit behaviour is byte-identical.
+    if (NOT_APPLICABLE.has(id) || naChecks.has(id)) continue;
     const suite = STATIC_SUITE[id];
     // Coverage is still RECORDED for a switched-off section (as skipped-by-operator, above) — that is
     // what removes its rules from the denominator. No rows are built: the suite itself is dropped at

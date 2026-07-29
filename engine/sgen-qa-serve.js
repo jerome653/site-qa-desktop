@@ -305,6 +305,7 @@ const TOOL_KEYS = ['audit', 'visual', 'cert', 'reports'];
 // (see the note in rules/registry.js), so listing them would be a control over nothing.
 // Manual rules are OMITTED, not shown disabled: they carry deduction 0 and can never move the score,
 // so a checkbox for one would be decoration.
+const { CHECK_RULES: AUDIT_CHECK_RULES } = require('./lib/site-qa/audit');
 const SCOPE_SUITE_KEYS = AUDIT_SUITES.map(s => s.key);
 const SCOPE_CATALOG = {
   suites: AUDIT_SUITES.map(s => ({ key: s.key, name: s.name, desc: s.desc || '', weight: WEIGHTS[s.key] || 0 })),
@@ -583,7 +584,21 @@ function appPage() {
   .ritem{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);font-size:13px}
   .ritem .tag{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.04em}
   .tag.audit{background:#2A3A55;color:#BcD}.tag.visual{background:#3A2A55;color:#DcF}.tag.cert{background:#553A2A;color:#FDc}
-.tag.seo{background:#2A4A55;color:#cEF}.tag.case{background:#2A5541;color:#cFD}
+.tag.seo{background:#2A4A55;color:#cEF}
+.scopepick{display:flex;gap:10px;margin:14px 0 4px;flex-wrap:wrap}
+.scopeopt{flex:1 1 220px;display:flex;flex-direction:column;gap:2px;padding:11px 13px;border:1px solid var(--line-strong);border-radius:8px;cursor:pointer;background:var(--surface)}
+.scopeopt.on{border-color:var(--brand-solid);box-shadow:inset 0 0 0 1px var(--brand-solid)}
+.scopeopt b{font-size:13px;color:var(--ink)} .scopeopt span{font-size:11px;color:var(--ink-faint)} .scopeopt input{position:absolute;opacity:0;pointer-events:none}
+.adv{margin:10px 0}.adv summary{cursor:pointer;font-size:12px;color:var(--ink-soft);padding:6px 0}
+.ckwrap{display:flex;flex-direction:column;gap:10px;margin:8px 0}
+.ckgrp{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.ckgrp>b{width:100%;font-size:11px;color:var(--ink-faint);font-weight:600}
+.ckgrp .chip.off{opacity:.45}.mpnote{color:var(--ink-faint);font-size:10px}
+.seolead{margin:12px 0;display:flex;flex-direction:column;gap:10px}
+.seocard{border:1px solid var(--line-strong);border-radius:8px;padding:12px 14px;background:var(--surface)}
+.seocard h4{margin:0 0 8px;font-size:12px;color:var(--ink-faint);font-weight:650;text-transform:uppercase;letter-spacing:.04em}
+.seorow{display:flex;gap:10px;padding:5px 0;border-top:1px solid var(--line);font-size:12px}.seorow:first-of-type{border-top:0}
+.seorow .k{flex:0 0 190px;color:var(--ink-soft)}.seorow .v{flex:1;color:var(--ink);word-break:break-word}
+.seorow .st{flex:0 0 74px;font-weight:650}.st.pass{color:var(--pass)}.st.warn{color:var(--warn)}.st.fail{color:var(--fail)}.st.na{color:var(--ink-faint)}.tag.case{background:#2A5541;color:#cFD}
   .ritem .nm{flex:1;font-family:var(--mono);color:var(--ink)}.ritem .when{color:var(--ink-faint);font-size:11.5px}
   .ritem a{color:var(--brand);font-weight:600;font-size:12.5px}
   .hint{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
@@ -923,25 +938,37 @@ function appPage() {
     </section>
 
     <!-- 4 REPORTS -->
-    <!-- 4 SEO — standalone. Deliberately the SAME element vocabulary as Site Audit (-btn/-cancel/
-         -retry/-pbar/-pfill/-status/-link/-frame/-ph) because stream(), setProg(), showCtl() and
-         showReport() dereference those ids by prefix WITHOUT null guards. Reusing the contract is
-         what lets this tool share every runner behaviour — cancel, retry, progress, notification,
-         embedded report — instead of reimplementing five of them slightly differently. -->
+    <!-- 4 SEO — its own tool, not a stripped copy of Site Audit.
+         The primary decision is SCOPE, not a page count: nobody thinks "I want 7 pages of SEO".
+         maxPages survives as an advanced safety CEILING only. Element ids keep the -btn/-cancel/
+         -retry/-pbar/-pfill/-status/-link/-frame/-ph vocabulary because stream(), setProg(),
+         showCtl() and showReport() dereference them by prefix with no null guard. -->
     <section class="panel" id="p-seo">
       <div class="tthead"><h2 class="tt">SEO</h2></div>
-      <p class="sub">Titles, meta descriptions, canonicals, social meta, schema, hreflang, indexability, robots.txt and sitemap — scored on their own. Site Audit covers the technical suites and no longer includes SEO, so neither score can prop up the other.</p>
+      <p class="sub">Titles, meta descriptions, canonicals, indexability, structured data, hreflang, robots.txt and sitemap — scored on their own. Site Audit covers the technical suites and no longer includes SEO, so neither score props up the other.</p>
       <div class="toolgrid">
         <div class="col-left"><div class="card">
           <div class="cfg">
             <div class="cfg-row"><label for="s-url">Site URL</label><input id="s-url" placeholder="https://example.com"></div>
-            <div class="cfg-row"><label for="s-max">Max pages</label><input id="s-max" type="number" min="1" value="1"></div>
           </div>
+          <!-- THE second decision, deliberately prominent and in the user's words. -->
+          <div class="scopepick" id="s-scope" role="radiogroup" aria-label="Audit scope">
+            <label class="scopeopt on"><input type="radio" name="s-scope" value="page" checked><b>This page</b><span>Audit exactly the URL above. No crawl.</span></label>
+            <label class="scopeopt"><input type="radio" name="s-scope" value="site"><b>Whole site</b><span>Discover pages from the sitemap, falling back to same-host links.</span></label>
+          </div>
+          <details class="adv" id="s-adv">
+            <summary>Advanced — checks and safety ceiling</summary>
+            <div class="cfg-row"><label for="s-max">Page ceiling</label><input id="s-max" type="number" min="1" max="1000" value="150"><span class="hint">Safety stop for Whole site. If it is reached the result says so.</span></div>
+            <div class="ckwrap" id="s-checks">
+            <div class="ckgrp"><b>Indexing & canonical</b><label class="chip"><input type="checkbox" value="indexability" checked>Indexability (robots meta, x-robots)</label><label class="chip"><input type="checkbox" value="canonical" checked>Canonical tag</label><label class="chip"><input type="checkbox" value="seo-index" checked>Index directives</label><label class="chip"><input type="checkbox" value="robots-txt" checked>robots.txt</label><label class="chip"><input type="checkbox" value="sitemap" checked>XML sitemap</label><label class="chip"><input type="checkbox" value="seo-hreflang" checked>hreflang</label></div>\r\n            <div class="ckgrp"><b>Titles & descriptions</b><label class="chip"><input type="checkbox" value="title" checked>Title tag</label><label class="chip"><input type="checkbox" value="meta-description" checked>Meta description</label><label class="chip"><input type="checkbox" value="duplicate-title" checked data-multipage="1">Duplicate titles<span class="mpnote"> · needs 2+ pages</span></label><label class="chip"><input type="checkbox" value="duplicate-description" checked data-multipage="1">Duplicate descriptions<span class="mpnote"> · needs 2+ pages</span></label></div>\r\n            <div class="ckgrp"><b>Structured data & social</b><label class="chip"><input type="checkbox" value="schema" checked>Schema.org / JSON-LD</label><label class="chip"><input type="checkbox" value="social-meta" checked>Open Graph / Twitter cards</label><label class="chip"><input type="checkbox" value="favicon" checked>Favicon</label></div>\r\n            <div class="ckgrp"><b>Content & other</b><label class="chip"><input type="checkbox" value="seo-content" checked>Content depth</label><label class="chip"><input type="checkbox" value="mobile-web" checked>Mobile-friendliness</label><label class="chip"><input type="checkbox" value="analytics" checked>Analytics tag</label><label class="chip"><input type="checkbox" value="privacy-links" checked>Privacy / legal links</label></div>
+            </div>
+            <div class="hint">Unticking a check leaves it out of the SEO score. The check still runs and still appears in the report — same rule the rest of the app uses: section off = did not run, single check off = ran, not counted.</div>
+          </details>
           <div class="cfg-action"><button class="run" id="s-btn" onclick="runSeo()">Run SEO audit</button><button class="run ghost" id="s-cancel" onclick="cancelScan('s')" style="display:none">Cancel</button><button class="run retry" id="s-retry" onclick="retryScan('s')" style="display:none">Retry</button></div>
         </div></div>
       </div>
-      <div class="pbar" id="s-pbar"><div class="pfill" id="s-pfill"></div></div><div class="status" id="s-status"></div><div class="cmplink" id="s-link"></div><div id="s-frame"></div>
-      <div class="placeholder" id="s-ph"><b>SEO results appear here</b>Run an SEO audit to see the SEO score, findings and the full report preview.</div>
+      <div class="pbar" id="s-pbar"><div class="pfill" id="s-pfill"></div></div><div class="status" id="s-status"></div><div id="s-lead"></div><div class="cmplink" id="s-link"></div><div id="s-frame"></div>
+      <div class="placeholder" id="s-ph"><b>SEO results appear here</b>Run an SEO audit to see indexability and canonical status first, then titles and descriptions with their actual values, then structured data.</div>
     </section>
     <section class="panel" id="p-reports">
       <div class="tthead"><h2 class="tt">Reports</h2><button class="gear" id="gear-reports" onclick="openSettings('reports')" title="Reports settings" aria-label="Reports settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div><p class="sub">Review previous runs. Select one to preview its report; open the HTML or save it as a PDF to share.</p>
@@ -1156,17 +1183,67 @@ function appPage() {
         var cmp='';if(m.comparison)cmp=' · <a href="/compare/'+m.id+'" target="_blank">open comparison ↗</a>';$('a-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full report</a>'+cmp;
         showReport('a','/report/'+m.id,'report');});}
 
-    // 4 SEO — standalone. Posts to /api/seo, which runs the seo suite and skips the other nine.
-    // The status line states the SCOPE rather than listing nine 'NOT RUN' sections: for this tool the
-    // narrow scope is the tool's identity, not a narrowing of a wider promise. It still says so out
-    // loud — a score whose coverage is unstated is exactly what ADR-0011 exists to prevent.
+    // 4 SEO — standalone. The UI asks for a SCOPE; the page count is an advanced ceiling only.
+    // Check toggles are mapped to registry rule ids and sent as excludeRules, which is the mechanism
+    // the app already has — a check left unticked is dropped from the SCORE, not hidden from the report.
+    var SEO_CHECK_RULES={"page-status":["FUNC-001","FUNC-002","FUNC-003"],"placeholder-content":["FUNC-004"],"global-components":["FUNC-005"],"broken-rich-content":["FUNC-006","FUNC-007"],"viewport-meta":["RESP-001"],"title":["SEO-001","SEO-002"],"meta-description":["SEO-003","SEO-004"],"canonical":["SEO-005","SEO-006"],"indexability":["SEO-007","SEO-008"],"social-meta":["SEO-011","SEO-012"],"favicon":["SEO-014"],"schema":["SEO-016","SEO-017","SEO-018","SEO-019"],"duplicate-title":["SEO-009"],"duplicate-description":["SEO-010"],"analytics":["SEO-025","SEO-026"],"mobile-web":["SEO-027"],"privacy-links":["SEO-028"],"headings":["A11Y-003","A11Y-004","A11Y-005"],"html-lang":["A11Y-009"],"images":["A11Y-006","A11Y-007","A11Y-008"],"image-perf":["PERF-003","PERF-004"],"compression":["PERF-007"],"render-blocking":["PERF-005"],"mixed-content":["SEC-009"],"anchor-target":["LINK-005"],"robots-txt":["SEO-020","SEO-021","SEO-029"],"sitemap":["SEO-022"],"404-config":["LINK-004"],"https-enforce":["SEC-007","SEC-008"],"interactive-link":["LINK-006","LINK-007","LINK-008","LINK-009"],"interactive-control":["DOM-010","DOM-011"],"interactive-nesting":["DOM-012","DOM-013"],"sec-header":["SEC-011","SEC-012","SEC-013","SEC-014","SEC-015"],"sec-cookie":["SEC-016","SEC-017","SEC-018"],"sec-js":["SEC-023"],"sec-transport":["SEC-024","SEC-025"],"sec-exposure":["SEC-022"],"seo-hreflang":["SEO-031"],"seo-index":["SEO-035","SEO-036"],"seo-content":["SEO-037","SEO-038"],"stb-dup-id":["DOM-003"],"stb-dom":["DOM-004"],"stb-form":["FORM-002"],"stb-uri":["LINK-010"],"console-errors":["CON-001"],"failed-requests":["CON-002"],"blocking-overlay":["CON-003"],"cwv-lcp":["PERF-001"],"cwv-cls":["PERF-002"],"page-weight":["PERF-006"],"low-contrast":["A11Y-002"],"axe":["A11Y-001"],"horizontal-overflow":["RESP-002"],"overflow-element":["RESP-003"],"element-wider-than-viewport":["RESP-004"],"tap-target-small":["RESP-005"],"input-font-small":["RESP-006"],"link-audit":["LINK-001","LINK-002","LINK-003"],"cross-browser":["XBR-001","XBR-002","XBR-003"]};
+    function seoScope(){var r=document.querySelector('#s-scope input[name=s-scope]:checked');return r?r.value:'page';}
+    // duplicate-* compare ACROSS pages. On THIS PAGE they cannot mean anything, so they are disabled
+    // with the reason visible rather than left tickable and silently reported as passing. The server
+    // enforces the same thing, so a stale client cannot bank a meaningless pass.
+    function seoSyncScope(){var single=seoScope()==='page';
+      document.querySelectorAll('#s-checks input[data-multipage]').forEach(function(cb){
+        cb.disabled=single; if(single)cb.checked=false; else cb.checked=true;
+        cb.closest('.chip').classList.toggle('off',single);});
+      document.querySelectorAll('#s-scope .scopeopt').forEach(function(o){o.classList.toggle('on',o.querySelector('input').checked);});
+      var mx=$('s-max'); if(mx)mx.disabled=single;}
+    document.addEventListener('change',function(e){if(e.target&&e.target.name==='s-scope')seoSyncScope();});
+    // Unticked checks -> the rule ids they own -> excludeRules.
+    function seoExcluded(){var out=[];
+      document.querySelectorAll('#s-checks input[type=checkbox]').forEach(function(cb){
+        if(cb.checked||cb.disabled)return;                       // disabled ones are the server's job
+        (SEO_CHECK_RULES[cb.value]||[]).forEach(function(id){out.push(id);});});
+      return out;}
     function runSeo(){var url=$('s-url').value.trim();if(!url){$('s-status').textContent='Enter a site URL.';return;}
-      stream('/api/seo',{url:url,maxPages:+$('s-max').value||1,render:false},'s',function(m){
+      var scope=seoScope(),ex=seoExcluded();
+      var on=[].slice.call(document.querySelectorAll('#s-checks input[type=checkbox]')).filter(function(c){return c.checked&&!c.disabled;});
+      if(!on.length){$('s-status').textContent='Leave at least one check ticked — an audit with every check unticked would score nothing.';return;}
+      $('s-lead').innerHTML='';
+      stream('/api/seo',{url:url,scope:scope,maxPages:+$('s-max').value||150,render:false,excludeRules:ex},'s',function(m){
         if(!m.ok){$('s-status').textContent='SEO audit failed: '+(m.error||'unknown');return;}
         var q=(m.quality!=null?' · SEO quality '+m.quality:'');
-        $('s-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · pass '+m.tally.pass+' / warn '+m.tally.warn+' / fail '+m.tally.fail+' / manual '+m.tally.manual+' · <b>scope: SEO suite only</b> · saved to history';
+        var sc=(m.scope==='site'?'whole site — '+m.pagesAudited+' page'+(m.pagesAudited===1?'':'s')+' audited':'this page only');
+        // A ceiling that BIT is stated, never swallowed: a silent cap makes a partial audit look whole.
+        var cap=m.capped?' · <b style="color:var(--warn)">STOPPED AT '+m.ceiling+' PAGES — '+m.notReached+' more were listed and not audited</b>':'';
+        var na=(m.notApplicable&&m.notApplicable.length)?' · <b style="color:var(--ink-faint)">not applicable on one page: '+m.notApplicable.join(', ')+'</b>':'';
+        var xc=(m.checksExcluded?' · '+m.checksExcluded+' rule(s) left out of the score by your check selection':'');
+        $('s-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · <b>scope: '+sc+'</b>'+cap+na+xc+' · saved to history';
         $('s-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full SEO report</a>';
+        seoLead(m);
         showReport('s','/report/'+m.id,'report');});}
+    // Results lead with what an SEO person needs FIRST — indexability and canonical, then titles and
+    // descriptions WITH THEIR VALUES, then structured data — instead of a generic pass/warn tally.
+    // Reads the report.json the app just wrote; no second source of truth.
+    var SEO_LEAD=[
+      ['Indexing & canonical',['indexability','canonical','seo-index','robots-txt','sitemap','seo-hreflang']],
+      ['Titles & descriptions',['title','meta-description','duplicate-title','duplicate-description']],
+      ['Structured data & social',['schema','social-meta','favicon']]];
+    function seoLead(m){var host=$('s-lead');if(!host)return;
+      fetch('/report/'+m.id+'/report.json').then(function(r){return r.json()}).then(function(d){
+        var suite=(d.suites||[]).filter(function(x){return x.key==='seo'})[0];if(!suite)return;
+        var by={};(suite.checks||[]).forEach(function(c){by[c.check]=c;});
+        var na={};(m.notApplicable||[]).forEach(function(k){na[k]=1;});
+        var html='<div class="seolead">';
+        SEO_LEAD.forEach(function(g){
+          var rows=g[1].map(function(id){var c=by[id];if(!c)return '';
+            var st=na[id]?'na':(c.status==='pass'?'pass':c.status==='fail'?'fail':c.status==='warn'?'warn':'na');
+            var lbl=na[id]?'N/A':(c.status||'').toUpperCase();
+            var val=na[id]?'Not applicable — compares across pages, and this run audited one page.'
+              :(c.detail||c.value||c.label||c.title||'');
+            return '<div class="seorow"><span class="st '+st+'">'+lbl+'</span><span class="k">'+id+'</span><span class="v">'+String(val).replace(/[<>&]/g,function(ch){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]})+'</span></div>';}).join('');
+          if(rows)html+='<div class="seocard"><h4>'+g[0]+'</h4>'+rows+'</div>';});
+        html+='</div>';host.innerHTML=html;
+      }).catch(function(){});}
 
     // 2 Visual Comparison
     // Three-axis compare object {pixel,background,typography} read from the #v-ax checkboxes. A key with
@@ -2035,7 +2112,21 @@ async function apiRun(req, res, mode = 'audit') {
   try {
     // maxPages: explicit + honest. `opts.maxPages || 30` treated 0/missing/non-numeric as 30 and
     // diverged from the UI (whose Max-pages default is 1). Missing/invalid ⇒ single-page (1).
-    const maxPages = Number.isFinite(+opts.maxPages) && +opts.maxPages >= 1 ? +opts.maxPages : 1;
+    // SCOPE, not a page count. Nobody thinks "I want 7 pages of SEO" — they think "this page" or "the
+    // whole site". The SEO tool asks for a SCOPE and derives the number:
+    //   page -> 1. discoverPages() always puts the start URL first, so a cap of 1 is exactly the given
+    //           URL and nothing else: no link following, no sitemap URL turned into an audited page.
+    //   site -> the CEILING. discoverPages() already does sitemap-first with same-host link discovery
+    //           as fallback, so "whole site" is a MAPPING onto existing capability, not new crawling.
+    // maxPages survives only as that safety ceiling, behind an advanced disclosure. When it bites, the
+    // result says so — a silent cap makes a partial audit look complete.
+    const SEO_CEILING_DEFAULT = 150;
+    const seoScope = opts.scope === 'site' ? 'site' : 'page';
+    const seoCeiling = Number.isFinite(+opts.maxPages) && +opts.maxPages >= 1
+      ? Math.min(1000, Math.floor(+opts.maxPages)) : SEO_CEILING_DEFAULT;
+    const maxPages = mode === 'seo'
+      ? (seoScope === 'page' ? 1 : seoCeiling)
+      : (Number.isFinite(+opts.maxPages) && +opts.maxPages >= 1 ? +opts.maxPages : 1);
     // Viewport picker (labels) — filter the render matrix like Visual Comparison; absent/empty ⇒ all.
     const viewports = Array.isArray(opts.viewports) && opts.viewports.length ? opts.viewports : null;
     // collectPages:true + applyAdvisory = the ADVISORY pass. Measured 2026-07-16: this server called
@@ -2055,6 +2146,15 @@ async function apiRun(req, res, mode = 'audit') {
     // excludeRules only ever reached the SCORE. This is the half that was missing.
     const wantExcluded = (Array.isArray(opts.excludeRules) ? opts.excludeRules : [])
       .filter((id) => typeof id === 'string' && SCOPE_RULE_IDS.has(id));
+    // duplicate-title (SEO-009) and duplicate-description (SEO-010) compare titles/descriptions
+    // ACROSS pages. On a THIS PAGE run there is exactly one page, so they cannot find a duplicate and
+    // would report a clean pass — a pass that means nothing. Excluded from the SCORE here and declared
+    // notApplicable in the result, so the tool never claims they were satisfied. Done on the SERVER as
+    // well as in the UI: a client that forgets to disable them must still not bank a meaningless pass.
+    const SINGLE_PAGE_NA = ['duplicate-title', 'duplicate-description'];
+    const naRuleIds = mode === 'seo' && seoScope === 'page'
+      ? SINGLE_PAGE_NA.flatMap((c) => AUDIT_CHECK_RULES[c] || []) : [];
+    for (const id of naRuleIds) if (SCOPE_RULE_IDS.has(id) && !wantExcluded.includes(id)) wantExcluded.push(id);
     const wantSet = new Set(wantExcluded);
     const operatorSkips = SCOPE_CATALOG.suites
       .map((s) => s.key)
@@ -2069,7 +2169,9 @@ async function apiRun(req, res, mode = 'audit') {
     const skipSuites = mode === 'seo'
       ? ALL_SUITE_KEYS.filter((k) => k !== 'seo')
       : [...new Set(operatorSkips.concat('seo'))];
-    const raw = await runAudit(url, { maxPages, render: opts.render !== false, renderSample: Math.min(maxPages, 25), viewports, screensDir: path.join(outDir, 'screenshots'), log: () => {}, progress, collectPages: true, skipSuites, collectionRoot: COLLECTION_ROOT });
+    const raw = await runAudit(url, { maxPages, render: opts.render !== false, renderSample: Math.min(maxPages, 25), viewports, screensDir: path.join(outDir, 'screenshots'), log: () => {}, progress, collectPages: true, skipSuites, collectionRoot: COLLECTION_ROOT,
+      singlePage: mode === 'seo' && seoScope === 'page',
+      notApplicableChecks: mode === 'seo' && seoScope === 'page' ? SINGLE_PAGE_NA : [] });
     // The ADVISORY pass (Best Practices, Copy Review — weight-0) belongs to Site Audit, the whole-site
     // tool. Running it for the SEO tool too was MEASURED by seo-split.test.js: the SEO report came back
     // as ["seo","best-practices","copy"] and declared BP-*/COPY-*/FUNC-008/009 as evaluated. Weight-0
@@ -2131,7 +2233,19 @@ async function apiRun(req, res, mode = 'audit') {
     let comparison = false, cmp = null;
     if (opts.save) saveBaseline(data, opts.save);
     if (opts.baseline) { try { const base = loadResult(opts.baseline); base.data._label = opts.baseline; data._label = 'current'; const d = diff(base.data, data); renderCompare(d, outDir); comparison = true; cmp = d.counts; } catch (e) {} }
-    emit({ t: 'done', ok: true, id, mode, verdict: data.verdict, score: data.score, tally: data.tally, comparison, cmp,
+    // The SEO tool's own facts. pagesAudited/capped come from the engine's page coverage, so
+    // "stopped at N pages" is MEASURED, never inferred from what the request asked for.
+    const pc = data.pageCoverage || {};
+    const seoFacts = mode !== 'seo' ? {} : {
+      scope: seoScope,
+      pagesAudited: (pc.counts && pc.counts.audited) != null ? pc.counts.audited : (pc.audited || []).length,
+      ceiling: seoScope === 'site' ? seoCeiling : 1,
+      capped: seoScope === 'site' && !!pc.capped,
+      notReached: (pc.notReached || []).length,
+      notApplicable: seoScope === 'page' ? SINGLE_PAGE_NA : [],
+      checksExcluded: wantExcluded.filter((id) => !naRuleIds.includes(id)).length,
+    };
+    emit({ t: 'done', ok: true, id, mode, ...seoFacts, verdict: data.verdict, score: data.score, tally: data.tally, comparison, cmp,
       quality: data.quality ? data.quality.overall : null,
       scopedOut: (excludeRules.length || 0) + SCOPE_CATALOG.rules.filter((r) => skipSet.has(r.suite)).length,
       notRunSuites: SCOPE_CATALOG.suites.filter((s) => skipSet.has(s.key)).map((s) => s.name),
