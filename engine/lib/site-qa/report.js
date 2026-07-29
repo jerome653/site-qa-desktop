@@ -9,6 +9,18 @@ const fs = require('fs');
 const path = require('path');
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// The footer printed `rendered/total pages` unconditionally, so an SEO-only run — where render is
+// DELIBERATELY not started — signed itself "Chromium render · 0/92 pages · 1 suites" and read as a
+// total failure. A skipped pass must say it was skipped; only a pass that actually ran gets counts.
+function renderFooter(data) {
+  const r = (data && data.render) || {};
+  const n = ((data && data.suites) || []).length;
+  const suites = `${n} suite${n === 1 ? '' : 's'}`;
+  if (r.error === 'skipped') return `Chromium render · not run (static-only scan) · ${suites}`;
+  if (r.error) return `Chromium render · failed: ${esc(r.error)} · ${suites}`;
+  return `Chromium render · ${r.rendered}/${r.total} pages · ${suites}`;
+}
 function rel(from, f) { try { return path.relative(from, f).replace(/\\/g, '/'); } catch (e) { return f; } }
 
 const STYLE = `
@@ -1052,7 +1064,7 @@ function renderReport(data, outDir, opts = {}) {
   <section class="issec" id="findsec"></section>
   <section class="lenses" id="lenses"></section>
   ${shotHtml}
-  <footer><span>SGEN Site QA · ${esc(data.host)} · ${esc(data.generated)}</span><span>Chromium render · ${data.render.rendered}/${data.render.total} pages · ${data.suites.length} suites</span></footer>
+  <footer><span>SGEN Site QA · ${esc(data.host)} · ${esc(data.generated)}</span><span>${renderFooter(data)}</span></footer>
 </div>
 ${lightbox}
 <script>window.__DATA=${JSON.stringify(data)};</script>
