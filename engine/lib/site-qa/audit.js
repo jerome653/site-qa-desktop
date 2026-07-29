@@ -495,6 +495,15 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
       if (chk.id === 'staging-leak') continue; // migration-only
       if (chk.id === 'security-headers') continue; // qa-site uses granular SEC-011..015 (checks-security); SEC-010 roll-up is qa-migration only
       if (skipCheck(chk.id)) continue; // operator switched this whole section off — do not run it, do not mark the ledger
+      // EVIDENCE GATE. This loop walks crawl.pages — EVERY response, including 301 hops and 404
+      // bodies — and only the ledger mark below was gated on the page actually being HTML. The
+      // findings themselves were kept, so a redirect (empty body, no <title>) emitted SEO-001
+      // "Missing <title>" and a 404 page carrying a correct `noindex` emitted SEO-007 CRITICAL
+      // "Live page is set to NOINDEX". Measured on sgen.com 2026-07-29: 26 bogus SEO-001 (all of
+      // them 301 hops, e.g. /advanced-settings -> /404?from= -> /product/advanced-settings, whose
+      // 200 DOES carry a title) and 1 bogus SEO-007 (a 404). A check that needs HTML must not run
+      // on a response that is not HTML.
+      if ((STATIC_NEEDS[chk.id] || 'html') === 'response' ? !pageResponded : !pageIsHtml) continue;
       let r, threw = null;
       try { r = chk.fn(ctx, { env: 'live', host }); } catch (e) { r = null; threw = e; }
       // The catch above still swallows, because one bad page must not abort the crawl — but the
@@ -650,16 +659,29 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     recordCoverage(id, suite, ok, ok ? null : whyNotVerified(l).reason, l);
     // Findings still print first — a check that crashed on page 3 may have found something real on
     // page 1, and that evidence is not retracted by the ledger.
+    // WHICH CHECK PRODUCED THIS ROW. A row is identified today only by `ruleId`, and a PASSING row has
+    // ruleId null by design (score.js: a clean check emits one generic summary row, not a per-rule one).
+    // So a clean check was, from any consumer's point of view, ANONYMOUS — and a consumer that groups by
+    // ruleId cannot tell "canonical passed" from "canonical never ran". Measured on sgen.com 2026-07-29:
+    // the SEO tool's graded summary printed NOT RUN for all 8 of its PASSING checks — canonical,
+    // indexability, favicon, schema, robots.txt, sitemap, analytics, og:image — because it had nothing
+    // else to key on. That is this platform's oldest law broken in the more flattering direction: "I
+    // looked and it is clean" must never be indistinguishable from "I never looked".
+    //
+    // `check` is the stable id STATIC_SUITE already keys everything by, stamped on every row this loop
+    // emits. Additive and scoped to the static loop: no other row gains a field, ruleId keeps its
+    // meaning, and identity (WP-001) is untouched — this names the CHECK, not the rule.
+    const stamp = (r) => { r.check = id; return r; };
     for (const [title, fs] of Object.entries(byTitle(finds))) {
       const items = itemsOf(fs);
       const pages = new Set(fs.map(f => f.location)).size;
       const target = pages > 1 ? `${items.length} occurrence(s) · ${pages} page(s)` : (fs[0].location || '');
-      suiteRows[suite].push(row(sevToStatus(worstSev(fs.map(f => f.severity))), title, target, fs[0].detail, fs[0].value, items, fs[0].ruleId));
+      suiteRows[suite].push(stamp(row(sevToStatus(worstSev(fs.map(f => f.severity))), title, target, fs[0].detail, fs[0].value, items, fs[0].ruleId)));
     }
     // THE GREEN TICK NOW COSTS EVIDENCE. Old rule: "no finding => pass". New rule: "no finding AND
     // the check provably looked and never threw => pass". Everything else is stated as unverified.
-    if (ok) { if (!finds.length && PASS_LABEL[id]) suiteRows[suite].push(row('pass', PASS_LABEL[id], null, '', '')); }
-    else { const w = whyNotVerified(l); suiteRows[suite].push(notRunRow(id, suite, w.reason, CHECK_RULES[id], w.detail, l)); }
+    if (ok) { if (!finds.length && PASS_LABEL[id]) suiteRows[suite].push(stamp(row('pass', PASS_LABEL[id], null, '', ''))); }
+    else { const w = whyNotVerified(l); suiteRows[suite].push(stamp(notRunRow(id, suite, w.reason, CHECK_RULES[id], w.detail, l))); }
   }
 
   // links -> rows (internal broken, external broken, redirect chains/loops)

@@ -80,6 +80,27 @@ function advisoryEvaluatedRules() {
   };
 }
 
+// ── WHICH ADVISORY PASSES RUN ─────────────────────────────────────────────────────────────────────
+// Site Audit runs all four. The SEO tool runs `copyReview` alone — the content surface an SEO report
+// needs, and the only one of the four that is score-neutral BY CONSTRUCTION in a run where the
+// functional suite never executed. The other three cannot be selected safely there:
+//   • contentArtifacts / spelling push FUNC-008/FUNC-009 into the SCORED functional suite. An SEO run
+//     skips that suite, so `suites.find(s => s.key === 'functional')` is undefined and both rows are
+//     silently DROPPED — while the declaration below would still name them as evaluated. A rule
+//     declared evaluated with no row behind it is the ADR-0011 lie, arrived at by accident.
+//   • bestPractices belongs to the whole-site tool; running it here is what seo-split.test.js
+//     measured as "SEO standalone that also returns eight best-practice findings".
+// The default is every pass, so Site Audit's output is byte-identical to before this seam existed.
+const ADVISORY_PASSES = ['contentArtifacts', 'spelling', 'bestPractices', 'copyReview'];
+function selectedPasses(opts) {
+  if (!Array.isArray(opts.passes)) return ADVISORY_PASSES.slice();
+  // Fail loudly on a name that is not a pass. A typo would otherwise silently disable a pass while the
+  // caller believed it ran — the same class of quiet nothing this module exists to prevent.
+  const unknown = opts.passes.filter(p => !ADVISORY_PASSES.includes(p));
+  if (unknown.length) throw new Error(`pipeline: unknown advisory pass(es) ${unknown.join(', ')} — expected any of ${ADVISORY_PASSES.join(', ')}`);
+  return ADVISORY_PASSES.filter(p => opts.passes.includes(p)); // canonical order, deduped
+}
+
 // Merge the advisory passes into a raw runAudit result. Returns a NEW result (does not mutate input).
 // Re-scores only when the suites actually change (FUNC-008 / Best Practices added, or a visual suite
 // already folded in) — otherwise it's a pure pass-through so the base case stays byte-for-byte.
@@ -90,15 +111,17 @@ function applyAdvisory(result, opts = {}) {
   // Did the ADVISORY passes actually run this call? A folded visual suite also sets `changed`, and in
   // that case no advisory rule was evaluated -- so the two must not share one flag.
   let ranAdvisory = false; // a folded visual suite already counts as a change
+  const passes = selectedPasses(opts);
+  const running = (p) => passes.includes(p);
 
-  if (pages.length && opts.advisory !== false) {
+  if (pages.length && passes.length && opts.advisory !== false) {
     // FUNC-008 → Functional suite (scored). One row aggregating all content artifacts across pages.
     const func = suites.find(s => s.key === 'functional');
     const pushRow = r => { if (func) func.checks.push({ status: r.status, name: r.name, target: r.target, detail: r.detail, meta: r.ruleId, items: r.items.length ? r.items : undefined, ruleId: r.ruleId, severity: r.severity, suite: 'functional', deduction: r.deduction }); };
-    pushRow(scanContentArtifacts(pages)); // FUNC-008 loose symbols / tokens / mojibake
-    pushRow(scanSpelling(pages));          // FUNC-009 common misspellings / doubled words
+    if (running('contentArtifacts')) pushRow(scanContentArtifacts(pages)); // FUNC-008 loose symbols / tokens / mojibake
+    if (running('spelling')) pushRow(scanSpelling(pages));                  // FUNC-009 common misspellings / doubled words
     // Best Practices → advisory suite (weight 0, never moves the score).
-    if (!suites.some(s => s.key === 'best-practices')) {
+    if (running('bestPractices') && !suites.some(s => s.key === 'best-practices')) {
       const bp = runBestPractices(pages);
       suites.push({ key: 'best-practices', name: 'Best Practices', desc: 'Advisory · modern web hygiene', icon: 'cursor', advisory: true, checks: bp.checks });
     }
@@ -107,7 +130,7 @@ function applyAdvisory(result, opts = {}) {
     // suite-weight path or the risk path. NOT folded into 'functional' the way FUNC-008/009 are —
     // those are scored defects (a mojibake IS a bug); these are flags a human reads, and putting them
     // in a weight-18 suite would let a phrasing signal act like a defect. See registry Suite 13.
-    if (!suites.some(s => s.key === 'copy')) {
+    if (running('copyReview') && !suites.some(s => s.key === 'copy')) {
       suites.push({ key: 'copy', name: 'Copy Review', desc: 'Advisory · AI flags & copy artifacts', icon: 'cursor', advisory: true, checks: scanCopyReview(pages) });
     }
     ranAdvisory = true;
@@ -124,7 +147,10 @@ function applyAdvisory(result, opts = {}) {
   let coverage = result.coverage;
   if (coverage && Array.isArray(coverage.evaluatedRules)) {
     const adv = advisoryEvaluatedRules();
-    const ran = ranAdvisory ? [...adv.contentArtifacts, ...adv.spelling, ...adv.bestPractices, ...adv.copyReview] : [];
+    // Only the passes that ACTUALLY RAN are declared. Reading the same `passes` list the execution above
+    // used is the point: a declaration derived from a second list could disagree with what executed, and
+    // "declared evaluated but never emitted a row" is precisely the defect ADR-0011 exists to stop.
+    const ran = ranAdvisory ? passes.flatMap(p => adv[p]) : [];
     const set = new Set([...coverage.evaluatedRules, ...ran]);
     evaluatedRules = [...set].sort();
     // Keep the RECORD and the SCORE in agreement: a coverage block that disagreed with the number

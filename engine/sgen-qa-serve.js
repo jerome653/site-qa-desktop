@@ -1231,16 +1231,32 @@ function appPage() {
     // Results lead with what an SEO person needs FIRST — indexability and canonical, then titles and
     // descriptions WITH THEIR VALUES, then structured data — instead of a generic pass/warn tally.
     // Reads the report.json the app just wrote; no second source of truth.
+    // CONTENT. SEO-037 (thin content) and SEO-038 (readability) have always run inside the seo suite and
+    // appeared in NO lead card — the graded summary led with tags and said nothing about the words on the
+    // page. The COPY-* rows come from the Copy Review advisory pass the SEO tool now runs (weight 0,
+    // status manual — see the applyAdvisory call on the server): flags a human reads, never a verdict.
+    var COPY_LEAD_RULES={'copy-artifacts':['COPY-001'],'copy-placeholders':['COPY-002'],'copy-phrasing':['COPY-003'],'copy-rhythm':['COPY-004']};
     var SEO_LEAD=[
       ['Indexing & canonical',['indexability','canonical','seo-index','robots-txt','sitemap','seo-hreflang']],
       ['Titles & descriptions',['title','meta-description','duplicate-title','duplicate-description']],
-      ['Structured data & social',['schema','social-meta','favicon']]];
+      ['Structured data & social',['schema','social-meta','favicon']],
+      ['Content & readability',['seo-content','copy-artifacts','copy-placeholders','copy-phrasing','copy-rhythm']]];
     function seoLead(m){var host=$('s-lead');if(!host)return;
       fetch('/report/'+m.id+'/report.json').then(function(r){return r.json()}).then(function(d){
         var suite=(d.suites||[]).filter(function(x){return x.key==='seo'})[0];if(!suite)return;
-        // ruleId -> check, inverted from the map the client already has.
+        // ruleId -> check, inverted from the maps the client already has. COPY rows live in their own
+        // advisory suite, so both suites are read — one card, two sources, no third source of truth.
         var R2C={};Object.keys(SEO_CHECK_RULES).forEach(function(ck){(SEO_CHECK_RULES[ck]||[]).forEach(function(rid){R2C[rid]=ck;});});
-        var by={};(suite.checks||[]).forEach(function(c){var ck=R2C[c.ruleId];if(ck&&!by[ck])by[ck]=c;});
+        Object.keys(COPY_LEAD_RULES).forEach(function(ck){COPY_LEAD_RULES[ck].forEach(function(rid){R2C[rid]=ck;});});
+        var copy=(d.suites||[]).filter(function(x){return x.key==='copy'})[0]||{checks:[]};
+        var rows0=(suite.checks||[]).concat(copy.checks||[]);
+        // c.check FIRST (backticks are forbidden in here — this comment lives inside a template literal).
+        // A row that failed carries a ruleId; a row that PASSED carries ruleId null (a
+        // clean check emits one generic summary row, by design), so ruleId alone could only ever match
+        // failures — every clean check rendered NOT RUN. Measured on sgen.com: 8 of them, including
+        // canonical and indexability. The engine now stamps the check id on every static row; ruleId stays
+        // as the fallback so a row from an older stored report still maps.
+        var by={};rows0.forEach(function(c){var ck=c.check||R2C[c.ruleId];if(ck&&!by[ck])by[ck]=c;});
         var na={};(m.notApplicable||[]).forEach(function(k){na[k]=1;});
         var html='<div class="seolead">';
         SEO_LEAD.forEach(function(g){
@@ -2196,7 +2212,25 @@ async function apiRun(req, res, mode = 'audit') {
     // means the SCORE was never wrong — but "SEO standalone" that also returns eight best-practice
     // findings is not standalone, and the same advisory findings would appear twice for anyone running
     // both tools.
-    const data = mode === 'seo' ? raw : applyAdvisory(raw);
+    // The SEO tool gets ONE advisory pass: Copy Review (COPY-001..004 — assistant boilerplate left in
+    // copy, unfilled authoring placeholders, AI-tell phrasing, uniform paragraph rhythm). That is the
+    // CONTENT surface an SEO report needs, and it is score-neutral by two independent mechanisms:
+    // WEIGHTS.copy = 0, and every COPY-* row is status 'manual', which score.js skips in BOTH openRisk
+    // and totalRisk. Asserted in seo-split.test.js by recomputing the score with the suite removed, so
+    // "a 4.11.0 SEO score is comparable to a 4.10.0 one" is measured rather than claimed.
+    //
+    // Best Practices and FUNC-008/009 stay out. Best Practices belongs to the whole-site tool (measured:
+    // an "SEO standalone" report that also returned eight best-practice findings). FUNC-008/009 are
+    // SCORED functional rules, and an SEO run does not run the functional suite at all — their rows would
+    // be silently dropped while the pass reported having run. See ADVISORY_PASSES in pipeline.js.
+    //
+    // Passing through applyAdvisory ALSO fixes what the raw path broke: it ends with `delete
+    // merged.pages`, so the report stops carrying every audited page's full HTML. On the raw path that
+    // HTML reached `<script>window.__DATA=…</script>` and the first `</script>` in it closed the tag —
+    // measured on sgen.com 2026-07-29, the SEO report body rendered as JSON text and DOM fragments and
+    // the issue list was empty. report.js now escapes the payload too; this stops shipping tens of MB of
+    // page source into report.html AND report.json on every site-scope run.
+    const data = mode === 'seo' ? applyAdvisory(raw, { passes: ['copyReview'] }) : applyAdvisory(raw);
     emit({ t: 'p', pct: 99, phase: 'writing report' });
     // CHANGE E: auto-compare this scan against the most recent PRIOR recorded scan for this host and
     // embed a "vs previous scan" panel near the top. loadLatestRecord() runs BEFORE recordScan() below,
