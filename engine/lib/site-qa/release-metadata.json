@@ -1,5 +1,5 @@
 {
-  "packageVersion": "4.9.0",
+  "packageVersion": "4.10.0",
   "engineVersion": "2.4.0",
   "registryVersion": "1.13.0",
   "contractVersion": "1.0",
@@ -12,14 +12,14 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "SEO tool: asks for SCOPE (This page / Whole site) instead of a raw page count; 17 SEO checks as toggles; results lead with indexability and canonical, then titles and descriptions with their values, then structured data. A single-page run no longer reports duplicate-title/duplicate-description as passing — they are declared notApplicable, because comparing across pages is impossible on one page. SITE AUDIT behaviour change: unticking Links now genuinely skips the link crawl instead of running it and discarding the result, so Site Audit is faster for anyone who de-scopes Links.",
+  "release": "Fixes a regression in 4.9.0: the SEO tool ran the audit but showed no graded result — only a one-line status. The graded summary now renders inline (indexability and canonical first, then titles and descriptions with their values, then structured data), above the full report. The SEO tool also gets the same URL field and Settings gear as every other tab, with Default scope and Page ceiling as saved defaults. No scoring change: no rule was added, removed or rescored, so a score from 4.10.0 is directly comparable to one from 4.9.0.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
     "STB-004 broken fonts",
     "near-duplicate content"
   ],
-  "generatedAt": "2026-07-29T07:25:13.972Z",
-  "gitTag": "v4.9.0",
-  "buildBaseCommit": "0e152ee"
+  "generatedAt": "2026-07-29T08:30:49.717Z",
+  "gitTag": "v4.10.0",
+  "buildBaseCommit": "72bc14e"
 }
