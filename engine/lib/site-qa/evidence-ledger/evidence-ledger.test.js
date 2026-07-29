@@ -131,15 +131,34 @@ console.log('Evidence Ledger (ADR-0007) — test suite\n');
 (function realEvidence() {
   const runs = process.env.SGEN_EVIDENCE_CORPUS
     || path.resolve(__dirname, '..', '..', '..', '..', 'sgen', 'W5-Live-Surface-Audit', 'site-qa', '_ui-runs');
-  let dir = null;
+  // WHICH run is examined must not be decided by DIRECTORY ORDER. It was: the loop took the first dir
+  // with >=4 screenshots and then asserted that dir contains duplicates. Measured 2026-07-30 on this
+  // machine: 9 candidate runs, 7 of them genuinely DO carry duplicate screenshots — but the
+  // alphabetically first was a 5-shot run whose screenshots are all unique, so the suite went red for a
+  // property of readdir order, not a property of the ledger. (The corpus is polluted with
+  // `127.0.0.1-*` runs left by the test suite itself, which is what moved a duplicate-free run to the
+  // front.) Same class as the fixed-tmpdir non-determinism that blocked the 4.8.0 gate.
+  //
+  // So: collect every candidate, and examine one that can actually demonstrate the property. That is
+  // STRICTLY STRONGER than the old single arbitrary pick — the assertion below still has to hold on real
+  // engine output, it is simply no longer hostage to which run sorts first.
+  const candidates = [];
   try {
     for (const d of fs.readdirSync(runs)) {
       const shots = path.join(runs, d, 'screenshots');
-      if (fs.existsSync(shots) && fs.readdirSync(shots).filter(f => f.endsWith('.png')).length >= 4) { dir = shots; break; }
+      if (fs.existsSync(shots) && fs.readdirSync(shots).filter(f => f.endsWith('.png')).length >= 4) candidates.push(shots);
     }
-  } catch (_) { dir = null; }
+  } catch (_) { /* corpus absent — handled below */ }
+  // Preferred: a run that contains at least one duplicate pair. Counted with the ledger itself, so the
+  // selection cannot disagree with what the assertions then measure.
+  const dupCount = (shots) => {
+    const probe = new EvidenceLedger({ now: () => 'T0' });
+    for (const f of fs.readdirSync(shots).filter(x => x.endsWith('.png')).sort()) probe.putFile(path.join(shots, f), D({ page: 'probe', component: f }));
+    return probe.manifest().counts.duplicates;
+  };
+  const dir = candidates.find(c => dupCount(c) >= 1) || null;
   if (!dir) {
-    unevaluated(`real-evidence: no stored screenshot run under ${runs} — dedup on REAL engine output was NOT demonstrated in this environment. `
+    unevaluated(`real-evidence: no stored run under ${runs} carries duplicate screenshots (${candidates.length} candidate run(s) examined) — dedup on REAL engine output was NOT demonstrated in this environment. `
       + 'This corpus is outside the repository and ships with no clone, so its absence is expected from committed state and is NOT a pass. '
       + 'Run the engine once, or point SGEN_EVIDENCE_CORPUS at a run directory, to evaluate it.');
     return;

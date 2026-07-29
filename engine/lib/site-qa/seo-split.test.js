@@ -27,9 +27,20 @@ const SERVE = path.resolve(__dirname, '..', '..', 'sgen-qa-serve.js');
 const RUNS = path.resolve(__dirname, '..', '..', '..', 'sgen', 'W5-Live-Surface-Audit', 'site-qa', '_ui-runs');
 const { SUITES } = require('./audit');
 
+// The fixture carries a <script> element ON PURPOSE. The report embeds its data island as
+// `<script>window.__DATA=${JSON.stringify(data)}</script>`, and JSON.stringify does not escape `<` — so
+// the first literal `</script>` inside any page HTML the payload carries CLOSES THE TAG EARLY, the JS
+// parser hits an unterminated string, `window.__DATA` is never assigned, and the rest of the JSON is
+// rendered by the browser as page content. Measured on sgen.com 2026-07-29: the SEO report printed
+// thousands of literal `\n` runs plus fragments of the site's own DOM below the footer, and the issue
+// list was empty because the report client starts `var D = window.__DATA`.
+//
+// This fixture had NO script tag, which is exactly why the whole suite could be green while every real
+// site was broken: a page with no `</script>` in it can never break the payload out.
 const PAGE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>seo split</title>'
   + '<meta name="description" content="deterministic page driving the real server for the seo split"></head>'
-  + '<body><header><nav><a href="/">h</a></nav></header><h1>Split</h1><p>Body copy for the split test.</p><footer>f</footer></body></html>';
+  + '<body><header><nav><a href="/">h</a></nav></header><h1>Split</h1><p>Body copy for the split test.</p>'
+  + '<script>window.__fixture=1;</script><footer>f</footer></body></html>';
 
 function bootServe(port) {
   const child = cp.spawn(process.execPath, [SERVE, '--port', String(port)], {
@@ -57,6 +68,12 @@ function post(port, route, payload) {
 function reportFor(id) {
   const f = path.join(RUNS, id, 'report.json');
   return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null;
+}
+// The HTML the app wrote. report.json can be perfect while report.html — the thing the operator
+// actually reads — is unparseable, so the two are checked separately.
+function reportHtmlFor(id) {
+  const f = path.join(RUNS, id, 'report.html');
+  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : null;
 }
 function doneOf(ndjson) {
   for (const line of ndjson.split('\n')) {
@@ -125,14 +142,84 @@ console.log('SEO split — Site Audit is technical, SEO is its own tool — REAL
     const S = sDone && sDone.ok ? reportFor(sDone.id) : null;
     ok(!!S, 'seo: the app wrote a report.json');
     if (S) {
-      eq(S.suites.map(x => x.key), ['seo'], 'seo: EXACTLY the seo suite ran — no advisory pass, nothing else');
+      // The SEO tool runs the seo suite plus ONE advisory pass: Copy Review (Suite 13). It is the content
+      // surface an SEO report needs, and it is score-neutral by two independent mechanisms —
+      // WEIGHTS.copy = 0, and every COPY-* row is status 'manual', which score.js skips in BOTH openRisk
+      // and totalRisk. Proven below rather than asserted. Best Practices and FUNC-008/009 are deliberately
+      // NOT here: FUNC-008/009 are SCORED rules of the functional suite, which an SEO run does not run.
+      eq(S.suites.map(x => x.key), ['seo', 'copy'], 'seo: the seo suite plus the weight-0 Copy Review advisory pass — nothing else');
       eq(S.quality && S.quality.evaluationDeclared, true, 'seo: evaluationDeclared stays TRUE — an SEO score that states its coverage');
       const declared = S.coverage && Array.isArray(S.coverage.evaluatedRules) ? S.coverage.evaluatedRules : [];
       const rules = require('./rules/registry');
       const all = (rules.all ? rules.all() : rules.RULES) || [];
       const nonSeo = new Set(all.filter(r => r.suite !== 'seo').map(r => r.id));
-      eq(declared.filter(id => nonSeo.has(id)), [],
-        'seo: no NON-seo rule is declared evaluated — the SEO score is an SEO score, not a whole-site score in disguise');
+      const copyIds = all.filter(r => r.suite === 'copy').map(r => r.id).sort();
+      // Copy Review DID run, so its rules are declared — that is the declaration being honest, not a leak.
+      // Anything else non-seo would be: a rule declared evaluated whose row was never emitted is the
+      // ADR-0011 lie, and it is the default failure mode here — applyAdvisory pushes FUNC-008/009 into the
+      // FUNCTIONAL suite, which an SEO run skips, so those rows are silently dropped while the pass still
+      // reports having run.
+      eq(declared.filter(id => nonSeo.has(id)).sort(), copyIds,
+        'seo: the only non-seo rules declared evaluated are the COPY-* rules that actually ran — no rule is declared without a row');
+      eq(declared.filter(id => /^(FUNC-008|FUNC-009|BP-)/.test(id)), [],
+        'seo: content-artifacts, spelling and Best Practices are NOT declared — those passes did not run for this tool');
+
+      // ── SCORE NEUTRALITY, MEASURED ─────────────────────────────────────────────────────────────
+      // Recompute the SEO quality from the app's own suites with the copy suite REMOVED. If the advisory
+      // pass could move the number, these two disagree. This is the assertion that lets the release notes
+      // say a 4.11.0 score is comparable to a 4.10.0 one.
+      const { compute } = require('./score');
+      const withCopy = compute(S.suites, { evaluatedRules: declared });
+      const withoutCopy = compute(S.suites.filter(s => s.key !== 'copy'), { evaluatedRules: declared });
+      eq(withCopy.overall, withoutCopy.overall, 'seo: the Copy Review pass does not move the SEO quality score — score-neutral, measured not assumed');
+      eq(S.quality.overall, withoutCopy.overall, 'seo: the score the app SHIPPED equals the score without the advisory pass');
+      const copySuite = S.suites.find(s => s.key === 'copy') || { checks: [] };
+      eq((copySuite.checks || []).filter(c => c.status !== 'manual').map(c => c.ruleId), [],
+        'seo: every Copy Review row is status manual — an advisory flag can never read as a verdict');
+
+      // ── A CLEAN CHECK MUST BE IDENTIFIABLE ────────────────────────────────────────────────────
+      // A passing row carries ruleId null by design, so before `check` was stamped it was ANONYMOUS —
+      // and the graded summary, which groups by check, printed NOT RUN for every check that passed.
+      // Measured on sgen.com 2026-07-29: 8 of them (canonical, indexability, favicon, schema,
+      // robots.txt, sitemap, analytics, og:image). "Clean" reading as "never looked" is this platform's
+      // oldest law broken in the flattering direction, which is the harder one to notice.
+      const seoRows = (S.suites.find(s => s.key === 'seo') || { checks: [] }).checks || [];
+      ok(seoRows.length > 0, 'seo: the seo suite produced rows');
+      eq(seoRows.filter(c => !c.check).map(c => c.status + ':' + c.name), [],
+        'seo: EVERY row names the check that produced it — a passing check is identifiable, not anonymous');
+      ok(seoRows.some(c => c.status === 'pass' && c.check),
+        'seo: at least one PASSING row carries its check id — the case that used to render as NOT RUN');
+    }
+
+    // ── 2c · THE REPORT'S DATA ISLAND MUST SURVIVE A PAGE THAT CONTAINS A SCRIPT TAG ──────────────
+    // The regression this exists to prevent, measured on sgen.com 2026-07-29 (v4.10.0): the SEO report
+    // body rendered thousands of literal `\n` runs plus fragments of the audited site's own DOM, and the
+    // issue list was empty. Cause: the server passed the RAW result to renderReport on the SEO path only
+    // (`mode === 'seo' ? raw : applyAdvisory(raw)`), so `pages[].html` — every audited page's full source,
+    // attached because the server always scans with collectPages:true — reached
+    // `<script>window.__DATA=${JSON.stringify(data)}</script>`, and the first `</script>` in it closed the
+    // tag. Two independent defects, so two independent assertions: the payload is ESCAPED, and the raw
+    // page HTML is not in the report at all.
+    if (S && sDone && sDone.ok) {
+      const html = reportHtmlFor(sDone.id);
+      ok(!!html, 'island: the app wrote a report.html');
+      if (html) {
+        eq((html.match(/<script/g) || []).length, 2, 'island: the report has exactly the 2 script tags its template emits — nothing broke out');
+        const line = (html.split('\n').find(l => l.indexOf('window.__DATA=') !== -1)) || '';
+        ok(line, 'island: the window.__DATA= assignment is present');
+        // Exactly one `</script` on that line, and it is the template's own closing tag at the end. A
+        // second one anywhere earlier IS the break-out.
+        eq((line.match(/<\/script/g) || []).length, 1, 'island: one `</script` on the payload line — its own closing tag, nothing earlier');
+        ok(/;<\/script>\s*$/.test(line), 'island: the payload line ends with its own closing tag');
+        // The escaping must not change the VALUE — an escape that mangles the data trades one broken
+        // report for another. A \\uXXXX sequence is a legal JSON string escape, so this parses exactly
+        // as the browser's own JSON-literal parse does, with no un-escaping step of its own.
+        const json = line.replace(/^\s*<script>window\.__DATA=/, '').replace(/;<\/script>\s*$/, '');
+        let parsed = null, perr = null;
+        try { parsed = JSON.parse(json); } catch (e) { perr = e.message; }
+        ok(parsed && parsed.host, 'island: the payload parses and still carries the report data' + (perr ? ' — ' + perr : ''));
+      }
+      ok(!('pages' in S), 'island: report.json carries no `pages` key — the SEO report stops writing every audited page\'s raw HTML to disk twice');
     }
 
     // ── 2b · SCOPE — 'this page' vs 'whole site' ──────────────────────────────────────────────────

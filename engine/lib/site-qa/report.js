@@ -10,6 +10,32 @@ const path = require('path');
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
+// ── THE DATA ISLAND ───────────────────────────────────────────────────────────────────────────────
+// `JSON.stringify` produces valid JSON, NOT valid <script> content. Three characters are legal inside
+// a JSON string and illegal inside a script element, and every one of them breaks the report:
+//   • `<`  — the first `</script>` in the payload CLOSES THE TAG. The JS parser then hits an
+//            unterminated string, `window.__DATA` is never assigned, and the browser renders the rest
+//            of the JSON as page content.
+//   • U+2028 / U+2029 — line separators. Legal in a JSON string, a line break in JS source.
+//
+// MEASURED on sgen.com 2026-07-29 (v4.10.0, SEO tool): the report body printed thousands of literal
+// `\n` runs plus fragments of the audited site's own DOM below the footer, and the issue list was
+// empty — the client starts `var D = window.__DATA`. Cause: the SEO path passed the raw result
+// straight to renderReport, so `pages[].html` (every audited page's full source) was in the payload,
+// and every real page contains a `</script>`.
+//
+// Escaping here rather than only stripping the field that happened to carry markup is deliberate:
+// stripping fixes ONE instance, this fixes the CLASS. `\uXXXX` is a legal JSON string escape, so the
+// parsed VALUE is identical — no report surface moves. The escape is computed from the character code
+// rather than written as a literal so this function cannot itself be broken by a source-encoding pass.
+// Built from character codes, not written as a regex literal: U+2028/U+2029 ARE source LineTerminators,
+// so a literal `/[<…]/` containing them is an unterminated regex — the file would not parse. Measured
+// while writing this fix ("SyntaxError: Invalid regular expression: missing /").
+const ISLAND_UNSAFE = new RegExp('[<' + String.fromCharCode(0x2028, 0x2029) + ']', 'g');
+function jsonIsland(v) {
+  return JSON.stringify(v).replace(ISLAND_UNSAFE, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+}
+
 // The footer printed `rendered/total pages` unconditionally, so an SEO-only run — where render is
 // DELIBERATELY not started — signed itself "Chromium render · 0/92 pages · 1 suites" and read as a
 // total failure. A skipped pass must say it was skipped; only a pass that actually ran gets counts.
@@ -1067,7 +1093,7 @@ function renderReport(data, outDir, opts = {}) {
   <footer><span>SGEN Site QA · ${esc(data.host)} · ${esc(data.generated)}</span><span>${renderFooter(data)}</span></footer>
 </div>
 ${lightbox}
-<script>window.__DATA=${JSON.stringify(data)};</script>
+<script>window.__DATA=${jsonIsland(data)};</script>
 <script>${CLIENT}</script>
 </body></html>`;
 
