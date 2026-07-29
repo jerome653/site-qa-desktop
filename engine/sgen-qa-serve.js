@@ -506,7 +506,7 @@ function appPage() {
   /* responsive: drop help/env first, then thin the tabs, then wrap to 2x2, then stack */
   @media(max-width:900px){ .help-btn{display:none} }
   @media(max-width:760px){ .top .env{display:none} .tabbar button .nd{display:none} .tabbar button{padding:11px 12px;text-align:center;align-items:center} .tabbar button b{font-size:13px} }
-  @media(max-width:560px){ .tabbar{flex-wrap:wrap} .tabbar button{flex:1 1 45%;border-bottom:1px solid var(--line)} .tabbar button.on{border-bottom:2px solid var(--brand-solid)} }
+  @media(max-width:560px){ .tabbar{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity} .tabbar::-webkit-scrollbar{display:none} .tabbar button{flex:0 0 auto;scroll-snap-align:start;border-bottom:2px solid transparent} .tabbar button.on{border-bottom:2px solid var(--brand-solid)} }
   @media(max-width:440px){ .top .brand .bv{display:none} }
   /* overflow-x:clip (NOT hidden) prevents sideways scroll WITHOUT creating a scroll container, so the
      sticky header + tool tabs stay locked to the top during scroll. */
@@ -805,7 +805,7 @@ function appPage() {
 
     <!-- 1 SITE AUDIT -->
     <section class="panel on" id="p-audit">
-      <div class="tthead"><h2 class="tt">Site Audit</h2><button class="gear" id="gear-audit" onclick="openSettings('audit')" title="Site Audit settings" aria-label="Site Audit settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div><p class="sub">Full single-site tester — links, forms, responsive, accessibility (axe-core), SEO, performance, security (TLS), cross-browser (Firefox + WebKit), console. Independent: needs no inventory, comparison, or certification.</p>
+      <div class="tthead"><h2 class="tt">Site Audit</h2><button class="gear" id="gear-audit" onclick="openSettings('audit')" title="Site Audit settings" aria-label="Site Audit settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div><p class="sub">Technical single-site tester — links, forms, responsive, accessibility (axe-core), performance, security (TLS), cross-browser (Firefox + WebKit), console. Nine suites; the Quality Score covers those nine. SEO moved out to its own tool (tab 4), so a score here is NOT comparable to one from before 4.8.0. Independent: needs no inventory, comparison, or certification.</p>
       <div class="card">
         <div class="cfg-split cfg-au">
           <label class="fld" style="min-width:0">Site URL<input id="a-url" type="text" placeholder="e.g. sgen.com" spellcheck="false"></label>
@@ -1017,7 +1017,14 @@ function appPage() {
     // their matrix BY LABEL, so a typo here silently drops that viewport from the sweep rather than
     // erroring. Width is a valid key because every width is unique across devices + breakpoint probes.
     var VPMAP={1920:'1920 · Desktop',1440:'1440 · MacBook Air',1180:'1180 · iPad Air 11 (LS)',820:'820 · iPad Air 11',744:'744 · iPad mini',414:'414 · iPhone XR/11',440:'440 · iPhone 17 Pro Max',393:'393 · iPhone 16',360:'360 · Galaxy S',384:'384 · Galaxy S Ultra',1280:'1280 · xl boundary',1024:'1024 · lg boundary',768:'768 · md boundary'};
-    function tab(t){document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on')});document.getElementById('p-'+t).classList.add('on');document.querySelectorAll('.tabbar button').forEach(function(b){b.classList.toggle('on',b.dataset.t===t)});}
+    function tab(t){document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on')});document.getElementById('p-'+t).classList.add('on');document.querySelectorAll('.tabbar button').forEach(function(b){b.classList.toggle('on',b.dataset.t===t)});tabScroll(t);}
+    // Keep the selected tab visible when the bar is a horizontal scroller (<=560px). Only the BAR's
+    // scrollLeft is touched — scrollIntoView() can scroll ancestors and yank the page under the user.
+    function tabScroll(t){var bar=document.querySelector('.tabbar');if(!bar)return;
+      var b=bar.querySelector('button[data-t="'+t+'"]');if(!b)return;
+      var l=b.offsetLeft,r=l+b.offsetWidth;
+      if(l<bar.scrollLeft)bar.scrollLeft=Math.max(0,l-8);
+      else if(r>bar.scrollLeft+bar.clientWidth)bar.scrollLeft=r-bar.clientWidth+8;}
     function $(id){return document.getElementById(id);}
     function checked(cid){return [].slice.call(document.querySelectorAll('#'+cid+' input:checked')).map(function(i){return i.value});}
     function setProg(pre,pct,phase){$(pre+'-pbar').classList.add('on');pct=Math.max(2,Math.min(100,pct||0));$(pre+'-pfill').style.width=pct+'%';if(phase)$(pre+'-status').innerHTML='<span class="spin"></span>'+phase+' — '+pct+'%';}
