@@ -140,6 +140,11 @@ const SUITES = [
   'annotate-audit.test.js',
   'cross-browser-evidence.test.js',
   'report-merged.test.js',
+  // The SEO split. Asserts the SCORE CONTRACT over the real server, not the tab bar: Site Audit runs
+  // nine suites and declares NO seo rule as evaluated (so seo risk leaves the denominator with the
+  // suite and the split cannot buy points), the SEO tool runs the seo suite alone, and the two are
+  // complementary — every scored suite covered exactly once across the product.
+  'seo-split.test.js',
 ];
 
 const env = Object.assign({}, process.env, {
