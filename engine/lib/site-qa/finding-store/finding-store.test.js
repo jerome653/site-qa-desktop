@@ -31,8 +31,18 @@ function scanRecord({ target = 'https://old.example.com', host, ts, findings = [
   return SS.buildRecord(result, { environment: 'production' });
 }
 
+// UNIQUE PER PROCESS. This was a FIXED path — os.tmpdir()/finding-store-test/run-<tag>-<n> — where both
+// `tag` (a caller label) and the assertion count are deterministic, so EVERY run on this machine reused
+// the SAME directories and two instances collided. That made the RELEASE GATE non-deterministic: the
+// gate clones the repo and runs the whole suite there, and regression.test.js re-runs this suite as a
+// SUB-PROCESS, so any overlap or leftover state failed it — three gate runs on one commit gave 9/10,
+// 10/10, 9/10, always in regression.test.js's frozen block. Proven directly: two concurrent instances
+// of this file both died with a Node stack trace. regression.test.js's `run()` swallows the error in a
+// bare catch, so it surfaced as "not green" rather than "crashed".
+// process.pid separates concurrent runs; RUN_SEQ separates repeats inside one run.
+let RUN_SEQ = 0;
 function tmpDir(tag) {
-  const dir = path.join(os.tmpdir(), 'finding-store-test', 'run-' + tag + '-' + (pass + fail));
+  const dir = path.join(os.tmpdir(), 'finding-store-test', 'p' + process.pid + '-run-' + tag + '-' + (pass + fail) + '-' + (++RUN_SEQ));
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   return dir;
