@@ -957,14 +957,12 @@ function appPage() {
             <label class="scopeopt"><input type="radio" name="s-scope" value="site"><b>Whole site</b><span>Discover pages from the sitemap, falling back to same-host links.</span></label>
           </div>
           <select id="s-scope-def" style="display:none"><option value="page">page</option><option value="site">site</option></select>
-          <details class="adv" id="s-adv">
-            <summary>Advanced — checks and safety ceiling</summary>
-            <div class="cfg-row"><label for="s-max">Page ceiling</label><input id="s-max" type="number" min="1" max="1000" value="150"><span class="hint">Safety stop for Whole site. If it is reached the result says so.</span></div>
-            <div class="ckwrap" id="s-checks">
-            <div class="ckgrp"><b>Indexing & canonical</b><label class="chip"><input type="checkbox" value="indexability" checked>Indexability (robots meta, x-robots)</label><label class="chip"><input type="checkbox" value="canonical" checked>Canonical tag</label><label class="chip"><input type="checkbox" value="seo-index" checked>Index directives</label><label class="chip"><input type="checkbox" value="robots-txt" checked>robots.txt</label><label class="chip"><input type="checkbox" value="sitemap" checked>XML sitemap</label><label class="chip"><input type="checkbox" value="seo-hreflang" checked>hreflang</label></div>\r\n            <div class="ckgrp"><b>Titles & descriptions</b><label class="chip"><input type="checkbox" value="title" checked>Title tag</label><label class="chip"><input type="checkbox" value="meta-description" checked>Meta description</label><label class="chip"><input type="checkbox" value="duplicate-title" checked data-multipage="1">Duplicate titles<span class="mpnote"> · needs 2+ pages</span></label><label class="chip"><input type="checkbox" value="duplicate-description" checked data-multipage="1">Duplicate descriptions<span class="mpnote"> · needs 2+ pages</span></label></div>\r\n            <div class="ckgrp"><b>Structured data & social</b><label class="chip"><input type="checkbox" value="schema" checked>Schema.org / JSON-LD</label><label class="chip"><input type="checkbox" value="social-meta" checked>Open Graph / Twitter cards</label><label class="chip"><input type="checkbox" value="favicon" checked>Favicon</label></div>\r\n            <div class="ckgrp"><b>Content & other</b><label class="chip"><input type="checkbox" value="seo-content" checked>Content depth</label><label class="chip"><input type="checkbox" value="mobile-web" checked>Mobile-friendliness</label><label class="chip"><input type="checkbox" value="analytics" checked>Analytics tag</label><label class="chip"><input type="checkbox" value="privacy-links" checked>Privacy / legal links</label></div>
-            </div>
-            <div class="hint">Unticking a check leaves it out of the SEO score. The check still runs and still appears in the report — same rule the rest of the app uses: section off = did not run, single check off = ran, not counted.</div>
-          </details>
+          <!-- The page ceiling and the check list moved into the Settings gear, where every other tool
+               keeps its configuration. #s-max stays in the DOM because the gear field BINDS to it (same
+               idiom as #s-scope-def above) — the control is still the truth, it is just no longer a
+               second place to set the same thing. The checks themselves have no bound control at all:
+               they live in SEO_OFF and are edited in the modal, exactly like Site Audit's scope tree. -->
+          <input id="s-max" type="number" min="1" max="1000" value="150" style="display:none" aria-hidden="true" tabindex="-1">
           <div class="cfg-action"><button class="run" id="s-btn" onclick="runSeo()">Run SEO audit</button><button class="run ghost" id="s-cancel" onclick="cancelScan('s')" style="display:none">Cancel</button><button class="run retry" id="s-retry" onclick="retryScan('s')" style="display:none">Retry</button></div>
         </div></div>
       </div>
@@ -1192,12 +1190,14 @@ function appPage() {
     // duplicate-* compare ACROSS pages. On THIS PAGE they cannot mean anything, so they are disabled
     // with the reason visible rather than left tickable and silently reported as passing. The server
     // enforces the same thing, so a stale client cannot bank a meaningless pass.
-    function seoSyncScope(){var single=seoScope()==='page';
-      document.querySelectorAll('#s-checks input[data-multipage]').forEach(function(cb){
-        cb.disabled=single; if(single)cb.checked=false; else cb.checked=true;
-        cb.closest('.chip').classList.toggle('off',single);});
+    // The chips now live in the Settings modal, so the sync no longer REWRITES them. It re-renders the
+    // modal if it happens to be open, and the not-applicable rule is applied where it is read
+    // (seoExcluded) instead of by unticking a box behind the user's back. The old version also
+    // force-CHECKED the two multi-page chips on every switch to Whole site, discarding a deliberate
+    // choice to leave them off — moving the rule to the read path removes that too.
+    function seoSyncScope(){
       document.querySelectorAll('#s-scope .scopeopt').forEach(function(o){o.classList.toggle('on',o.querySelector('input').checked);});
-      var mx=$('s-max'); if(mx)mx.disabled=single;}
+      if(document.getElementById('sq-host'))renderSeoChecks();}
     document.addEventListener('change',function(e){if(e.target&&e.target.name==='s-scope')seoSyncScope();});
     // Seed the per-run scope from the saved default, then sync the dependent controls once.
     function seoSeedScope(){var d=$('s-scope-def');if(!d)return;
@@ -1205,16 +1205,20 @@ function appPage() {
       var r=document.querySelector('#s-scope input[value="'+want+'"]');if(r)r.checked=true;
       seoSyncScope();}
     try{seoSeedScope();}catch(e){}
-    // Unticked checks -> the rule ids they own -> excludeRules.
+    // Checks left out in Settings -> the rule ids they own -> excludeRules. A multi-page check on a
+    // This-page run is NOT added here: the server declares those notApplicable itself, and sending them
+    // as scope exclusions too would double-count the same narrowing in the scope panel.
     function seoExcluded(){var out=[];
-      document.querySelectorAll('#s-checks input[type=checkbox]').forEach(function(cb){
-        if(cb.checked||cb.disabled)return;                       // disabled ones are the server's job
-        (SEO_CHECK_RULES[cb.value]||[]).forEach(function(id){out.push(id);});});
+      SEO_OFF.forEach(function(id){
+        if(seoScope()==='page'&&seoIsMp(id))return;              // the server's job, not an exclusion
+        (SEO_CHECK_RULES[id]||[]).forEach(function(r){out.push(r);});});
       return out;}
+    // How many checks this run will actually score. Mirrors seoExcluded's reading of the same state.
+    function seoOnCount(){var single=seoScope()==='page';
+      return seoCatAll().filter(function(c){return SEO_OFF.indexOf(c[0])<0&&!(single&&c[2]);}).length;}
     function runSeo(){var url=$('s-url').value.trim();if(!url){$('s-status').textContent='Enter a site URL.';return;}
       var scope=seoScope(),ex=seoExcluded();
-      var on=[].slice.call(document.querySelectorAll('#s-checks input[type=checkbox]')).filter(function(c){return c.checked&&!c.disabled;});
-      if(!on.length){$('s-status').textContent='Leave at least one check ticked — an audit with every check unticked would score nothing.';return;}
+      if(!seoOnCount()){$('s-status').innerHTML='Every check is switched off in <b>Settings</b> — an audit with nothing ticked would score nothing. Open the gear and include at least one.';return;}
       $('s-lead').innerHTML='';
       stream('/api/seo',{url:url,scope:scope,maxPages:+$('s-max').value||150,render:false,excludeRules:ex},'s',function(m){
         if(!m.ok){$('s-status').textContent='SEO audit failed: '+(m.error||'unknown');return;}
@@ -1492,7 +1496,8 @@ function appPage() {
         // from this on load, the same default-vs-per-run split the rest of the app already uses.
         seo:[
           {k:'scope',t:'sel',bind:'s-scope-def',opts:[['page','This page'],['site','Whole site']],label:'Default scope',hint:'Which scope a new SEO run starts on. This page audits exactly the URL and issues no crawl; Whole site discovers pages from the sitemap, falling back to same-host links. Still changeable per run.'},
-          {k:'maxPages',t:'num',bind:'s-max',min:1,max:1000,label:'Page ceiling (Whole site)',hint:'Safety stop, Whole site only. If the crawl reaches it the result says so — it never truncates silently.'}
+          {k:'maxPages',t:'num',bind:'s-max',min:1,max:1000,label:'Page ceiling (Whole site)',hint:'Safety stop, Whole site only. If the crawl reaches it the result says so — it never truncates silently.'},
+          {k:'checks',t:'seochecks',label:'Checks to run',hint:'Unticking a check leaves it out of the SEO score. The check still runs and still appears in the report — the same rule the rest of the app uses: a whole section off means it did not run, a single check off means it ran and was not counted. Duplicate titles and descriptions compare ACROSS pages, so on a This-page run they are not applicable and are held out of the score whatever is ticked here.'}
         ],
       audit:[
         {k:'maxPages',t:'num',bind:'a-max',min:1,max:500,label:'Max pages to crawl',hint:'1 = homepage only; higher follows the sitemap + internal links up to this cap. Sent to the scan as maxPages.'},
@@ -1530,6 +1535,20 @@ function appPage() {
     };
     var SCOPE_CAT=${JSON.stringify(SCOPE_CATALOG).replace(/</g, '\\u003c')};
     var SCOPE_EXCLUDED=[];        // ruleIds excluded from SCORING (the checks still run + still report)
+    // ---- SEO check catalogue (tab 4) --------------------------------------------------------------
+    // ONE source for the SEO check list. It used to be authored twice: as chips in the panel markup and
+    // as the ids seoExcluded() read back out of that markup. Now the modal renders from this and
+    // seoExcluded() maps from it, so a check cannot exist in one place and not the other.
+    // mp:1 = compares ACROSS pages, so it cannot mean anything on a This-page run.
+    var SEO_CAT=[
+      ['Indexing & canonical',[['indexability','Indexability (robots meta, x-robots)'],['canonical','Canonical tag'],['seo-index','Index directives'],['robots-txt','robots.txt'],['sitemap','XML sitemap'],['seo-hreflang','hreflang']]],
+      ['Titles & descriptions',[['title','Title tag'],['meta-description','Meta description'],['duplicate-title','Duplicate titles',1],['duplicate-description','Duplicate descriptions',1]]],
+      ['Structured data & social',[['schema','Schema.org / JSON-LD'],['social-meta','Open Graph / Twitter cards'],['favicon','Favicon']]],
+      ['Content & readability',[['seo-content','Content depth and readability'],['mobile-web','Mobile-friendliness'],['analytics','Analytics tag'],['privacy-links','Privacy / legal links']]]
+    ];
+    var SEO_OFF=[];               // check ids left OUT of the SEO score (they still run + still report)
+    function seoCatAll(){return SEO_CAT.reduce(function(a,g){return a.concat(g[1]);},[]);}
+    function seoIsMp(id){var c=seoCatAll().filter(function(x){return x[0]===id;})[0];return !!(c&&c[2]);}
     var UNBOUND={reports:{filter:'all',limit:60}};
     function sEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
     function clone(o){return JSON.parse(JSON.stringify(o));}
@@ -1538,12 +1557,18 @@ function appPage() {
     // read/write a field through its bound control — the control stays the truth
     function fGet(tool,f){
       if(f.t==='scope')return SCOPE_EXCLUDED.slice();
+      if(f.t==='seochecks')return SEO_OFF.slice();
       if(f.t==='vps'){var c=$(f.bind);if(!c)return [];return [].slice.call(c.querySelectorAll('input:checked')).map(function(i){return i.value;});}
       if(f.bind){var el=$(f.bind);if(!el)return null;return f.t==='bool'?el.checked:(f.t==='num'?(+el.value||0):el.value);}
       return UNBOUND[tool][f.k];
     }
     function fSet(tool,f,v){
       if(f.t==='scope'){SCOPE_EXCLUDED=Array.isArray(v)?v.slice():[];return;}
+      // Restoring a saved list drops ids this build no longer ships — same guard as the viewport matrix
+      // below, and for the same reason: a stale id would silently narrow the score with nothing on screen
+      // to show it. Unknown ids are dropped, not kept.
+      if(f.t==='seochecks'){var known={};seoCatAll().forEach(function(c){known[c[0]]=1;});
+        SEO_OFF=Array.isArray(v)?v.filter(function(x){return known[x];}):[];return;}
       if(f.t==='vps'){var c=$(f.bind);if(!c||!Array.isArray(v))return;
         // Matrix-migration guard (carried over from the old form-persistence block). A saved viewport
         // list is a set of WIDTHS and the device matrix has changed before (1200/480/430/380 retired,
@@ -1581,6 +1606,7 @@ function appPage() {
     function renderModal(){
       $('set-body').innerHTML=FIELDS[curTool].map(function(f){
         if(f.t==='scope')return '<div class="opt col"><div class="otx"><b>'+sEsc(f.label)+'</b><span>'+sEsc(f.hint)+'</span></div><div id="sc-host"></div></div>';
+        if(f.t==='seochecks')return '<div class="opt col"><div class="otx"><b>'+sEsc(f.label)+'</b><span>'+sEsc(f.hint)+'</span></div><div id="sq-host"></div></div>';
         if(f.t==='vps')return '<div class="opt col"><div class="otx"><b>'+sEsc(f.label)+'</b><span>'+sEsc(f.hint)+'</span></div><div class="chips" id="vp-host-'+f.k+'">'+
           vpsOpts(f.bind).map(function(o){return '<label class="chip"><input type="checkbox" value="'+sEsc(o.v)+'"'+(DRAFT[f.k].indexOf(o.v)>=0?' checked':'')+' onchange="setVps(\\''+f.k+'\\')">'+sEsc(o.label)+'</label>';}).join('')+'</div></div>';
         var ctl='';
@@ -1593,7 +1619,32 @@ function appPage() {
         return '<div class="opt"><div class="otx"><b>'+sEsc(f.label)+'</b><span>'+sEsc(f.hint)+'</span></div><div class="octl">'+ctl+'</div></div>';
       }).join('');
       if(FIELDS[curTool].some(function(f){return f.t==='scope';}))renderScope();
+      if(FIELDS[curTool].some(function(f){return f.t==='seochecks';}))renderSeoChecks();
     }
+    // ---- SEO check list: the same chips, now where every other tool keeps its settings ------------
+    function sqOn(id){return DRAFT.checks.indexOf(id)<0;}
+    function renderSeoChecks(){
+      var single=seoScope()==='page';
+      var all=seoCatAll(),on=all.filter(function(c){return sqOn(c[0])&&!(single&&c[2]);}).length;
+      var h='<div class="sc-tools"><button class="bt" onclick="sqAll(true)">Include all</button><button class="bt" onclick="sqAll(false)">Exclude all</button>'
+        + '<span class="sc-count'+(on<all.length?' part':'')+'" id="sq-count">scoring on <b>'+on+'</b> / '+all.length+' checks</span></div>';
+      h+='<div class="ckwrap">';   // the wrapper the panel used, so group spacing is unchanged
+      SEO_CAT.forEach(function(g){
+        h+='<div class="ckgrp"><b>'+sEsc(g[0])+'</b>'+g[1].map(function(c){
+          var na=single&&c[2];
+          return '<label class="chip'+(na?' off':'')+'"'+(na?' title="Compares across pages — not applicable on a This-page run"':'')+'>'
+            + '<input type="checkbox" value="'+sEsc(c[0])+'"'+(sqOn(c[0])&&!na?' checked':'')+(na?' disabled':'')
+            + ' onchange="sqCheck(\\''+c[0]+'\\',this.checked)">'+sEsc(c[1])
+            + (c[2]?'<span class="mpnote"> \\u00b7 needs 2+ pages</span>':'')+'</label>';
+        }).join('')+'</div>';
+      });
+      h+='</div>';                 // /.ckwrap
+      if(single)h+='<div class="sc-note">This-page scope: duplicate titles and descriptions compare ACROSS pages, so they are held out of the score for this run whatever is ticked. The server enforces the same thing, so a stale window cannot bank a pass nobody could have earned.</div>';
+      $('sq-host').innerHTML=h;
+    }
+    function sqSet(id,on){var i=DRAFT.checks.indexOf(id);if(on&&i>=0)DRAFT.checks.splice(i,1);if(!on&&i<0)DRAFT.checks.push(id);}
+    function sqCheck(id,on){sqSet(id,on);renderSeoChecks();}
+    function sqAll(on){seoCatAll().forEach(function(c){sqSet(c[0],on);});renderSeoChecks();}
     function setF(k,v){DRAFT[k]=v;}
     function setVps(k){var h=$('vp-host-'+k);DRAFT[k]=[].slice.call(h.querySelectorAll('input:checked')).map(function(i){return i.value;});}
     // ---- scope tree: suites that expand to their individual checks ----
