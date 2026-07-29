@@ -944,18 +944,19 @@ function appPage() {
          -retry/-pbar/-pfill/-status/-link/-frame/-ph vocabulary because stream(), setProg(),
          showCtl() and showReport() dereference them by prefix with no null guard. -->
     <section class="panel" id="p-seo">
-      <div class="tthead"><h2 class="tt">SEO</h2></div>
+      <div class="tthead"><h2 class="tt">SEO</h2><button class="gear" id="gear-seo" onclick="openSettings('seo')" title="SEO settings" aria-label="SEO settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div>
       <p class="sub">Titles, meta descriptions, canonicals, indexability, structured data, hreflang, robots.txt and sitemap — scored on their own. Site Audit covers the technical suites and no longer includes SEO, so neither score props up the other.</p>
       <div class="toolgrid">
         <div class="col-left"><div class="card">
-          <div class="cfg">
-            <div class="cfg-row"><label for="s-url">Site URL</label><input id="s-url" placeholder="https://example.com"></div>
+          <div class="cfg-split">
+            <label class="fld" style="min-width:0">Site URL<input id="s-url" type="text" placeholder="e.g. sgen.com" spellcheck="false"></label>
           </div>
           <!-- THE second decision, deliberately prominent and in the user's words. -->
           <div class="scopepick" id="s-scope" role="radiogroup" aria-label="Audit scope">
             <label class="scopeopt on"><input type="radio" name="s-scope" value="page" checked><b>This page</b><span>Audit exactly the URL above. No crawl.</span></label>
             <label class="scopeopt"><input type="radio" name="s-scope" value="site"><b>Whole site</b><span>Discover pages from the sitemap, falling back to same-host links.</span></label>
           </div>
+          <select id="s-scope-def" style="display:none"><option value="page">page</option><option value="site">site</option></select>
           <details class="adv" id="s-adv">
             <summary>Advanced — checks and safety ceiling</summary>
             <div class="cfg-row"><label for="s-max">Page ceiling</label><input id="s-max" type="number" min="1" max="1000" value="150"><span class="hint">Safety stop for Whole site. If it is reached the result says so.</span></div>
@@ -1198,6 +1199,12 @@ function appPage() {
       document.querySelectorAll('#s-scope .scopeopt').forEach(function(o){o.classList.toggle('on',o.querySelector('input').checked);});
       var mx=$('s-max'); if(mx)mx.disabled=single;}
     document.addEventListener('change',function(e){if(e.target&&e.target.name==='s-scope')seoSyncScope();});
+    // Seed the per-run scope from the saved default, then sync the dependent controls once.
+    function seoSeedScope(){var d=$('s-scope-def');if(!d)return;
+      var want=d.value==='site'?'site':'page';
+      var r=document.querySelector('#s-scope input[value="'+want+'"]');if(r)r.checked=true;
+      seoSyncScope();}
+    try{seoSeedScope();}catch(e){}
     // Unticked checks -> the rule ids they own -> excludeRules.
     function seoExcluded(){var out=[];
       document.querySelectorAll('#s-checks input[type=checkbox]').forEach(function(cb){
@@ -1231,15 +1238,19 @@ function appPage() {
     function seoLead(m){var host=$('s-lead');if(!host)return;
       fetch('/report/'+m.id+'/report.json').then(function(r){return r.json()}).then(function(d){
         var suite=(d.suites||[]).filter(function(x){return x.key==='seo'})[0];if(!suite)return;
-        var by={};(suite.checks||[]).forEach(function(c){by[c.check]=c;});
+        // ruleId -> check, inverted from the map the client already has.
+        var R2C={};Object.keys(SEO_CHECK_RULES).forEach(function(ck){(SEO_CHECK_RULES[ck]||[]).forEach(function(rid){R2C[rid]=ck;});});
+        var by={};(suite.checks||[]).forEach(function(c){var ck=R2C[c.ruleId];if(ck&&!by[ck])by[ck]=c;});
         var na={};(m.notApplicable||[]).forEach(function(k){na[k]=1;});
         var html='<div class="seolead">';
         SEO_LEAD.forEach(function(g){
-          var rows=g[1].map(function(id){var c=by[id];if(!c)return '';
+          var rows=g[1].map(function(id){var c=by[id];
+            if(!c&&!na[id])return '<div class="seorow"><span class="st na">NOT RUN</span><span class="k">'+id+'</span><span class="v">This check produced no row in this run.</span></div>';
+            if(!c)c={};
             var st=na[id]?'na':(c.status==='pass'?'pass':c.status==='fail'?'fail':c.status==='warn'?'warn':'na');
             var lbl=na[id]?'N/A':(c.status||'').toUpperCase();
             var val=na[id]?'Not applicable — compares across pages, and this run audited one page.'
-              :(c.detail||c.value||c.label||c.title||'');
+              :(c.detail||c.name||'');
             return '<div class="seorow"><span class="st '+st+'">'+lbl+'</span><span class="k">'+id+'</span><span class="v">'+String(val).replace(/[<>&]/g,function(ch){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]})+'</span></div>';}).join('');
           if(rows)html+='<div class="seocard"><h4>'+g[0]+'</h4>'+rows+'</div>';});
         html+='</div>';host.innerHTML=html;
@@ -1456,10 +1467,17 @@ function appPage() {
       audit:{name:'Site Audit',ic:'\\u2713',sub:'CRAWL \\u00b7 RENDER \\u00b7 SCORE'},
       visual:{name:'Visual Comparison',ic:'\\u21c4',sub:'REFERENCE vs TARGET'},
       cert:{name:'Post-Deployment Check',ic:'\\u2605',sub:'DID EVERYTHING MAKE IT ACROSS'},
-      reports:{name:'Reports',ic:'\\u25a4',sub:'HISTORY \\u00b7 PREVIEW \\u00b7 EXPORT'}
+      seo:{name:'SEO',ic:'\\u2315',sub:'SCOPE \\u00b7 CHECKS \\u00b7 SCORE'},
+        reports:{name:'Reports',ic:'\\u25a4',sub:'HISTORY \\u00b7 PREVIEW \\u00b7 EXPORT'}
     };
     // t: bool|num|sel|vps|scope · bind: the id of the live control this field is a view of.
     var FIELDS={
+        // Tab 4. DEFAULTS only — the visible scope control stays the PER-RUN choice and is seeded
+        // from this on load, the same default-vs-per-run split the rest of the app already uses.
+        seo:[
+          {k:'scope',t:'sel',bind:'s-scope-def',opts:[['page','This page'],['site','Whole site']],label:'Default scope',hint:'Which scope a new SEO run starts on. This page audits exactly the URL and issues no crawl; Whole site discovers pages from the sitemap, falling back to same-host links. Still changeable per run.'},
+          {k:'maxPages',t:'num',bind:'s-max',min:1,max:1000,label:'Page ceiling (Whole site)',hint:'Safety stop, Whole site only. If the crawl reaches it the result says so — it never truncates silently.'}
+        ],
       audit:[
         {k:'maxPages',t:'num',bind:'a-max',min:1,max:500,label:'Max pages to crawl',hint:'1 = homepage only; higher follows the sitemap + internal links up to this cap. Sent to the scan as maxPages.'},
         {k:'render',t:'bool',bind:'a-render',label:'Browser render pass',hint:'Loads each page in a real headless browser for axe-core accessibility, Core Web Vitals, full-page screenshots and the Firefox + WebKit pass. Off = a faster static-only scan that cannot see any of those.'},
