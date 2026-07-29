@@ -29,7 +29,15 @@ module.exports = {
   // FALL on sites where rules did not run. Measured across the stored corpus: 9/9 runs were inflated,
   // mean -8.1, median -10. Minor, not major: the score's shape, model tag and every other stream are
   // unchanged — only the number is corrected.
-  ENGINE_VERSION: '2.4.0',   // ADR-0011 score declaration integrity (was 2.3.0: V2 Phase 1 contract + providers + 32 rules)
+  // 2.5.0 — CONTENT SURFACE + ROW IDENTITY. Two additive behavioural changes, no scoring change:
+  //   • the SEO tool now runs the Copy Review advisory pass (COPY-001..004, WEIGHTS.copy = 0, every row
+  //     status 'manual'), so an SEO report says something about the WORDS. Score-neutral by two
+  //     mechanisms and asserted as such by recomputing with the suite removed (seo-split.test.js).
+  //   • every static row now names the CHECK that produced it. A passing row carries ruleId null by
+  //     design, so a clean check was anonymous — and the SEO tool's graded summary printed NOT RUN for
+  //     all 8 of its PASSING checks on sgen.com. Minor, not major: nothing is rescored, and identity
+  //     (WP-001) is unmoved — `check` names the check, `ruleId` still names the rule.
+  ENGINE_VERSION: '2.5.0',   // content surface + row check identity (was 2.4.0: ADR-0011 score declaration integrity)
   REPORT_VERSION: '1.4.0',   // merged findings list (Issues + per-section detail -> one filtered, section-grouped table)
   REGISTRY_VERSION,          // rule metadata version (owned by the registry)
 

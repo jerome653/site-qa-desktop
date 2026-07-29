@@ -1,6 +1,6 @@
 {
-  "packageVersion": "4.10.0",
-  "engineVersion": "2.4.0",
+  "packageVersion": "4.11.0",
+  "engineVersion": "2.5.0",
   "registryVersion": "1.13.0",
   "contractVersion": "1.0",
   "reportVersion": "1.4.0",
@@ -12,14 +12,14 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "Fixes a regression in 4.9.0: the SEO tool ran the audit but showed no graded result — only a one-line status. The graded summary now renders inline (indexability and canonical first, then titles and descriptions with their values, then structured data), above the full report. The SEO tool also gets the same URL field and Settings gear as every other tab, with Default scope and Page ceiling as saved defaults. No scoring change: no rule was added, removed or rescored, so a score from 4.10.0 is directly comparable to one from 4.9.0.",
+  "release": "Makes the SEO report readable, and stops it lying in two directions. (1) The report body rendered as raw JSON text and fragments of the audited site's own DOM: the SEO tool embedded every audited page's full HTML in the report's data island, and the first </script> in that HTML closed the tag — so the issue list was empty too. The payload is now escaped so no page content can break it, and the SEO report no longer carries page source at all (measured on sgen.com: 31.6 MB of HTML, previously written twice per run). (2) The graded summary printed NOT RUN for every check that PASSED — 8 of them on sgen.com, including canonical and indexability — because a passing row carried no identity. Every check now names itself, so clean reads as clean. New: the SEO report has a Content & readability section (thin content and readability, plus Copy Review flags for assistant boilerplate, unfilled placeholders, AI-tell phrasing and paragraph rhythm). Also carries the 4.10.x SEO false-positive fixes: redirects and 404s are no longer audited as pages (26 bogus 'Missing title' and 1 bogus NOINDEX on sgen.com), robots.txt is parsed by User-agent group so an AI-training opt-out is not a CRITICAL, and an SEO-only run no longer signs itself '0/92 pages rendered'. No scoring change: no rule was added, removed or rescored, and the new Copy Review rows carry weight 0 and status manual — so a score from 4.11.0 is directly comparable to one from 4.10.0.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
     "STB-004 broken fonts",
     "near-duplicate content"
   ],
-  "generatedAt": "2026-07-29T08:30:49.717Z",
-  "gitTag": "v4.10.0",
-  "buildBaseCommit": "72bc14e"
+  "generatedAt": "2026-07-29T21:35:00.000Z",
+  "gitTag": "v4.11.0",
+  "buildBaseCommit": "15a00b7"
 }
