@@ -1,5 +1,5 @@
 {
-  "packageVersion": "4.8.0",
+  "packageVersion": "4.9.0",
   "engineVersion": "2.4.0",
   "registryVersion": "1.13.0",
   "contractVersion": "1.0",
@@ -12,14 +12,14 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "SEO is now its own tool. Site Audit is technical only and its Quality Score covers NINE suites; SEO has its own tool, its own score and its own findings; Reports moves to tab 5. A Site Audit score from 4.8.0 is NOT comparable to one from 4.7.0 — SEO left the denominator, so the number answers a different question. Do not read a change as an improvement.",
+  "release": "SEO tool: asks for SCOPE (This page / Whole site) instead of a raw page count; 17 SEO checks as toggles; results lead with indexability and canonical, then titles and descriptions with their values, then structured data. A single-page run no longer reports duplicate-title/duplicate-description as passing — they are declared notApplicable, because comparing across pages is impossible on one page. SITE AUDIT behaviour change: unticking Links now genuinely skips the link crawl instead of running it and discarding the result, so Site Audit is faster for anyone who de-scopes Links.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
     "STB-004 broken fonts",
     "near-duplicate content"
   ],
-  "generatedAt": "2026-07-29T01:33:49.157Z",
-  "gitTag": "v4.8.0",
-  "buildBaseCommit": "730ba6d"
+  "generatedAt": "2026-07-29T07:25:13.972Z",
+  "gitTag": "v4.9.0",
+  "buildBaseCommit": "0e152ee"
 }
