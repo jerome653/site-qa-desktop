@@ -37,8 +37,15 @@ module.exports = {
   //     design, so a clean check was anonymous — and the SEO tool's graded summary printed NOT RUN for
   //     all 8 of its PASSING checks on sgen.com. Minor, not major: nothing is rescored, and identity
   //     (WP-001) is unmoved — `check` names the check, `ruleId` still names the rule.
-  ENGINE_VERSION: '2.5.0',   // content surface + row check identity (was 2.4.0: ADR-0011 score declaration integrity)
-  REPORT_VERSION: '1.4.0',   // merged findings list (Issues + per-section detail -> one filtered, section-grouped table)
+  // 3.0.0 — MAJOR, and the reason is a SCORING SEMANTICS change, not a feature: a run that never read a
+  // page no longer publishes a number. score and quality.overall come back null and the verdict is
+  // COULD NOT AUDIT. Measured before the change on a fixture answering 403 to every path: verdict NEEDS
+  // ATTENTION, score 50%, QUALITY 71, htmlPages 0, 87 of 97 rules never evaluated, and the words
+  // "blocked" and "unreachable" appearing zero times in the report. A site the tool never saw scored 71.
+  // Anything comparing scores across this boundary must know that a previously-numeric result can now be
+  // null — which is exactly what a major version is for.
+  ENGINE_VERSION: '3.0.0',   // reachability diagnosis: a blind run publishes no score (was 2.5.0)
+  REPORT_VERSION: '1.5.0',   // + reachability panel above the verdict, and a "not scored" ring state
   REGISTRY_VERSION,          // rule metadata version (owned by the registry)
 
   // ── Acquisition-boundary streams (ADR-0004 §D5/§D6) ────────────────────────────────────────────

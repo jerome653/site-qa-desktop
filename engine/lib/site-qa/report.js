@@ -49,6 +49,28 @@ function renderFooter(data) {
 }
 function rel(from, f) { try { return path.relative(from, f).replace(/\\/g, '/'); } catch (e) { return f; } }
 
+// ── "DID WE SEE THE SITE?" — FIRST THING ON THE PAGE ─────────────────────────────────────────────
+// A run that never read a page used to look like an ordinary result: NEEDS ATTENTION, score 50%,
+// quality 71, and not one word about the 403 that caused it. The diagnosis therefore goes ABOVE the
+// verdict card, not into the findings list — by the time a reader reaches the findings they have already
+// believed the number. Absent field (a healthy run, or any report written before this existed) renders
+// nothing, so this cannot change an existing report.
+function reachPanel(data) {
+  const r = data && data.reachability;
+  if (!r) return '';
+  const hard = r.audited === false;
+  const label = hard ? 'The site was never read — there is nothing to score'
+    : r.ok === false ? 'What was fetched looks like a status page, not the site'
+    : 'Some pages fetched look like status pages';
+  return `<section class="reachpanel${hard ? ' hard' : ''}">
+    <div class="rp-h"><span class="rp-ic">${hard ? '&#9888;' : '&#9873;'}</span><b>${esc(label)}</b><code class="rp-r">${esc(r.reason)}</code></div>
+    <p class="rp-m">${esc(r.message)}</p>
+    ${r.action ? `<p class="rp-a"><b>What to do:</b> ${esc(r.action)}</p>` : ''}
+    <div class="rp-e">${esc(r.evidence ? `fetched ${r.evidence.pagesFetched} response(s) · ${r.evidence.htmlPages} readable page(s) · statuses seen: ${(r.evidence.statuses || []).join(', ') || 'none'}${(r.evidence.errorCodes || []).length ? ' · codes: ' + r.evidence.errorCodes.join(', ') : ''}` : '')}</div>
+    ${hard ? '<div class="rp-n">Every section below reads NOT VERIFIED because no page was ever available to check. That is a coverage fact, not a clean result — and it is why no score is shown.</div>' : ''}
+  </section>`;
+}
+
 const STYLE = `
 :root,:root[data-theme="light"],:root[data-theme="dark"]{color-scheme:dark;--ground:#000000;--surface:#0B0A09;--surface-2:#131110;--line:#221F1B;--line-strong:#332E27;--ink:#F3EEE6;--ink-soft:#B0A796;--ink-faint:#726A5D;--brand:#E01F26;--brand-ink:#E01F26;--brand-solid:#C8181C;--pass:#2FA968;--pass-bg:#07160E;--pass-line:#12351F;--warn:#D89B26;--warn-bg:#1A1305;--warn-line:#3D2E0C;--fail:#E5484D;--fail-bg:#1C0A0B;--fail-line:#3F1416;--man:#4A4A4A;--man-bg:#131110;--man-line:#242424;--shadow:0 1px 2px rgba(0,0,0,.55),0 12px 34px rgba(0,0,0,.5);--shadow-sm:0 1px 2px rgba(0,0,0,.4);--radius:14px;--sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code","SFMono-Regular",Menlo,Consolas,monospace;--good:#3fb950;--good-bg:rgba(63,185,80,.12);--good-line:rgba(63,185,80,.35);--bad:#e5484d;--bad-bg:rgba(229,72,77,.12);--bad-line:rgba(229,72,77,.35);--amber:#d29922;--amber-bg:rgba(210,153,34,.12);--amber-line:rgba(210,153,34,.35);}
 *{box-sizing:border-box;scrollbar-width:none;-ms-overflow-style:none}::-webkit-scrollbar{display:none;width:0;height:0}body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -64,6 +86,19 @@ const STYLE = `
 .target .glob{width:7px;height:7px;border-radius:50%;flex:none}.target .u{font-family:var(--mono);font-size:12.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rerun{flex:none;font-family:var(--mono);font-size:11px;color:var(--ink-faint)}.rerun code{background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:2px 7px;color:var(--ink-soft)}
 .wrap{max-width:none;margin:0;padding:26px clamp(22px,3vw,64px) 72px}
+/* Reachability panel. Sits above the verdict because a reader who reaches the findings has already
+   believed the number. The "hard" variant = no page was ever read, so there is no score at all.
+   (No backticks in this file's CSS or client comments — they live inside template literals.) */
+.reachpanel{border:1px solid var(--warn);border-left:4px solid var(--warn);border-radius:12px;background:var(--surface);padding:14px 18px;margin:0 0 16px}
+.reachpanel.hard{border-color:var(--fail);border-left-color:var(--fail)}
+.rp-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.rp-h b{font-size:14.5px;color:var(--ink)}
+.rp-ic{font-size:16px;color:var(--warn)}.reachpanel.hard .rp-ic{color:var(--fail)}
+.rp-r{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+.rp-m{margin:8px 0 0;font-size:13px;color:var(--ink-soft);line-height:1.6;max-width:88ch}
+.rp-a{margin:7px 0 0;font-size:12.5px;color:var(--ink-soft);line-height:1.6;max-width:88ch}
+.rp-e{margin-top:9px;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)}
+.rp-n{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-faint);line-height:1.55}
 .summary{display:grid;grid-template-columns:minmax(0,340px) 1fr;gap:16px;align-items:stretch}
 .verdict{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;display:flex;gap:18px;align-items:center;position:relative;overflow:hidden}
 .verdict::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--vc,var(--warn))}
@@ -837,7 +872,11 @@ window.lensGo=function(name,btn){
   var lt=document.querySelector('.lens-tabs');if(lt)window.scrollTo({top:lt.getBoundingClientRect().top+window.scrollY-70,behavior:'smooth'});
 };
 
-(function(){var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;var hasQ=D.quality&&D.quality.overall!=null;var val=hasQ?D.quality.overall:D.score;var suffix=hasQ?'':'%';var html='';if(hasQ){var qlen=Math.max(0,Math.min(100,val))/100*C;html='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+gcol(val)+'" stroke-dasharray="'+qlen+' '+(C-qlen)+'"></circle>';}else{var tot=D.tally.pass+D.tally.warn+D.tally.fail;var segs=[['var(--pass)',D.tally.pass],['var(--warn)',D.tally.warn],['var(--fail)',D.tally.fail]];var acc=0;segs.forEach(function(s){var len=tot?s[1]/tot*C:0;html+='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+s[0]+'" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="'+(-acc)+'"></circle>';acc+=len;});}document.getElementById('ringsegs').innerHTML=html;var el=document.getElementById('score');if(el)el.style.color=gcol(val);if(reduce){if(el)el.textContent=val+suffix;return;}var n=0,step=Math.max(1,Math.round(val/28));var iv=setInterval(function(){n+=step;if(n>=val){n=val;clearInterval(iv);}if(el)el.textContent=n+suffix;},22);})();
+(function(){var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;var hasQ=D.quality&&D.quality.overall!=null;var val=hasQ?D.quality.overall:D.score;
+/* NO NUMBER WHEN NOTHING WAS MEASURED. A blind run (the site was never read) carries score null and
+   quality.overall null. Counting up to 0% would read as "this site scored zero", which is a
+   measurement — the one thing this run cannot make. Show a dash and stop. */
+if(val==null){var e0=document.getElementById('score');if(e0){e0.textContent='\\u2014';e0.style.color='var(--fail)';}var sm=document.querySelector('.ring .sm');if(sm)sm.textContent='not scored';return;}var suffix=hasQ?'':'%';var html='';if(hasQ){var qlen=Math.max(0,Math.min(100,val))/100*C;html='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+gcol(val)+'" stroke-dasharray="'+qlen+' '+(C-qlen)+'"></circle>';}else{var tot=D.tally.pass+D.tally.warn+D.tally.fail;var segs=[['var(--pass)',D.tally.pass],['var(--warn)',D.tally.warn],['var(--fail)',D.tally.fail]];var acc=0;segs.forEach(function(s){var len=tot?s[1]/tot*C:0;html+='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+s[0]+'" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="'+(-acc)+'"></circle>';acc+=len;});}document.getElementById('ringsegs').innerHTML=html;var el=document.getElementById('score');if(el)el.style.color=gcol(val);if(reduce){if(el)el.textContent=val+suffix;return;}var n=0,step=Math.max(1,Math.round(val/28));var iv=setInterval(function(){n+=step;if(n>=val){n=val;clearInterval(iv);}if(el)el.textContent=n+suffix;},22);})();
 
 document.querySelectorAll('[data-count]').forEach(function(el){var target=+el.getAttribute('data-count');if(matchMedia('(prefers-reduced-motion:reduce)').matches){el.textContent=target;return;}var n=0,step=Math.max(1,Math.round(target/26));var iv=setInterval(function(){n+=step;if(n>=target){n=target;clearInterval(iv);}el.textContent=n;},24);});
 
@@ -1032,6 +1071,7 @@ function renderReport(data, outDir, opts = {}) {
   <div class="rerun">re-run · <code>sgen qa-site ${esc(data.target)}</code></div>
 </div></div>
 <div class="wrap">
+  ${reachPanel(data)}
   ${opts.scopePanel || ''}
   <section class="summary">
     <div class="verdict" style="--vc:${vmap[0]};--vcb:${vmap[1]};--vcl:${vmap[2]}">

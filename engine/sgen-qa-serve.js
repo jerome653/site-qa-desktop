@@ -1187,7 +1187,12 @@ function appPage() {
         // operator switched it off minutes ago and will still be told, because this line is the last
         // thing read before the report is forwarded to someone who did NOT switch it off.
         if(m.notRunSuites&&m.notRunSuites.length)sc+=' · <b style="color:var(--fail)">NOT RUN: '+m.notRunSuites.join(', ')+'</b>';
-        $('a-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · pass '+m.tally.pass+' / warn '+m.tally.warn+' / fail '+m.tally.fail+' / manual '+m.tally.manual+' · saved to history'+sc;
+        // NOT SCORED IS NOT A SCORE. A run that never read a page carries score null, and this line
+        // concatenated it: "score null%" — a number-shaped nothing, in the one place the operator reads
+        // before forwarding the report. The engine refuses to score a site it did not see; so does this.
+        if(m.score==null){var rm=(m.reach&&m.reach.message)?' — '+m.reach.message:'';
+          $('a-status').innerHTML='Done — <b style="color:var(--fail)">'+(m.verdict||'COULD NOT AUDIT')+'</b> · not scored'+rm+' · saved to history';}
+        else $('a-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · pass '+m.tally.pass+' / warn '+m.tally.warn+' / fail '+m.tally.fail+' / manual '+m.tally.manual+' · saved to history'+sc;
         var cmp='';if(m.comparison)cmp=' · <a href="/compare/'+m.id+'" target="_blank">open comparison ↗</a>';$('a-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full report</a>'+cmp;
         showReport('a','/report/'+m.id,'report');});}
 
@@ -1237,7 +1242,11 @@ function appPage() {
         var cap=m.capped?' · <b style="color:var(--warn)">STOPPED AT '+m.ceiling+' PAGES — '+m.notReached+' more were listed and not audited</b>':'';
         var na=(m.notApplicable&&m.notApplicable.length)?' · <b style="color:var(--ink-faint)">not applicable on one page: '+m.notApplicable.join(', ')+'</b>':'';
         var xc=(m.checksExcluded?' · '+m.checksExcluded+' rule(s) left out of the score by your check selection':'');
-        $('s-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · <b>scope: '+sc+'</b>'+cap+na+xc+' · saved to history';
+        // Same rule as the Site Audit line above: an SEO run against an origin that served nothing
+        // readable has no score to report, and must not print one.
+        if(m.score==null){var rm2=(m.reach&&m.reach.message)?' — '+m.reach.message:'';
+          $('s-status').innerHTML='Done — <b style="color:var(--fail)">'+(m.verdict||'COULD NOT AUDIT')+'</b> · not scored'+rm2+' · saved to history';}
+        else $('s-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · <b>scope: '+sc+'</b>'+cap+na+xc+' · saved to history';
         $('s-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full SEO report</a>';
         seoLead(m);
         showReport('s','/report/'+m.id,'report');});}
@@ -2346,7 +2355,12 @@ async function apiRun(req, res, mode = 'audit') {
       // the scope tree, every never-run check went back to banking its full registry risk as resolved
       // and the score climbed. Scope must narrow the question, never restore the inflation.
       const evaluatedRules = (data.coverage && Array.isArray(data.coverage.evaluatedRules)) ? data.coverage.evaluatedRules : null;
-      data.quality = computeQuality(data.suites, evaluatedRules ? { excludeRules, evaluatedRules } : { excludeRules });
+      // NOT ON A BLIND RUN. Site Audit always skips the seo suite, so this branch always executes — which
+      // means it also always overwrote the not-measured quality audit.js publishes when the crawl never
+      // read a page. Measured on a 403-only origin: audit.js said null, this line said 70. Scope narrows
+      // the question; it cannot answer a question nobody could answer.
+      const blindRun = !!(data.reachability && data.reachability.audited === false);
+      if (!blindRun) data.quality = computeQuality(data.suites, evaluatedRules ? { excludeRules, evaluatedRules } : { excludeRules });
       const facts = scopeFacts(data, excludeRules, skipSuites);
       scopePanel = buildScopePanel(facts);
       // Recorded in report.json so the narrowing is auditable after the fact, not just visible.
@@ -2380,6 +2394,10 @@ async function apiRun(req, res, mode = 'audit') {
     };
     emit({ t: 'done', ok: true, id, mode, ...seoFacts, verdict: data.verdict, score: data.score, tally: data.tally, comparison, cmp,
       quality: data.quality ? data.quality.overall : null,
+      // The diagnosis travels with the result. Without it the app's status line — the FIRST thing read,
+      // and often the only thing, since the report opens in a second pane — could say the run produced
+      // no score but not why. Absent on a healthy run, so nothing changes there.
+      reach: data.reachability ? { audited: data.reachability.audited, reason: data.reachability.reason, message: data.reachability.message } : null,
       scopedOut: (excludeRules.length || 0) + SCOPE_CATALOG.rules.filter((r) => skipSet.has(r.suite)).length,
       notRunSuites: SCOPE_CATALOG.suites.filter((s) => skipSet.has(s.key)).map((s) => s.name),
       scorableTotal: SCOPE_CATALOG.rules.length }); res.end();

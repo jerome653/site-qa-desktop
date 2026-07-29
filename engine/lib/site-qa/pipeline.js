@@ -174,7 +174,25 @@ function applyAdvisory(result, opts = {}) {
     throw new Error('pipeline: refusing to replace a coverage-declared Quality Score with an undeclared one — the declaration was lost in transport (ADR-0011). This is the defect that inflated every shipped score; it must never regress silently.');
   }
 
+  // ── A NOT-MEASURED RESULT MUST NOT BECOME A MEASURED ONE ────────────────────────────────────────
+  // audit.js publishes score null / quality.overall null / verdict COULD NOT AUDIT when the crawl never
+  // read a page (see reachability.js). rescore() above knows nothing about that and happily computes a
+  // number from the handful of site-level checks that run without a page — measured on a 403-only
+  // origin: the honest null came back out of here as 70. Exactly the ADR-0011 defect, one layer up:
+  // the declaration was not lost, the NULL was.
+  const blind = !!(result.reachability && result.reachability.audited === false);
   const merged = { ...result, suites, ...scored, ...(coverage ? { coverage } : {}) };
+  if (blind) {
+    merged.quality = result.quality;      // the not-measured object audit.js built
+    merged.score = null;
+    merged.verdict = 'COULD NOT AUDIT';
+    merged.ready = false;
+  }
+  // The guard, in the same spirit as the declaration guard above: state the invariant rather than trust
+  // that no future caller re-derives these three fields.
+  if (blind && (merged.score != null || (merged.quality && merged.quality.overall != null))) {
+    throw new Error('pipeline: refusing to publish a score for a run that never read a page — "not measured" must never be replaced by a number (see reachability.js).');
+  }
   delete merged.pages; // don't persist raw HTML into the immutable record
   return merged;
 }

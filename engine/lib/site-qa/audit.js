@@ -12,6 +12,7 @@ const { STATIC_CHECKS, buildCtx } = require('../migration-qa/checks-static');
 const { renderPass, VIEWPORTS } = require('../migration-qa/checks-render');
 const { tlsCheck } = require('./tls-check');
 const { crossBrowser } = require('./cross-browser');
+const { diagnoseReachability } = require('./reachability');
 const { compute: computeQuality } = require('./score');
 const { compute: computeReadiness } = require('./readiness');
 const { projectFindings } = require('./lib/report-contract');
@@ -596,7 +597,15 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   // gallery and per-page evidence that the rest of the report reads, so switching off (say) Responsive
   // must not blank the evidence every other section links to.
   let xbrowser = [];
-  if (render && !isSkipped('crossbrowser')) { try { xbrowser = await crossBrowser(url, { screensDir, log }); } catch (e) { xbrowser = []; } }
+  // NEVER CROSS-BROWSER AN ERROR PAGE. crossBrowser() loads the URL directly rather than reading
+  // htmlPages, so on an origin that serves 403 to everything it dutifully rendered the block page in
+  // Firefox and WebKit and scored it: measured 1 pass + 1 warn, with the 403 screenshotted and shown in
+  // the report's cross-browser cards as though it were the site. Two engines agreeing about a 403 is not
+  // a compatibility result. With no readable page the suite measures nothing and says so (the
+  // recordCoverage call below already turns an empty xbrowser into a not-verified row).
+  const originAuditable = htmlPages.length > 0;
+  if (render && originAuditable && !isSkipped('crossbrowser')) { try { xbrowser = await crossBrowser(url, { screensDir, log }); } catch (e) { xbrowser = []; } }
+  else if (render && !originAuditable) log('Cross-browser skipped: no readable page was fetched, so there is nothing to compare across engines.');
 
   // 8) og:image + favicon actually LOAD (#3) — HEAD the declared URLs from the first HTML page
   let assetLoad = null;
@@ -889,9 +898,21 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   });
   const tot = suites.reduce((a, s) => { a.pass += s.pass; a.warn += s.warn; a.fail += s.fail; a.manual += s.manual; a.notRun += s.notRun; return a; }, { pass: 0, warn: 0, fail: 0, manual: 0, notRun: 0 });
   const graded = tot.pass + tot.warn + tot.fail;
-  const score = graded ? Math.round(tot.pass / graded * 100) : 0;
-  const verdict = tot.fail > 0 ? 'NEEDS ATTENTION' : (tot.warn > 0 ? 'PASSED WITH WARNINGS' : 'ALL PASSING');
-  const ready = tot.fail === 0;
+  // ── DID WE SEE THE SITE? ────────────────────────────────────────────────────────────────────────
+  // Computed BEFORE the verdict, because it can veto it. Measured on a fixture answering 403 to every
+  // path (2026-07-30): verdict NEEDS ATTENTION, score 50%, QUALITY 71, htmlPages 0, 87 of 97 rules never
+  // evaluated, and the words "blocked" and "unreachable" appearing ZERO times in the whole report. A
+  // site the tool never saw scored 71. With nothing listening at all the same run reported quality 0 —
+  // also a number, also about nothing, and indistinguishable from a genuinely terrible site.
+  const reachability = diagnoseReachability({ pages: crawl.pages, htmlPages, target: url });
+  // `audited: false` means NO page was ever readable. There is nothing to score, so nothing is scored:
+  // a null says "not measured", where any number says "measured, and this is the result". This is the
+  // ADR-0011 law applied to the whole run instead of to one rule.
+  const blind = !!(reachability && reachability.audited === false);
+  const score = blind ? null : (graded ? Math.round(tot.pass / graded * 100) : 0);
+  const verdict = blind ? 'COULD NOT AUDIT' : (tot.fail > 0 ? 'NEEDS ATTENTION' : (tot.warn > 0 ? 'PASSED WITH WARNINGS' : 'ALL PASSING'));
+  // Launch readiness is a claim about the SITE. On a blind run it is unknown, and unknown is not ready.
+  const ready = blind ? false : tot.fail === 0;
   // THE SEAM. The evaluation ledger is built HERE, before scoring, because computeQuality() needs it:
   // score.js builds each suite's denominator from the REGISTRY (every rule that COULD fire) while the
   // numerator only accrues from rows that actually ran — so a check that does not run is subtracted from
@@ -909,7 +930,12 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   const evaluatedRules = new Set(), notEvaluatedRules = new Set();
   for (const c of coverageChecks) for (const r of (c.ruleIds || [])) (c.verified ? evaluatedRules : notEvaluatedRules).add(r);
   for (const r of evaluatedRules) notEvaluatedRules.delete(r);
-  const quality = computeQuality(suites, { evaluatedRules: [...evaluatedRules] }); // SGEN Quality Score, scored over what was ACTUALLY evaluated
+  // A blind run publishes NO Quality Score. score.js would happily compute one from the handful of
+  // site-level checks that can run without a page (measured: 71 from 10 of 97 rules), and that number
+  // is worse than useless — it is a confident answer to a question nobody could have answered.
+  const quality = blind
+    ? { overall: null, model: 'sgen-quality-v2', evaluationDeclared: true, notMeasured: true, categories: [], reason: reachability.reason }
+    : computeQuality(suites, { evaluatedRules: [...evaluatedRules] }); // scored over what ACTUALLY ran
   const readiness = computeReadiness(suites); // launch-readiness veto layer (additive; tier-1 rules gate)
   const generated = new Date().toISOString();
   // Stage-2 single projection point: findings become canonical contract objects ONCE. Every finding-level
@@ -964,6 +990,9 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     ...(skipped.size ? { skipped: { model: 'operator-skip-v1', suites: [...skipped], names: SUITES.filter(s => skipped.has(s.key)).map(s => s.name) } } : {}),
     crawl: { pages: crawl.pages.length, htmlPages: htmlPages.length, sitemapCount: crawl.sitemapCount, linkFollowed: crawl.linkFollowed, capped: crawl.capped, maxPages },
     pageCoverage: buildPageCoverage(crawl, htmlPages),
+    // Present ONLY when there is something to say, so a healthy run's output is unchanged and an older
+    // stored report (which has no such field) is still valid — absence means "the site was seen".
+    ...(reachability ? { reachability } : {}),
     render: { rendered: renderRes.rendered, total: renderRes.total, viewports: renderRes.viewports || [], error: renderRes.error || null },
     links: { checked: links.totalInternal + links.totalExternal, broken: links.brokenInternal.length + links.brokenExternal.length, brokenInternal: links.brokenInternal.length, brokenExternal: links.brokenExternal.length, chains: links.chains.length },
     suites, shots: renderRes.shots || {}, consent: renderRes.consentByPage || {},

@@ -145,6 +145,10 @@ const SUITES = [
   // suite and the split cannot buy points), the SEO tool runs the seo suite alone, and the two are
   // complementary — every scored suite covered exactly once across the product.
   'seo-split.test.js',
+  // Did we see the site? A 403-only origin used to report quality 71 with the word "blocked" appearing
+  // nowhere, and cross-browser scored the block page. This asserts the cause is NAMED and that a run
+  // which read nothing publishes no number — ADR-0011's law applied to the whole run.
+  'reachability.test.js',
 ];
 
 const env = Object.assign({}, process.env, {

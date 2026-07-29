@@ -12,6 +12,7 @@ const path = require('path');
 const { chromium } = require('playwright');
 let sharp = null; try { sharp = require('sharp'); } catch (e) { sharp = null; }
 const { discoverPages } = require('../migration-qa/crawl');
+const { explainUnreachable } = require('./reachability');   // the shared unreachable-cause wording
 const { stableCapture } = require('./capture');
 const { withDeadline } = require('./deadline');
 // Same class of hang as the Site Audit's cross-browser step (see deadline.js): page.evaluate and
@@ -204,36 +205,12 @@ function pairByPath(aPages, bPages, urlMap) {
 // no I/O — unit-testable, and additive: an existing caller that ignores the field is unaffected.
 function diagnoseEmpty({ aHtml = [], bHtml = [], refStatuses = [], candStatuses = [], refErrors = [], candErrors = [], pairs = [] } = {}) {
   if (pairs.length > 0) return null;
-  // one wording rule, applied to whichever side came back empty (site = the noun, urlNoun = the URL label)
-  const explain = (statuses, errors, site, urlNoun) => {
-    const blocked = statuses.find(s => s === 401 || s === 403);
-    if (blocked != null) return `The ${site} blocked this scanner (HTTP ${blocked}). It is likely blocking this scanner's IP — ask the site owner to allowlist it, or point at a source this tool can reach.`;
-    if (statuses.includes(0) || statuses.length === 0) {
-      // Splitting these four apart matters. The old single message read "DNS or connection failure …
-      // check the URL is correct", which blames the ADDRESS for what is usually a ROUTE — and cost a
-      // real investigation: a reference site that resolved fine, served 200 to the rest of the world,
-      // and was simply blackholed from the operator's own network.
-      const has = re => errors.some(c => re.test(String(c)));
-      // Only an unresolvable name makes the address itself the suspect.
-      if (has(/ENOTFOUND|EAI_AGAIN|ERR_NAME/i))
-        return `The ${site}'s domain could not be resolved (DNS). Check the ${urlNoun} URL is spelled correctly.`;
-      // Resolved, then silence. The address is fine; the path to it is not — so point outward, and say
-      // plainly that "unreachable from here" is a weaker claim than "down".
-      // UND_ERR_* are undici's own codes, and are what actually turn up in practice: its internal
-      // connect timeout fires before our AbortController does, so a blackholed host reports
-      // UND_ERR_CONNECT_TIMEOUT and never ETIMEDOUT. Matching only the POSIX-looking names silently
-      // misses the single most common real-world failure.
-      if (has(/ETIMEDOUT|ETIMEOUT|EHOSTUNREACH|ENETUNREACH|ECONNRESET|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT|UND_ERR_SOCKET/i))
-        return `The ${site} resolved, but never answered — the connection timed out. The site may well be up and simply unreachable from THIS network (an ISP route, a firewall, or a VPN that needs switching on). Confirm it loads from another network before treating it as down.`;
-      if (has(/ECONNREFUSED/i))
-        return `The ${site} refused the connection — something is answering at that address but rejecting the request (wrong port, or the service is stopped).`;
-      if (has(/CERT|TLS|SSL|EPROTO|ERR_SSL/i))
-        return `The ${site} failed its TLS handshake — a certificate or protocol problem, not a missing page.`;
-      // No usable evidence. Stay vague on purpose rather than assert a cause we cannot prove.
-      return `Could not connect to the ${site} (connection failure). Check the ${urlNoun} URL is reachable.`;
-    }
-    return `The ${site} returned no crawlable pages (statuses: ${statuses.join(', ')}).`;
-  };
+  // ONE wording rule for the whole product, applied to whichever side came back empty (site = the noun,
+  // urlNoun = the URL label). The rules used to live only here, which meant Site Audit had no diagnosis
+  // at all: a 403 origin scored 71 with the word "blocked" appearing nowhere in its report. They now
+  // live in reachability.js and BOTH tools import them, because the same failure must not get two
+  // different explanations depending on which tab the operator happened to open.
+  const explain = (statuses, errors, site, urlNoun) => explainUnreachable(statuses, errors, site, urlNoun);
   if (aHtml.length === 0) return { ok: false, reason: 'reference-unreachable', message: explain(refStatuses, refErrors, 'reference site', 'reference') };
   if (bHtml.length === 0) return { ok: false, reason: 'candidate-unreachable', message: explain(candStatuses, candErrors, 'candidate (staging) site', 'candidate') };
   if (pairs.length === 0) return { ok: false, reason: 'no-common-pages', message: 'Both sites were reachable, but they share no matching page paths — check the reference and target URLs line up (same paths on live vs staging).' };
