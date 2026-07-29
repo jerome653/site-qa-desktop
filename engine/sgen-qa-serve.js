@@ -548,9 +548,18 @@ function appPage() {
   .upd{display:flex;align-items:center;gap:8px;margin-left:10px}
   .upd-btn{background:transparent;border:1px solid var(--line-strong);color:var(--ink-soft);border-radius:8px;padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer}
   .upd-btn:hover{color:var(--ink);border-color:var(--brand)}.upd-btn:disabled{opacity:.55;cursor:default}
+  /* An update the user has not dealt with PULSES. The solid red alone sat quietly in a dark top bar and
+     was easy to look straight past, which is how "why do I only find out when I restart" happens. The
+     animation stops the moment the update is downloading or applying — a spinner that never ends reads
+     as broken. Respects prefers-reduced-motion. */
   .upd-btn.has-update{color:#fff;background:var(--brand-solid);border-color:var(--brand-solid);font-weight:700}
   .upd-btn.has-update:hover{background:var(--brand);border-color:var(--brand);color:#fff}
-  .upd-toast{position:fixed;right:18px;bottom:18px;z-index:200;max-width:340px;background:var(--surface);border:1px solid var(--brand-solid);border-left:4px solid var(--brand-solid);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:13px 16px;font-size:12.5px;color:var(--ink-soft);line-height:1.55;opacity:0;transform:translateY(10px);transition:opacity .3s,transform .3s}
+  .upd-btn.has-update.pulse{animation:updpulse 1.9s ease-in-out infinite}
+  @keyframes updpulse{0%,100%{box-shadow:0 0 0 0 rgba(200,24,28,.65)}50%{box-shadow:0 0 0 7px rgba(200,24,28,0)}}
+  @media (prefers-reduced-motion:reduce){.upd-btn.has-update.pulse{animation:none}}
+  .upd-x{position:absolute;top:8px;right:10px;cursor:pointer;color:var(--ink-faint);font-size:14px;line-height:1}
+  .upd-x:hover{color:var(--ink)}
+  .upd-toast{position:fixed;right:18px;bottom:18px;z-index:200;max-width:340px;padding-right:26px;background:var(--surface);border:1px solid var(--brand-solid);border-left:4px solid var(--brand-solid);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:13px 16px;font-size:12.5px;color:var(--ink-soft);line-height:1.55;opacity:0;transform:translateY(10px);transition:opacity .3s,transform .3s}
   .upd-toast.show{opacity:1;transform:none}
   .upd-toast b{color:var(--ink);display:block;margin-bottom:3px;font-size:13px}
   .upd-st{font-family:var(--mono);font-size:11px;color:var(--ink-faint);white-space:nowrap}
@@ -1456,16 +1465,37 @@ function appPage() {
       sgenUpdate.onStatus(function(p){
         if(!p)return;
         if(p.state==='checking'){btn.disabled=true;set('Checking…');}
-        else if(p.state==='none'){btn.disabled=false;mode='check';btn.classList.remove('has-update');btn.textContent='Check for updates';set('Up to date');}
-        else if(p.state==='available'){btn.disabled=false;mode='download';btn.classList.add('has-update');btn.textContent='Download update';set('v'+(p.version||'')+' available');}
-        else if(p.state==='downloading'){btn.disabled=true;set('Downloading… '+(p.percent||0)+'%');}
-        else if(p.state==='downloaded'){btn.disabled=false;mode='install';btn.classList.add('has-update');btn.textContent='Restart to update';set('v'+(p.version||'')+' ready');}
-        else if(p.state==='error'){btn.disabled=false;set('Update error');}
+        else if(p.state==='none'){btn.disabled=false;mode='check';btn.classList.remove('has-update');btn.classList.remove('pulse');btn.textContent='Check for updates';set('Up to date');}
+        else if(p.state==='available'){btn.disabled=false;mode='download';btn.classList.add('has-update');btn.classList.add('pulse');btn.textContent='Download update';set('v'+(p.version||'')+' available');}
+        else if(p.state==='downloading'){btn.disabled=true;btn.classList.remove('pulse');set('Downloading… '+(p.percent||0)+'%');}
+        // DOWNLOADED no longer means "now go and restart the app yourself" — the shell applies it as soon
+        // as the engine is idle. The button stays clickable as a manual fallback, so if the auto-apply
+        // never fires the user is exactly where the old build left them rather than stuck.
+        else if(p.state==='downloaded'){btn.disabled=false;mode='install';btn.classList.add('has-update');btn.classList.remove('pulse');btn.textContent='Apply now';set('v'+(p.version||'')+' — applying');
+          updToast('<b>Update v'+(p.version||'')+' downloaded</b>Applying it now — the window will reopen on its own in a moment. Nothing for you to do.',true);}
+        // A scan is running. The swap deliberately waits rather than interrupting it, and says so.
+        else if(p.state==='waiting'){btn.disabled=false;mode='install';btn.classList.add('has-update');btn.classList.remove('pulse');btn.textContent='Apply now';set('v'+(p.version||'')+' — after this scan');
+          updToast('<b>Update v'+(p.version||'')+' is ready</b>It will apply by itself the moment this scan finishes — a running audit is never interrupted. Or click Apply now to stop waiting.',true);}
+        else if(p.state==='installing'){btn.disabled=true;btn.classList.remove('pulse');btn.textContent='Updating…';set('v'+(p.version||'')+' — restarting');
+          updToast('<b>Applying v'+(p.version||'')+'</b>The window closes and reopens on the new version. This takes about a second.',true);}
+        else if(p.state==='error'){btn.disabled=false;btn.classList.remove('pulse');set('Update error');}
       });
       // AUTO-CHECK — detect only, never downloads. Poll the engine's cached feed version; if it's newer than
       // the running app, redden the button + toast. Download + install stay a manual click (above).
-      function updToast(v){var t=document.createElement('div');t.className='upd-toast';t.innerHTML='<b>Update available — v'+v+'</b>Click the red “Update available” button in the top bar to download, then Restart to install.';document.body.appendChild(t);requestAnimationFrame(function(){t.classList.add('show');});setTimeout(function(){t.classList.remove('show');setTimeout(function(){if(t.parentNode)t.remove();},400);},9000);}
-      function markAvail(v){if(mode==='install'||mode==='download')return;mode='avail';btn.disabled=false;btn.classList.add('has-update');btn.textContent='Update available';set('v'+v);if(toasted!==v){toasted=v;updToast(v);}}
+      // One toast, replaced rather than stacked, and STICKY: the old one faded after 9 seconds, so an
+      // update announced while the user was reading a report announced itself to nobody. It closes on the
+      // x, or when the next state replaces it.
+      var toast=null;
+      function updToast(html,sticky){
+        if(toast&&toast.parentNode)toast.remove();
+        toast=document.createElement('div');toast.className='upd-toast';
+        toast.innerHTML='<span class="upd-x" title="Dismiss" onclick="this.parentNode.remove()">\\u2715</span>'+html;
+        document.body.appendChild(toast);var t=toast;
+        requestAnimationFrame(function(){t.classList.add('show');});
+        if(!sticky)setTimeout(function(){t.classList.remove('show');setTimeout(function(){if(t.parentNode)t.remove();},400);},9000);
+      }
+      function markAvail(v){if(mode==='install'||mode==='download')return;mode='avail';btn.disabled=false;btn.classList.add('has-update');btn.classList.add('pulse');btn.textContent='Update available';set('v'+v);
+        if(toasted!==v){toasted=v;updToast('<b>Update available \\u2014 v'+v+'</b>Click the red button in the top bar. It downloads and applies itself \\u2014 you will not need to restart the app.',true);}}
       function autoCheck(){if(mode==='install'||mode==='download')return;fetch('/api/feed-version').then(function(r){return r.json();}).then(function(d){if(d&&d.version&&window.__appver&&svGt(d.version,window.__appver))markAvail(d.version);}).catch(function(){});}
       setInterval(autoCheck,10*60*1000);
     })();

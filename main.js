@@ -208,7 +208,17 @@ async function checkEngineUpdate() {
     try { fs.unlinkSync(tmp); } catch (_) {}
     pendingEngine = { version: remote, dir: root };
     log.info('[engine] downloaded ' + remote + ' -> ' + root);
-    send({ state: 'downloaded', version: remote });   // UI shows "Restart to update"; user applies it manually
+    // APPLY IT. This used to stop here and tell the user to restart the app themselves — a manual step
+    // for something the shell can do in about a second, and the reason "I have to restart just to get
+    // the update" was true. The engine is require()d INTO this process (see loadEngine), so the process
+    // must come back for a new engine to load; what was never necessary is the HUMAN doing it.
+    //
+    // applyEngineWhenIdle() polls /api/status and will not swap mid-scan, so a running audit is never
+    // interrupted — it applies the moment the engine goes quiet. The button stays live throughout as a
+    // manual fallback, so a failed auto-apply degrades to exactly the old behaviour rather than to
+    // nothing.
+    send({ state: 'downloaded', version: remote });
+    applyEngineWhenIdle();
     return { state: 'downloaded', version: remote };
   } catch (e) {
     log.error('[engine] update check failed', e);
@@ -218,9 +228,12 @@ async function checkEngineUpdate() {
 }
 function applyEngineWhenIdle() {
   if (applyingUpdate || !pendingEngine) return; applyingUpdate = true;
+  let said = false;
   (function tick() {
     engineBusy().then(busy => {
-      if (busy) { setTimeout(tick, 15000); return; }        // audit running → wait, never swap mid-scan
+      // audit running → wait, never swap mid-scan. Say so ONCE: silence here read as a stalled update,
+      // because the user cannot see why nothing is happening.
+      if (busy) { if (!said) { said = true; send({ state: 'waiting', version: pendingEngine.version }); } setTimeout(tick, 15000); return; }
       try {
         fs.mkdirSync(ENGINES_DIR, { recursive: true });
         fs.writeFileSync(ACTIVE_JSON, JSON.stringify(pendingEngine));
