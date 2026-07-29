@@ -371,7 +371,21 @@ const SITE_CHECKS = [
     const r = await http.getText(origin + '/robots.txt');
     if (!r.ok || r.status >= 400) return F('SEO-029', 'robots-txt', '8 SEO', `GET /robots.txt → ${r.status || r.error}`, origin + '/robots.txt');
     const hasSitemap = /^\s*sitemap:/im.test(r.body);
-    const blanketDisallow = /^\s*disallow:\s*\/\s*$/im.test(r.body);
+    // GROUPED PARSE. `Disallow: /` only blocks the site when it sits in a group a SEARCH crawler
+    // obeys. The old file-wide regex ignored User-agent grouping entirely, so it called sgen.com
+    // CRITICAL for a deliberate AI-training opt-out (`User-agent: Google-Extended` and
+    // `Applebot-Extended` -> `Disallow: /`) while `User-agent: *` said `Allow: /`. Only `*` and the
+    // named search bots may trip this rule; an AI-crawler opt-out is a policy choice, not a defect.
+    const SEARCH_AGENTS = ['*', 'googlebot', 'bingbot', 'slurp', 'duckduckbot', 'baiduspider', 'yandex'];
+    let uaGroup = [], blanketDisallow = false;
+    for (const raw of String(r.body || '').split(/\r?\n/)) {
+      const line = raw.replace(/#.*$/, '').trim();
+      if (!line) { uaGroup = []; continue; }            // blank line ends a group (robots.txt spec)
+      const ua = line.match(/^user-agent:\s*(.+)$/i);
+      if (ua) { uaGroup.push(ua[1].trim().toLowerCase()); continue; }
+      if (!uaGroup.length) continue;                     // directive with no group — ignore
+      if (/^disallow:\s*\/\s*$/i.test(line) && uaGroup.some(a => SEARCH_AGENTS.includes(a))) blanketDisallow = true;
+    }
     if (env === 'live') {
       if (blanketDisallow) return F('SEO-020', 'robots-txt', '8 SEO', 'Disallow: / on production blocks all crawling — classic staging-config leak.', origin + '/robots.txt');
       if (!hasSitemap) return F('SEO-021', 'robots-txt', '8 SEO', 'Add a Sitemap: reference for crawlers.', origin + '/robots.txt');

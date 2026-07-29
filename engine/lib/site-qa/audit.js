@@ -425,6 +425,15 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     for (const chk of STATIC_CHECKS) {
       if (chk.id === 'staging-leak') continue; // migration-only
       if (chk.id === 'security-headers') continue; // qa-site uses granular SEC-011..015 (checks-security); SEC-010 roll-up is qa-migration only
+      // EVIDENCE GATE. This loop walks crawl.pages — EVERY response, including 301 hops and 404
+      // bodies — and only the ledger mark below was gated on the page actually being HTML. The
+      // findings themselves were kept, so a redirect (empty body, no <title>) emitted SEO-001
+      // "Missing <title>" and a 404 page carrying a correct `noindex` emitted SEO-007 CRITICAL
+      // "Live page is set to NOINDEX". Measured on sgen.com 2026-07-29: 26 bogus SEO-001 (all of
+      // them 301 hops, e.g. /advanced-settings -> /404?from= -> /product/advanced-settings, whose
+      // 200 DOES carry a title) and 1 bogus SEO-007 (a 404). A check that needs HTML must not run
+      // on a response that is not HTML.
+      if ((STATIC_NEEDS[chk.id] || 'html') === 'response' ? !pageResponded : !pageIsHtml) continue;
       let r, threw = null;
       try { r = chk.fn(ctx, { env: 'live', host }); } catch (e) { r = null; threw = e; }
       // The catch above still swallows, because one bad page must not abort the crawl — but the
