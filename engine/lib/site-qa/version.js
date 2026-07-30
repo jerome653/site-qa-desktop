@@ -62,7 +62,12 @@ module.exports = {
   // 3.4.0 — additive. result.techStack now also carries cms / framework / ecommerce / server / cdn with
   // per-signature page counts, detected offline from responses the crawl already made. Signatures only:
   // techStack.note travels with the data so no surface can present a signature as certainty.
-  ENGINE_VERSION: '3.4.0',   // + tech stack: cms/framework/server/cdn (was 3.3.0)
+  // 3.5.0 — additive, no scoring change. Copy Review gains COPY-005 (placeholder / lorem copy) and
+  // COPY-006 (near-duplicate body copy across pages). Both advisory: WEIGHTS.copy = 0 and severity
+  // 'manual'. COPY-005 exists because Content & SEO skips every suite except 'seo' at RUN level, so
+  // FUNC-004 could never reach the tab named for content; it shares one detector with FUNC-004 rather
+  // than restating the patterns. COPY-006 is the first BODY-level duplicate detection in the product.
+  ENGINE_VERSION: '3.5.0',   // + COPY-005 placeholder copy, COPY-006 duplicate body copy (was 3.4.0)
   // 1.6.0 — the report's SHAPE changed, which is what this stream is for. Out: the verdict card, the
   // score ring, the readiness pill and the seven stat tiles (redundant — every number was restated
   // below). In: a status breakdown that says what each HTTP code MEANS, and a link count strip. A

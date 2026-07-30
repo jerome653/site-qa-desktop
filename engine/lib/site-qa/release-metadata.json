@@ -1,6 +1,6 @@
 {
-  "packageVersion": "5.4.0",
-  "engineVersion": "3.4.0",
+  "packageVersion": "5.5.0",
+  "engineVersion": "3.5.0",
   "registryVersion": "1.14.0",
   "contractVersion": "1.0",
   "reportVersion": "1.7.0",
@@ -12,7 +12,7 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "The report now says what the site is BUILT on. A post-deployment check that only proves the new site is a faithful copy has not proved it is a production site — \"is this really WordPress behind Cloudflare, or did the staging build go to production\" is a question every crawl already held the evidence for, in the HTML it fetched and the headers that came back, and never asked. A new \"Built on\" panel names the CMS (WordPress, Shopify, Wix, Squarespace, Webflow, Drupal, Joomla, Ghost, HubSpot), the framework (Next.js, Nuxt, SvelteKit, Gatsby, Angular, Vue, React), e-commerce (WooCommerce, Shopify, Magento, BigCommerce), and the server and CDN read from response headers (nginx, Apache, LiteSpeed, IIS, Caddy; Cloudflare, Vercel, Netlify, CloudFront, Fastly, Akamai). Every signature carries a page count, because a CMS seen on 1 of 40 pages is a part-migrated site and not the same fact as one seen on all 40. Detection is offline and deterministic — no extra requests, no third-party service. IT REPORTS SIGNATURES, NEVER CERTAINTY: a generator tag can be removed and a header can be spoofed or stripped by a proxy, so an empty list means no signature was seen, not that the technology is absent, and that caveat travels ON the data rather than living in the renderer so no surface can show the lists without it. Post-Deployment Check gets all of it for free, because it already runs a full audit of the target as production validation — which is also where Largest Contentful Paint and Cumulative Layout Shift already fire.",
+  "release": "The content tab now sees content problems. Two things were on the wrong side of the line between \"content and SEO\" and \"technical\". PLACEHOLDER COPY: lorem ipsum, \"your text here\", sample/dummy text and TODO markers were caught by Site Audit and invisible to Content & SEO — not because a rule was switched off, but because that check lives in the functional suite and a Content & SEO run skips every suite except SEO before rules are even considered, so no toggle could have reached it. The tab named for content was the one blind to placeholder copy. It now flags there too, calling the SAME detector rather than a second copy of the patterns, which would drift the moment one was edited. Site Audit still scores it; Content & SEO flags it for whoever owns the words. DUPLICATE BODY COPY, for the first time in this product: duplicate detection previously meant page titles and meta descriptions only, so two pages carrying word-for-word identical body text passed clean. Body copy is now compared page to page using word shingles and Jaccard similarity — deterministic and offline, no AI, no network, no third-party service. Two deliberate limits keep the signal readable: pages under 40 words are not compared, because a \"Contact us.\" stub trivially matches every other stub and would bury the one real case, and each duplicate PAIR is reported once rather than in both directions, which would make a site look twice as duplicated as it is. Both are advisory and never move a score: near-duplicate copy is frequently deliberate (regional landing pages, product variants) and the tool cannot see the reason for an editorial decision. \"Nothing found\" and \"nothing could be compared\" stay distinct — a single-page run reports how many pages had enough copy to compare instead of showing a clean tick over a comparison that never happened.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
@@ -20,6 +20,6 @@
     "near-duplicate content"
   ],
   "generatedAt": "2026-07-30T00:00:00.000Z",
-  "gitTag": "v5.4.0",
+  "gitTag": "v5.5.0",
   "buildBaseCommit": "358e2cf"
 }
