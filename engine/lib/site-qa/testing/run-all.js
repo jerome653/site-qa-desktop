@@ -100,6 +100,9 @@ const SUITES = [
   'content-artifacts/content-artifacts.test.js',
   'spelling/spelling.test.js',
   'copy-review/copy-review.test.js',
+  // The content tab must see content problems: lorem ipsum could never reach Content & SEO (FUNC-004
+  // lives in a suite that run is skipped), and duplicate detection was titles/descriptions only.
+  'copy-review/duplicate-placeholder.test.js',
   'ops/ops.test.js',
   'reporting/reporting.test.js',
   'inventory/inventory.test.js',

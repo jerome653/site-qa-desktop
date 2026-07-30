@@ -95,6 +95,24 @@ function F(ruleId, check, section, detail, url, value) {
   return { ruleId, check, section, severity: r ? r.severity : null, title: r ? r.title : ruleId, detail: detail || '', location: url, value: value == null ? '' : String(value) };
 }
 
+// ---------- placeholder / lorem copy ----------
+// Exported because TWO tabs need this answer and there must be ONE detector. FUNC-004 (scored, in the
+// functional suite) runs in Site Audit; COPY-005 (advisory) runs in Content & SEO. Content & SEO skips
+// every suite except 'seo', so FUNC-004 is excluded at RUN level — no rule toggle could reach it, and
+// the tab named for content was the one blind to placeholder copy while the technical tab caught it.
+// Two copies of these patterns would drift the moment one is edited.
+const PLACEHOLDER_PATTERNS = [
+  ['lorem ipsum', /lorem ipsum|lipsum/i],
+  ['"…here" placeholder', /\byour (?:text|content|headline|title|image|logo) here\b/i],
+  ['sample/dummy text', /\b(?:sample|dummy|placeholder) (?:text|content|copy)\b/i],
+  ['TODO/TBD/insert marker', /\b(?:TODO|FIXME|TBD|coming soon\.\.\.|insert .* here)\b/i],
+];
+function detectPlaceholders(prose) {
+  const p = typeof prose === 'string' ? prose : '';
+  if (!p) return [];
+  return PLACEHOLDER_PATTERNS.filter(([, re]) => re.test(p)).map(([label]) => label);
+}
+
 // ---------- analytics / tracking fingerprints ----------
 // Exported because the ANSWER matters outside the check that produces it. The vendor list has been
 // computed since this detector was written and, on a live run, thrown away: the check returns null
@@ -260,12 +278,7 @@ const STATIC_CHECKS = [
   // §2 — placeholder / lorem / TODO in visible copy
   { id: 'placeholder-content', section: '2 Content', fn(c) {
     if (!c.isHtml) return null;
-    const p = c.prose;
-    const hits = [];
-    if (/lorem ipsum|lipsum/i.test(p)) hits.push('lorem ipsum');
-    if (/\byour (?:text|content|headline|title|image|logo) here\b/i.test(p)) hits.push('"…here" placeholder');
-    if (/\b(?:sample|dummy|placeholder) (?:text|content|copy)\b/i.test(p)) hits.push('sample/dummy text');
-    if (/\b(?:TODO|FIXME|TBD|coming soon\.\.\.|insert .* here)\b/i.test(p)) hits.push('TODO/TBD/insert marker');
+    const hits = detectPlaceholders(c.prose);
     return hits.length ? F('FUNC-004', 'placeholder-content', '2 Content', hits.join(', '), c.url) : null;
   } },
 
@@ -440,4 +453,4 @@ const SITE_CHECKS = [
   } },
 ];
 
-module.exports = { STATIC_CHECKS, SITE_CHECKS, buildCtx, F, STAGING_HOST_RE, detectAnalytics };
+module.exports = { STATIC_CHECKS, SITE_CHECKS, buildCtx, F, STAGING_HOST_RE, detectAnalytics, detectPlaceholders };

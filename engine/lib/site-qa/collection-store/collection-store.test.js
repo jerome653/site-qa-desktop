@@ -102,6 +102,9 @@ console.log('Collection Store (ADR-0009) — test suite\n');
   const m = s.get(r.collectionId).manifest;
   eq(m.schemaVersion, COLLECTION.schemaVersion, 'manifest: collection schema version');
   eq(m.engineVersion, '2.3.0', 'manifest: engine version');
+  // NOT the live registry version — this asserts the manifest records what META SUPPLIED, faithfully.
+  // (engineVersion above is pinned to a fixture value for the same reason.) Bumping it with the real
+  // registry would turn a fidelity assertion into a version assertion and stop testing anything.
   eq(m.registryVersion, '1.13.0', 'manifest: registry version');
   eq(m.providerContractVersion, '1.0', 'manifest: provider contract version');
   eq(m.collectorSet, ['documents', 'network', 'shots', 'staticPages'], 'manifest: collector set from the collection\'s OWN declaration, sorted — never inferred from emptiness');
@@ -233,7 +236,7 @@ console.log('Collection Store (ADR-0009) — test suite\n');
   ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
   ok(SEMVER_.test(version.COLLECTION_SCHEMA_VERSION), 'D9: collection schema version unmoved (from the authority: ' + version.COLLECTION_SCHEMA_VERSION + ')');
   ok(SEMVER_.test(version.PROVIDER_CONTRACT_VERSION), 'D9: provider contract version unmoved (from the authority: ' + version.PROVIDER_CONTRACT_VERSION + ')');
-  eq(reg.RULES.length, 142, 'D9: registry unchanged — ADR-0009 adds NO rule');
+  eq(reg.RULES.length, 144, 'D9: registry unchanged — ADR-0009 adds NO rule');
 })();
 
 try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) {}

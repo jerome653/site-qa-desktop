@@ -124,7 +124,7 @@ console.log('Collection Store producer wiring — test suite\n');
     ok(stable(bad) === stable(without), 'guarded: …and the result is still byte-identical');
 
     // ── 7 · frozen scope ─────────────────────────────────────────────────────────────────────────
-    eq(require('../rules/registry').RULES.length, 142, 'D9: registry unchanged');
+    eq(require('../rules/registry').RULES.length, 144, 'D9: registry unchanged');
   // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
   // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
   // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the

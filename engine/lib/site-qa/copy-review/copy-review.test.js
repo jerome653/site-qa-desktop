@@ -159,11 +159,11 @@ console.log('Copy Review (COPY-001..004) — test suite\n');
       + htmlOfParas(Array(10).fill(35)),
   };
   const dirtyRows = scanCopyReview([dirtyCtx]);
-  eq(dirtyRows.length, 4, 'rows: scanCopyReview returns exactly 4 rows (COPY-001..004)');
+  eq(dirtyRows.length, 6, 'rows: scanCopyReview returns exactly 6 rows (COPY-001..006 — 005 placeholder copy and 006 duplicate body copy joined in 1.14.0)');
   const withItems = dirtyRows.filter(r => r.items.length > 0);
   ok(withItems.length >= 3, 'rows: at least 3 of the 4 rules actually found something on the dirty fixture');
   for (const row of dirtyRows) {
-    ok(/^COPY-00[1-4]$/.test(row.ruleId), `rows: ${row.ruleId} matches the COPY-00N pattern`);
+    ok(/^COPY-00[1-6]$/.test(row.ruleId), `rows: ${row.ruleId} matches the COPY-00N pattern`);
     // The critical guard: status must stay 'manual' even though items.length > 0 for this row. A
     // regression that copies content-artifacts' `items.length ? fail : pass` pattern would break this.
     eq(row.status, 'manual', `rows: ${row.ruleId} status is 'manual' even with ${row.items.length} item(s) found`);

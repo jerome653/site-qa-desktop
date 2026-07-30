@@ -89,8 +89,8 @@ console.log('Score declaration integrity (ADR-0011) — test suite\n');
       ...RULES.filter(r => r.suite === 'best-practices').map(r => r.id),
       ...RULES.filter(r => r.suite === 'copy').map(r => r.id)];
     const declared = new Set(raw.coverage.evaluatedRules);
-    eq(advisory.filter(id => !declared.has(id)).length, 14,
-      'naive: 14 advisory rules RUN but are absent from audit\'s pre-advisory declaration — the reason the naive fix is wrong');
+    eq(advisory.filter(id => !declared.has(id)).length, 16,
+      'naive: 16 advisory rules RUN but are absent from audit\'s pre-advisory declaration — the reason the naive fix is wrong');
 
     // ── 5 · the completed declaration is recorded, not just used ──────────────────────────────────
     ok(data.coverage.evaluatedRules.length > raw.coverage.evaluatedRules.length,
@@ -126,7 +126,7 @@ console.log('Score declaration integrity (ADR-0011) — test suite\n');
     eq(declaredR.ready, undeclared.ready, 'scope: …nor `ready`');
     ok(declaredR.quality.overall !== undeclared.quality.overall, 'scope: it changes ONLY the Quality Score — which is the entire point');
     eq(data.readiness, raw.readiness, 'scope: the launch-readiness verdict is untouched by the fix');
-    eq(RULES.length, 142, 'scope: registry unchanged — ADR-0011 adds NO rule');
+    eq(RULES.length, 144, 'scope: registry unchanged — ADR-0011 adds NO rule');
     const scoreSrc = fs.readFileSync(require.resolve('./score.js'), 'utf8');
     ok(/MODEL = 'sgen-quality-v2'/.test(scoreSrc), 'scope: score.js model untouched — the fix is transport, not maths');
   } catch (e) {

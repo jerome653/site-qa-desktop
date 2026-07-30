@@ -1,11 +1,11 @@
 {
   "packageVersion": "5.4.0",
   "engineVersion": "3.4.0",
-  "registryVersion": "1.13.0",
+  "registryVersion": "1.14.0",
   "contractVersion": "1.0",
   "reportVersion": "1.7.0",
   "developerEvidenceTier": 1,
-  "ruleCount": 142,
+  "ruleCount": 144,
   "v2RuleCount": 32,
   "evidenceQuality": {
     "verified": 28,

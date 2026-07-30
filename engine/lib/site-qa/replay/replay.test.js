@@ -208,7 +208,7 @@ console.log('Replay Engine (ADR-0010) — test suite\n');
   impact(record, { baselineProviders: PROVIDERS, candidateProviders: PROVIDERS.filter(p => p.type !== 'network'), versions: VERSIONS });
   eq(reg.RULES.length, rulesBefore, 'frozen: replay does not mutate the registry');
   eq(PROVIDERS.length, providersBefore, 'frozen: replay does not mutate the provider set');
-  eq(reg.RULES.length, 142, 'D9: registry unchanged — ADR-0010 adds NO rule');
+  eq(reg.RULES.length, 144, 'D9: registry unchanged — ADR-0010 adds NO rule');
   // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
   // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
   // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the
