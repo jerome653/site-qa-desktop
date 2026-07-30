@@ -31,6 +31,11 @@ Lorem detection is literally:
 
 ### Advisory — Copy Review (Suite 13, weight 0, every row `manual`)
 
+> **Runs in Content & SEO only** (since 5.2.0). It used to run in Site Audit too — by default, not by
+> intent — so the same finding surfaced in two tools. Removing it did not move the Site Audit score;
+> that is measured, not assumed (`seo-split.test.js` adds the suite back to a shipped result and
+> recomputes to the same number).
+
 | Rule | What it flags | Confidence |
 |---|---|---|
 | COPY-001 `llm-boilerplate-leak` | `as an AI language model`, `as of my last training`, `I cannot browse the internet`, `Certainly! Here's…`, `here's a rewritten version` | High — near-zero FP |
@@ -93,6 +98,33 @@ surfaced as counts rather than only as pass/fail rows.*
 
 ---
 
+## 3b. Tech stack — what the site is built on (new in 5.4.0)
+
+Detected offline from responses the crawl already made — no extra requests, no third-party service.
+Surfaced as a **"Built on"** panel and as `result.techStack`, each signature with a page count.
+
+| Layer | Read from | Detects |
+|---|---|---|
+| CMS | HTML | WordPress, Shopify, Wix, Squarespace, Webflow, Drupal, Joomla, Ghost, HubSpot |
+| Framework | HTML | Next.js, Nuxt, SvelteKit, Gatsby, Angular, Vue, React |
+| E-commerce | HTML | WooCommerce, Shopify, Magento, BigCommerce |
+| Server | `Server` header | nginx, Apache, LiteSpeed, IIS, Caddy, Google Frontend |
+| CDN | Response headers | Cloudflare, Vercel, Netlify, CloudFront, Fastly, Akamai |
+| Analytics | HTML | GA4, GTM, Meta Pixel, LinkedIn — **now named on the row** (5.3.0) |
+
+**Signatures, never certainty.** A generator tag can be removed and a header spoofed or stripped by a
+proxy, so an empty list means *no signature seen*, not that the technology is absent. The caveat ships
+as `techStack.note`, on the data rather than in the renderer.
+
+Page counts matter: WordPress on 1 of 40 pages is a part-migrated site, not "WordPress".
+
+**Post-Deployment Check gets all of this free** — it already runs a full audit of the target as
+production validation (`c-prod`, on by default), which is also where PERF-001 (LCP), PERF-002 (CLS),
+PERF-006 (page weight) and PERF-007 (compression) fire. So "is the deployed site production-ready, not
+just a faithful copy" is now largely answered.
+
+---
+
 ## 4. Gaps worth your decision
 
 1. **Duplicate content — only titles and descriptions.** SEO-009/010 compare `<title>` and
@@ -100,10 +132,12 @@ surfaced as counts rather than only as pass/fail rows.*
    internal or external. Near-duplicate content is on the deferred list.
 2. **No off-site / reverse search.** Nothing checks whether the copy exists elsewhere on the web.
    Separate proposal — needs an external search API, which is the first runtime network dependency on a
-   third party this engine would take.
-3. **SEO-only runs skip FUNC-004.** `sgen-qa-serve.js:2323` runs the SEO tool with
-   `passes: ['copyReview']` only, so an SEO run gets the COPY flags but **not** the scored lorem/placeholder
-   check. Site Audit gets both. One-line fix if that is not intended.
+   third party this engine would take. Scored 72/100 on the tribunal rubric; the recommendation was to
+   split it — internal near-duplicate detection needs no external anything.
+3. **Content & SEO runs skip FUNC-004.** The tool runs with `passes: ['copyReview']` only, so it gets
+   the COPY flags but **not** the scored lorem/placeholder check. Site Audit gets it. Now sharper than
+   when this was first written: with Copy Review moved out of Site Audit, the tab named for content is
+   the one that cannot flag lorem ipsum. One-line fix if unintended — **still awaiting your call.**
 4. **COPY-002 `\bTK\b`** will fire on legitimate uses (ticker symbols, initials). Advisory only, so the
    blast radius is a flag a human reads.
 
