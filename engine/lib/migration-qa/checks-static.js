@@ -95,6 +95,26 @@ function F(ruleId, check, section, detail, url, value) {
   return { ruleId, check, section, severity: r ? r.severity : null, title: r ? r.title : ruleId, detail: detail || '', location: url, value: value == null ? '' : String(value) };
 }
 
+// ---------- analytics / tracking fingerprints ----------
+// Exported because the ANSWER matters outside the check that produces it. The vendor list has been
+// computed since this detector was written and, on a live run, thrown away: the check returns null
+// when tracking is present (present-on-live is a pass), so the row rendered the generic label
+// "Analytics / tracking detected" and never said WHICH. Staging named them; live did not. The tool
+// knew, and only the environment decided whether it told anyone.
+//
+// Order is fixed, not detection order, so two runs over the same site produce the same string.
+const ANALYTICS_SIGNATURES = [
+  ['GA4', /gtag\(|googletagmanager\.com\/gtag|\bG-[A-Z0-9]{6,}\b/],
+  ['GTM', /googletagmanager\.com\/gtm|GTM-[A-Z0-9]{4,}/],
+  ['Meta Pixel', /connect\.facebook\.net|fbq\(/],
+  ['LinkedIn', /snap\.licdn\.com|_linkedin_partner_id/],
+];
+function detectAnalytics(html) {
+  const b = typeof html === 'string' ? html : '';
+  if (!b) return [];
+  return ANALYTICS_SIGNATURES.filter(([, re]) => re.test(b)).map(([name]) => name);
+}
+
 // ---------- per-page checks ----------
 const STATIC_CHECKS = [
   // §13/§10 — page status
@@ -292,12 +312,7 @@ const STATIC_CHECKS = [
   // §9 — analytics / tracking presence. INVERTS by env.
   { id: 'analytics', section: '9 Analytics', fn(c, o) {
     if (!c.isHtml) return null;
-    const b = c.html;
-    const found = [];
-    if (/gtag\(|googletagmanager\.com\/gtag|\bG-[A-Z0-9]{6,}\b/.test(b)) found.push('GA4');
-    if (/googletagmanager\.com\/gtm|GTM-[A-Z0-9]{4,}/.test(b)) found.push('GTM');
-    if (/connect\.facebook\.net|fbq\(/.test(b)) found.push('Meta Pixel');
-    if (/snap\.licdn\.com|_linkedin_partner_id/.test(b)) found.push('LinkedIn');
+    const found = detectAnalytics(c.html);
     if (o.env === 'live') {
       return found.length ? null : F('SEO-025', 'analytics', '9 Analytics', 'Expected GA4/GTM/pixel after migration (SOP Phase 7 §25). Verify firing manually.', c.url);
     }
@@ -425,4 +440,4 @@ const SITE_CHECKS = [
   } },
 ];
 
-module.exports = { STATIC_CHECKS, SITE_CHECKS, buildCtx, F, STAGING_HOST_RE };
+module.exports = { STATIC_CHECKS, SITE_CHECKS, buildCtx, F, STAGING_HOST_RE, detectAnalytics };

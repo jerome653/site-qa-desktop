@@ -155,6 +155,8 @@ const SUITES = [
   'updater.test.js',
   // A bare "403" in the page list is evidence, not a finding — 403 and 404 land on different desks.
   'http-status.test.js',
+  // "Analytics / tracking detected" knew the vendor and threw it away on every live run.
+  'analytics-stack.test.js',
 ];
 
 const env = Object.assign({}, process.env, {

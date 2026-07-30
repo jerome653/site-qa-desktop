@@ -8,7 +8,7 @@
 
 const http = require('../migration-qa/http');
 const { discoverPages, extractLinks } = require('../migration-qa/crawl');
-const { STATIC_CHECKS, buildCtx } = require('../migration-qa/checks-static');
+const { STATIC_CHECKS, buildCtx, detectAnalytics } = require('../migration-qa/checks-static');
 const { renderPass, VIEWPORTS } = require('../migration-qa/checks-render');
 const { tlsCheck } = require('./tls-check');
 const { crossBrowser } = require('./cross-browser');
@@ -480,6 +480,7 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
 
   // 2) static checks aggregated by id
   const staticBy = {};
+  const analyticsSeen = new Map();   // vendor -> how many HTML pages carried it (see the detect call below)
   const titles = {}, descs = {};
   const ledger = newLedger();
   // The two evidence gates every static pass row is now held to. `htmlOk` is the same predicate the
@@ -514,6 +515,11 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
       if (!r) continue;
       (Array.isArray(r) ? r : [r]).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f));
     }
+    // WHAT is on the page, not merely THAT something is. The analytics check answers a yes/no question
+    // and on a live run "yes" is a pass, so the vendor list it computed was discarded and the row read
+    // "Analytics / tracking detected". Accumulated across pages because a tag manager fires on some
+    // templates and not others, and "GA4 on 1 of 40 pages" is the finding, not "GA4".
+    if (pageIsHtml) for (const v of detectAnalytics(ctx.html)) analyticsSeen.set(v, (analyticsSeen.get(v) || 0) + 1);
     // Batch modules: ONE throw takes out every family in the batch, so the ledger marks them all.
     // Interaction Integrity (Batch 1) — dead links/buttons, nesting, disabled-active. Static + deterministic.
     if (ctx.isHtml && p.status === 200 && !skipBatch(BATCH_IDS.interaction)) { try { interactionCheck(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.interaction, true); } catch (e) { ledger.markAll(BATCH_IDS.interaction, false, e); } }
@@ -689,7 +695,18 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     }
     // THE GREEN TICK NOW COSTS EVIDENCE. Old rule: "no finding => pass". New rule: "no finding AND
     // the check provably looked and never threw => pass". Everything else is stated as unverified.
-    if (ok) { if (!finds.length && PASS_LABEL[id]) suiteRows[suite].push(stamp(row('pass', PASS_LABEL[id], null, '', ''))); }
+    if (ok) {
+      if (!finds.length && PASS_LABEL[id]) {
+        // The analytics pass row is the one green tick that has a real answer behind it. Everything
+        // else here is "we looked and found nothing wrong"; this one is "we looked and found THIS".
+        if (id === 'analytics' && analyticsSeen.size) {
+          const names = [...analyticsSeen.keys()];
+          const detail = names.map(n => `${n} on ${analyticsSeen.get(n)} page(s)`).join(' · ')
+            + '. Presence only — this does not prove the tag fires or reports into the right property.';
+          suiteRows[suite].push(stamp(row('pass', `Analytics / tracking detected — ${names.join(', ')}`, null, detail, names.join(', '))));
+        } else suiteRows[suite].push(stamp(row('pass', PASS_LABEL[id], null, '', '')));
+      }
+    }
     else { const w = whyNotVerified(l); suiteRows[suite].push(stamp(notRunRow(id, suite, w.reason, CHECK_RULES[id], w.detail, l))); }
   }
 
@@ -993,6 +1010,10 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     // Present ONLY when there is something to say, so a healthy run's output is unchanged and an older
     // stored report (which has no such field) is still valid — absence means "the site was seen".
     ...(reachability ? { reachability } : {}),
+    // Machine-readable, so a consumer does not have to scrape the sentence off the row. Always present
+    // (empty array = looked, found none) — an absent field and "none found" are different claims, and
+    // this tool exists to keep those apart.
+    techStack: { analytics: [...analyticsSeen.keys()], analyticsPageCounts: Object.fromEntries(analyticsSeen) },
     render: { rendered: renderRes.rendered, total: renderRes.total, viewports: renderRes.viewports || [], error: renderRes.error || null },
     // totalInternal / totalExternal are carried SEPARATELY, not just summed into `checked`. The report
     // shows internal and external as distinct counts, and a single total cannot be split back apart —
