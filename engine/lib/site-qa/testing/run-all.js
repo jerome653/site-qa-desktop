@@ -149,6 +149,10 @@ const SUITES = [
   // nowhere, and cross-browser scored the block page. This asserts the cause is NAMED and that a run
   // which read nothing publishes no number — ADR-0011's law applied to the whole run.
   'reachability.test.js',
+  // The updater had NO committed coverage — it was verified once by a throwaway script, which is the
+  // same as unverified: the next edit had nothing to fail against. The signal used to be in-app only,
+  // so an update announced during a minimised scan reached nobody.
+  'updater.test.js',
 ];
 
 const env = Object.assign({}, process.env, {

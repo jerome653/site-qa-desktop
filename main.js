@@ -11,7 +11,12 @@
 // launch. An update is therefore a tiny download + a relaunch — never the ~865MB NSIS reinstall whose
 // app-running close-check kept failing. The engine's heavy deps always resolve from the shell's bundled
 // node_modules via NODE_PATH, so the hot bundle stays pure JS.
-const { app, BrowserWindow, shell, dialog, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, dialog, Menu, ipcMain, Notification } = require('electron');
+// Windows shows a toast only when the process AppUserModelID matches the installed shortcut's, which
+// electron-builder sets from package.json "appId". Without this line the notification is constructed,
+// raises no error, and is silently dropped — the worst possible failure for a signal whose whole job is
+// to be seen. Harmless on macOS/Linux.
+try { app.setAppUserModelId('com.sgen.siteqa'); } catch (_) {}
 const log = require('electron-log');            // update logs -> %APPDATA%\SGEN Site QA\logs\main.log
 try { log.transports.file.level = 'info'; } catch (_) {}
 const https = require('https');
@@ -181,7 +186,60 @@ function extractZip(zip, destDir) {
 // Checks the feed's version.txt (tiny). If newer, downloads engine.zip, verifies its sha256, extracts to
 // userData, then activates + relaunches when the engine is idle (never mid-audit). No NSIS, no admin.
 let checking = false, applyingUpdate = false, pendingEngine = null;
-const send = s => { try { if (win && !win.isDestroyed()) win.webContents.send('update:status', s); } catch (_) {} };
+// ── THE SIGNAL HAS TO LEAVE THE WINDOW ────────────────────────────────────────────────────────────
+// Every update signal used to be in-app only: a red top-bar button and a toast in the renderer. During
+// the one activity this app exists for — a scan that runs for minutes — the window is minimised or
+// behind something else, so "an update is ready" announced itself to an empty screen. An OS notification
+// is the only channel that reaches a user who is not looking at us.
+//
+// Deliberately NARROW:
+//   · Only the three states that are ABOUT the user: available (nothing has happened yet), downloaded
+//     (applying, the window is about to reopen), waiting (a scan is holding it). checking / downloading /
+//     none / error stay in-app — a toast per poll is how a notification channel gets muted for good.
+//   · Nothing when the window is already focused. The in-app toast has been seen; a second copy in the
+//     tray is noise, and noise is what trains people to dismiss these unread.
+//   · Deduped on state+version, because applyEngineWhenIdle() re-polls 'waiting' every 15 seconds.
+// Click restores and focuses the window, so the notification is a way IN, not just an announcement.
+const notified = new Set();
+const OS_NOTE = {
+  available:  v => ['Update available — v' + v, 'It downloads and applies itself. Nothing to restart.'],
+  downloaded: v => ['Update v' + v + ' is applying', 'The window reopens on its own in a moment.'],
+  waiting:    v => ['Update v' + v + ' is ready', 'It applies the moment this scan finishes — the audit is never interrupted.'],
+};
+function osNotify(s) {
+  try {
+    const make = s && OS_NOTE[s.state];
+    if (!make || !Notification.isSupported()) return;
+    if (win && !win.isDestroyed() && win.isFocused() && !win.isMinimized()) return;
+    const key = s.state + '@' + (s.version || '');
+    if (notified.has(key)) return; notified.add(key);
+    const [title, body] = make(s.version || '');
+    const n = new Notification({ title, body, silent: false });
+    n.on('click', () => { try { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } } catch (_) {} });
+    n.show();
+  } catch (e) { try { log.warn('[update] os notification failed', e); } catch (_) {} }
+}
+const send = s => { osNotify(s); try { if (win && !win.isDestroyed()) win.webContents.send('update:status', s); } catch (_) {} };
+
+// ── WHO NOTICES AN UPDATE FIRST ───────────────────────────────────────────────────────────────────
+// It was the RENDERER: sgen-qa-serve.js polled /api/feed-version every 10 minutes and drew a red button
+// itself, so the main process — the only side that can raise an OS notification — never learned an update
+// existed until the user clicked. That is why "available" could not be announced outside the window: not
+// a missing notification call, a missing FACT. Main now owns the discovery.
+//
+// Version-only. It does NOT download: checkEngineUpdate() below fetches ~360 KB, and doing that on a
+// timer would spend the user's bandwidth on a decision they have not made. The poll costs one text file.
+// The renderer's own poll is left alone deliberately — its 'available' branch sets mode='download', and
+// autoCheck() early-returns in that mode, so the first announcement from here stands that poll down.
+const AVAIL_POLL_MS = 10 * 60 * 1000;
+async function pollAvailability() {
+  if (!app.isPackaged || checking || pendingEngine || applyingUpdate) return;
+  try {
+    const remote = (await fetchText(FEED_BASE + '/version.txt')).trim();
+    const cur = activeEngineDir().version;
+    if (remote && semverGt(remote, cur)) send({ state: 'available', version: remote });
+  } catch (_) { /* offline is not an event — stay silent rather than cry wolf */ }
+}
 
 async function checkEngineUpdate() {
   if (checking) return { state: 'checking' };
@@ -280,8 +338,13 @@ function wireIpc() {
 app.whenReady().then(async () => {
   try { await startServer(); createWindow(); wireIpc(); }
   catch (e) { dialog.showErrorBox('SGEN Site QA — startup failed', String(e && e.message || e)); app.quit(); }
-  // Updates are MANUAL: nothing is checked, downloaded, or applied unless the user clicks the update
-  // control (ipc update:check -> download+stage, update:install -> relaunch). No auto-check on launch.
+  // DOWNLOADS are manual: nothing is fetched, staged, or applied unless the user clicks the update
+  // control (ipc update:check -> download+stage, update:install -> relaunch). What IS automatic is
+  // NOTICING — a version-only feed poll, so the app can tell the user an update exists even when its
+  // window is minimised behind a running scan. (This comment used to say nothing was checked at all,
+  // which had not been true since the renderer grew its own 10-minute autoCheck.)
+  setTimeout(pollAvailability, 20000);            // not at boot — startServer + first paint come first
+  setInterval(pollAvailability, AVAIL_POLL_MS);
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('window-all-closed', () => { app.quit(); });
