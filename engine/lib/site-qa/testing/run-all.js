@@ -157,6 +157,8 @@ const SUITES = [
   'http-status.test.js',
   // "Analytics / tracking detected" knew the vendor and threw it away on every live run.
   'analytics-stack.test.js',
+  // What is the deployed site BUILT on — a faithful copy is not proof of a production site.
+  'tech-stack.test.js',
 ];
 
 const env = Object.assign({}, process.env, {

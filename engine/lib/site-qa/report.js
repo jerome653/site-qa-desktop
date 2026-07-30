@@ -124,6 +124,15 @@ const STYLE = `
 .lk-cell.bad .lk-n{color:var(--fail)}
 .lk-l{font-size:11.5px;color:var(--ink-faint);margin-top:3px;line-height:1.4}
 .lk-foot{margin-top:9px;font-size:12px;color:var(--ink-faint);line-height:1.55}
+/* "Built on" — signatures, never certainty; the caveat is part of the panel, not a tooltip. */
+.techstack{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.techstack-h{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px}
+.tsrow{display:flex;gap:14px;align-items:baseline;padding:5px 0;flex-wrap:wrap}
+.tsl{flex:none;width:96px;font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em}
+.tsv{display:flex;gap:7px;flex-wrap:wrap}
+.tk{display:inline-flex;align-items:baseline;gap:6px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:7px;padding:3px 9px;font-size:12.5px;color:var(--ink)}
+.tk i{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)}
+.ts-note{margin-top:10px;font-size:12px;color:var(--ink-faint);line-height:1.55;max-width:92ch}
 .summary{display:grid;grid-template-columns:minmax(0,340px) 1fr;gap:16px;align-items:stretch}
 .verdict{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;display:flex;gap:18px;align-items:center;position:relative;overflow:hidden}
 .verdict::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--vc,var(--warn))}
@@ -1108,6 +1117,32 @@ function renderReport(data, outDir, opts = {}) {
       return `<div class="lkcount"><div class="lkcount-h">Links</div><div class="lk-grid">${cells}</div>${capNote}</div>`;
     })();
 
+    // ── WHAT THE SITE IS BUILT ON ────────────────────────────────────────────────────────────────
+    // A post-deployment check that only proves the target is a faithful copy has not proved it is a
+    // production site. These signatures were already in every response the crawl made. Rendered only
+    // when something was actually seen, and always with the caveat the engine ships alongside the data
+    // — an empty list means no signature was seen, never "the technology is absent".
+    const stackHtml = (() => {
+      const t = data.techStack;
+      if (!t) return '';
+      const groups = [['CMS', t.cms], ['Framework', t.framework], ['E-commerce', t.ecommerce],
+        ['Server', t.server], ['CDN', t.cdn], ['Analytics', t.analytics]]
+        .filter(([, v]) => Array.isArray(v) && v.length);
+      if (!groups.length) return '';
+      const counts = t.pageCounts || {};
+      const key = { CMS: 'cms', Framework: 'framework', 'E-commerce': 'ecommerce', Server: 'server', CDN: 'cdn' };
+      const cells = groups.map(([label, vals]) => {
+        const c = counts[key[label]] || (label === 'Analytics' ? (t.analyticsPageCounts || {}) : {});
+        const items = vals.map(v => {
+          const n = c[v];
+          return `<span class="tk">${esc(v)}${typeof n === 'number' ? `<i>${esc(n)} page${n === 1 ? '' : 's'}</i>` : ''}</span>`;
+        }).join('');
+        return `<div class="tsrow"><div class="tsl">${esc(label)}</div><div class="tsv">${items}</div></div>`;
+      }).join('');
+      return `<div class="techstack"><div class="techstack-h">Built on</div>${cells}
+        <div class="ts-note">${esc(t.note || '')}</div></div>`;
+    })();
+
     return `<section class="pcov">
       <div class="pcov-h"><h2>Pages audited — ${esc(nA)} of ${esc(nD)} discovered</h2></div>
       <div class="pcov-body${hasNot ? '' : ' solo'}">
@@ -1117,6 +1152,7 @@ function renderReport(data, outDir, opts = {}) {
         </div>
         ${notCol}
       </div>
+      ${stackHtml}
       ${statusHtml}
       ${linkHtml}
       ${cappedFoot}

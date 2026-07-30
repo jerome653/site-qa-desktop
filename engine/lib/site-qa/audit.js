@@ -13,6 +13,7 @@ const { renderPass, VIEWPORTS } = require('../migration-qa/checks-render');
 const { tlsCheck } = require('./tls-check');
 const { crossBrowser } = require('./cross-browser');
 const { diagnoseReachability } = require('./reachability');
+const { detectStack, mergeStack, SIGNATURE_ONLY_NOTE } = require('./tech-stack');
 const { compute: computeQuality } = require('./score');
 const { compute: computeReadiness } = require('./readiness');
 const { projectFindings } = require('./lib/report-contract');
@@ -481,6 +482,7 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   // 2) static checks aggregated by id
   const staticBy = {};
   const analyticsSeen = new Map();   // vendor -> how many HTML pages carried it (see the detect call below)
+  const stackPerPage = [];           // per-page tech-stack signatures, folded into one view after the loop
   const titles = {}, descs = {};
   const ledger = newLedger();
   // The two evidence gates every static pass row is now held to. `htmlOk` is the same predicate the
@@ -520,6 +522,9 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     // "Analytics / tracking detected". Accumulated across pages because a tag manager fires on some
     // templates and not others, and "GA4 on 1 of 40 pages" is the finding, not "GA4".
     if (pageIsHtml) for (const v of detectAnalytics(ctx.html)) analyticsSeen.set(v, (analyticsSeen.get(v) || 0) + 1);
+    // Same idea, one layer out: what is the site BUILT on. Headers come from the response the crawl
+    // already made, so this costs nothing beyond a few regexes and never issues a request.
+    if (pageIsHtml) stackPerPage.push(detectStack(ctx.html, ctx.headers));
     // Batch modules: ONE throw takes out every family in the batch, so the ledger marks them all.
     // Interaction Integrity (Batch 1) — dead links/buttons, nesting, disabled-active. Static + deterministic.
     if (ctx.isHtml && p.status === 200 && !skipBatch(BATCH_IDS.interaction)) { try { interactionCheck(ctx).forEach(f => (staticBy[f.check] = staticBy[f.check] || []).push(f)); ledger.markAll(BATCH_IDS.interaction, true); } catch (e) { ledger.markAll(BATCH_IDS.interaction, false, e); } }
@@ -1013,7 +1018,14 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     // Machine-readable, so a consumer does not have to scrape the sentence off the row. Always present
     // (empty array = looked, found none) — an absent field and "none found" are different claims, and
     // this tool exists to keep those apart.
-    techStack: { analytics: [...analyticsSeen.keys()], analyticsPageCounts: Object.fromEntries(analyticsSeen) },
+    techStack: {
+      ...mergeStack(stackPerPage),
+      analytics: [...analyticsSeen.keys()],
+      analyticsPageCounts: Object.fromEntries(analyticsSeen),
+      // Travels WITH the data, so no surface can render the lists without the caveat that makes them
+      // honest: an empty list means no signature was seen, not that the technology is absent.
+      note: SIGNATURE_ONLY_NOTE,
+    },
     render: { rendered: renderRes.rendered, total: renderRes.total, viewports: renderRes.viewports || [], error: renderRes.error || null },
     // totalInternal / totalExternal are carried SEPARATELY, not just summed into `checked`. The report
     // shows internal and external as distinct counts, and a single total cannot be split back apart —
