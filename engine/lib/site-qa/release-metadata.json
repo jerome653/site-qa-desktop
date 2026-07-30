@@ -1,6 +1,6 @@
 {
-  "packageVersion": "5.2.0",
-  "engineVersion": "3.2.0",
+  "packageVersion": "5.3.0",
+  "engineVersion": "3.3.0",
   "registryVersion": "1.13.0",
   "contractVersion": "1.0",
   "reportVersion": "1.6.0",
@@ -12,7 +12,7 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "Each tab is now true to its name. Copy Review (COPY-001..004 — assistant boilerplate left in visible copy, unfilled authoring placeholders, AI-tell phrasing, uniform paragraph rhythm) runs ONLY in the Content & SEO tool. It already ran there by request; it ALSO ran in Site Audit, not by intent but by default, because the advisory pass with no explicit list runs all four. The result was a technical report carrying a copy section and the same finding surfacing in two tools, one of which nobody opens looking for copy problems. Site Audit now names its passes and keeps the ones that are technical: content artifacts (mojibake, unresolved tokens) and misspellings are SCORED functional defects folded into the functional suite — a mojibake is a bug, not a copy opinion — and Best Practices is web hygiene. NO SCORING CHANGE, and it is measured rather than argued from the weights table: the Copy Review suite carries weight 0 and every one of its rows is status manual, which the scorer skips in both the open-risk and total-risk paths, and the suite now proves it from the other direction by taking the app own shipped result, adding a copy suite BACK, recomputing, and asserting the number is identical. A Site Audit score from 5.1.0 is directly comparable to one from 5.2.0. A Site Audit report no longer contains a copy suite and no longer declares COPY-* rules as evaluated in its coverage ledger — a rule is declared if and only if it ran, and that is asserted in both directions so it cannot be satisfied by declaring everything or nothing.",
+  "release": "\"Analytics / tracking detected\" now says WHAT it detected. The detector has built a vendor list since it was written — GA4, GTM, Meta Pixel and LinkedIn by signature — and threw it away on every live run: present-on-live is a pass, so the check returned nothing and the row fell back to a generic label. On staging the same detector named them. The tool knew, and only the environment decided whether it told anyone. The row now reads \"Analytics / tracking detected - GA4, GTM\" and carries per-page counts, because a tag manager fires on some templates and not others: \"GA4 on 1 of 40 pages\" is the finding, not \"GA4\". The row also states its own limit — presence only; it does not prove the tag fires or reports into the right property, and a green tick implying otherwise would be worse than no tick. The result carries techStack.analytics and techStack.analyticsPageCounts so nothing has to scrape the sentence off the row, and the field is ALWAYS present: an empty array means the tool looked and found none, which is a different claim from a missing field. Also in this release, carried from 5.2.0: Copy Review (assistant boilerplate, unfilled placeholders, AI-tell phrasing, paragraph rhythm) runs only in the Content & SEO tool. It used to run in Site Audit too, by default rather than intent, so a technical report carried a copy section and the same finding surfaced in two tools. No scoring change, measured rather than argued: the Copy Review suite is weight 0 with every row manual, and the suite proves it by adding the suite back to a shipped result and recomputing to the same number. A Site Audit score from 5.1.0 is directly comparable to one from 5.3.0.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
@@ -20,6 +20,6 @@
     "near-duplicate content"
   ],
   "generatedAt": "2026-07-30T00:00:00.000Z",
-  "gitTag": "v5.2.0",
+  "gitTag": "v5.3.0",
   "buildBaseCommit": "358e2cf"
 }

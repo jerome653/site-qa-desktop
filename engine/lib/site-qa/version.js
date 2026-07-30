@@ -55,7 +55,11 @@ module.exports = {
   // declares COPY-* as evaluated. NOT a scoring change and not a major: WEIGHTS.copy = 0 and every
   // COPY-* row is status 'manual', proven by adding the suite back to a shipped result and recomputing
   // to the same number (seo-split.test.js). Scores remain comparable across this boundary.
-  ENGINE_VERSION: '3.2.0',   // Copy Review is Content & SEO only (was 3.1.0)
+  // 3.3.0 — additive. The analytics pass row names the tracking stack it found ("Analytics / tracking
+  // detected — GA4, GTM") with per-page counts, and the result carries techStack.analytics +
+  // analyticsPageCounts for consumers. The vendor list already existed and was discarded on live runs,
+  // where present-means-pass returned null; staging named them all along. No rule added or rescored.
+  ENGINE_VERSION: '3.3.0',   // analytics row names the stack; result.techStack (was 3.2.0)
   // 1.6.0 — the report's SHAPE changed, which is what this stream is for. Out: the verdict card, the
   // score ring, the readiness pill and the seven stat tiles (redundant — every number was restated
   // below). In: a status breakdown that says what each HTTP code MEANS, and a link count strip. A
