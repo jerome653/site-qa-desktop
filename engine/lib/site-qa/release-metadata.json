@@ -1,9 +1,9 @@
 {
-  "packageVersion": "5.0.0",
-  "engineVersion": "3.0.0",
+  "packageVersion": "5.1.0",
+  "engineVersion": "3.1.0",
   "registryVersion": "1.13.0",
   "contractVersion": "1.0",
-  "reportVersion": "1.5.0",
+  "reportVersion": "1.6.0",
   "developerEvidenceTier": 1,
   "ruleCount": 142,
   "v2RuleCount": 32,
@@ -12,14 +12,14 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "MAJOR: the tool now tells you when it could not see the site, and refuses to score what it did not read. Measured on an origin that answers 403 to every path — a WAF or an IP allowlist, which is what this scanner meets in the field: the old build reported NEEDS ATTENTION, 50%, QUALITY 71 with zero pages actually read, 87 of 97 rules never evaluated, the words blocked and unreachable appearing nowhere in the report, and the cross-browser section scoring the 403 page itself (two engines agreeing about a block page is not a compatibility result). Now: the report opens with a diagnosis that names the cause — blocked, DNS, route/timeout, connection refused, TLS handshake, server error, 404 entry, redirect dead-end, or non-HTML — each with what to do about it, plus the evidence it was derived from. The verdict is COULD NOT AUDIT, the score and quality are null rather than a number, launch readiness is not ready, and the cross-browser pass does not run on an unreadable origin. It also recognises STATUS PAGES SERVED WITH A 200 (WAF and CDN block pages, Cloudflare interstitials): if every page fetched looks like one the report says the findings may describe an error page, and a real article about HTTP errors is deliberately not flagged. This is a comparability break by design: a result that used to be a number can now be null, which is why the major version moves. A healthy site is unaffected — verified byte-for-byte on a live run. Also in this release: the SEO report renders again (its data island was broken by embedding every audited page raw HTML, so the first </script> in it ended the tag — the payload is escaped now and page source is no longer shipped, 31.6 MB per sgen.com run written twice), a passing check no longer reads NOT RUN (8 of them did on sgen.com, because a clean row carried no identity), a Content and readability section, the SEO checks and page ceiling moved into the Settings gear like every other tool, and an update now applies itself instead of asking you to restart the app.",
+  "release": "Tool 4 is now \"Content & SEO\" — the name matches what it audits. It has not been SEO-only since Copy Review landed: it runs thin content, readability and COPY-001..004 (assistant boilerplate, unfilled placeholders, AI-tell phrasing, paragraph rhythm) alongside titles, canonicals, schema and indexability, and the old label meant the content half was work nobody had reason to look for. Renamed on every user-facing surface; the suite key, route and rule ids are deliberately unchanged because they are identifiers in reports already on disk. THE REPORT LOSES ITS TOP BLOCK. The verdict card, score ring, readiness pill and seven stat tiles are gone as redundant: every number in them was stated again further down (the tally by the status filter, pages crawled by page coverage, rendered by the gallery, copy flags by the Copy Review suite), so the first screen summarised the screens below it. This removes a VIEW, not a measurement — verdict, score, quality, tally and readiness are all still in report.json, on the run event, and in the app status line, and the reachability panel still stops a reader when the run could not see the site. NEW: page statuses now say what they mean. The coverage list rendered a bare number, and 403 and 404 land on completely different desks — one is usually a WAF or an IP allowlist with the site perfectly healthy, the other is a dead page someone has to fix. One vocabulary now serves the whole product (30 codes including the Cloudflare 52x family, class-level fallback for the rest, an action only where the answer is actionable), 401/403/429 group as BLOCKED rather than missing, and a status of 0 reads \"No response\" rather than \"other\". NEW: link counts. internal / external / broken internal / broken external / redirect chains were recorded in report.json all along and rendered nowhere. Wiring them up surfaced a real data defect: audit.js summed internal and external into one total and dropped the components, so a fixture with 4 internal and 1 external links reported \"5 internal, 0 external\". They are now carried separately, with the 300-URL internal cap stated rather than implied. Also: the app raises an OS notification when an update is ready, pending behind a running scan, or applying — the signal used to be in-app only, so an update announced during a minimised scan reached nobody, and discovery moved into the main process because the renderer owned it and the main process is the only side that can raise a notification.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
     "STB-004 broken fonts",
     "near-duplicate content"
   ],
-  "generatedAt": "2026-07-30T01:20:00.000Z",
-  "gitTag": "v5.0.0",
+  "generatedAt": "2026-07-30T00:00:00.000Z",
+  "gitTag": "v5.1.0",
   "buildBaseCommit": "358e2cf"
 }

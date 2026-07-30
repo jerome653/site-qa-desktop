@@ -44,8 +44,18 @@ module.exports = {
   // "blocked" and "unreachable" appearing zero times in the report. A site the tool never saw scored 71.
   // Anything comparing scores across this boundary must know that a previously-numeric result can now be
   // null — which is exactly what a major version is for.
-  ENGINE_VERSION: '3.0.0',   // reachability diagnosis: a blind run publishes no score (was 2.5.0)
-  REPORT_VERSION: '1.5.0',   // + reachability panel above the verdict, and a "not scored" ring state
+  // 3.1.0 — additive, no scoring change. The audit result now carries links.totalInternal /
+  // totalExternal / capped as their own fields: they were summed into `checked` and the components
+  // discarded, and a total cannot be split back apart — measured on a fixture with 4 internal + 1
+  // external links, the report read "5 internal, 0 external". Nothing is rescored; a consumer that
+  // only reads `checked` is unaffected.
+  ENGINE_VERSION: '3.1.0',   // links: internal/external carried separately (was 3.0.0)
+  // 1.6.0 — the report's SHAPE changed, which is what this stream is for. Out: the verdict card, the
+  // score ring, the readiness pill and the seven stat tiles (redundant — every number was restated
+  // below). In: a status breakdown that says what each HTTP code MEANS, and a link count strip. A
+  // consumer scraping the HTML for .verdict / .tile will find nothing; report.json is unchanged and
+  // remains the contract for anything automated.
+  REPORT_VERSION: '1.6.0',   // - verdict card / ring / tiles, + status meaning + link counts
   REGISTRY_VERSION,          // rule metadata version (owned by the registry)
 
   // ── Acquisition-boundary streams (ADR-0004 §D5/§D6) ────────────────────────────────────────────
