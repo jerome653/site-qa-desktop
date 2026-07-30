@@ -2331,9 +2331,14 @@ async function apiRun(req, res, mode = 'audit') {
     // SAFE BY CONSTRUCTION: WEIGHTS.copy = 0 and every COPY-* row is status 'manual', which score.js
     // skips in both openRisk and totalRisk — so removing the suite cannot move the Site Audit score.
     // Asserted, not assumed, in seo-split.test.js.
+    // EACH TAB OWNS WHAT ITS NAME SAYS — the whole rule, not half of it. Content findings live on
+    // Content & SEO: Copy Review (COPY-001..006) plus content artifacts (mojibake, unresolved tokens)
+    // and misspellings, which were technical-tab findings only because that is where the advisory pass
+    // happened to fold them. Site Audit keeps Best Practices, which is web hygiene, and nothing else
+    // advisory. Mojibake is a content defect and belongs with the words, not with the TLS check.
     const data = mode === 'seo'
-      ? applyAdvisory(raw, { passes: ['copyReview'] })
-      : applyAdvisory(raw, { passes: ['contentArtifacts', 'spelling', 'bestPractices'] });
+      ? applyAdvisory(raw, { passes: ['copyReview', 'contentArtifacts', 'spelling'] })
+      : applyAdvisory(raw, { passes: ['bestPractices'] });
     emit({ t: 'p', pct: 99, phase: 'writing report' });
     // CHANGE E: auto-compare this scan against the most recent PRIOR recorded scan for this host and
     // embed a "vs previous scan" panel near the top. loadLatestRecord() runs BEFORE recordScan() below,

@@ -176,15 +176,26 @@ console.log('SEO split — Site Audit is technical, SEO is its own tool — REAL
       const all = (rules.all ? rules.all() : rules.RULES) || [];
       const nonSeo = new Set(all.filter(r => r.suite !== 'seo').map(r => r.id));
       const copyIds = all.filter(r => r.suite === 'copy').map(r => r.id).sort();
-      // Copy Review DID run, so its rules are declared — that is the declaration being honest, not a leak.
-      // Anything else non-seo would be: a rule declared evaluated whose row was never emitted is the
-      // ADR-0011 lie, and it is the default failure mode here — applyAdvisory pushes FUNC-008/009 into the
-      // FUNCTIONAL suite, which an SEO run skips, so those rows are silently dropped while the pass still
-      // reports having run.
-      eq(declared.filter(id => nonSeo.has(id)).sort(), copyIds,
-        'seo: the only non-seo rules declared evaluated are the COPY-* rules that actually ran — no rule is declared without a row');
-      eq(declared.filter(id => /^(FUNC-008|FUNC-009|BP-)/.test(id)), [],
-        'seo: content-artifacts, spelling and Best Practices are NOT declared — those passes did not run for this tool');
+      // The content passes DID run, so their rules are declared — that is the declaration being honest,
+      // not a leak. A rule declared evaluated whose row was never emitted is the ADR-0011 lie, and it
+      // was the live failure mode here until 6.0.0: applyAdvisory pushed FUNC-008/009 into the
+      // FUNCTIONAL suite behind `if (func)`, which an SEO run does not have, so the rows were built and
+      // SILENTLY DROPPED while the pass still reported having run. They now fall back to the Copy
+      // Review suite, so declaration and rows agree again.
+      const contentIds = ['FUNC-008', 'FUNC-009'];
+      eq(declared.filter(id => nonSeo.has(id)).sort(), copyIds.concat(contentIds).sort(),
+        'seo: the non-seo rules declared evaluated are exactly the COPY-* and content rules that ran — no rule is declared without a row');
+      // REPORT rows, not registry entries — `all` above is the registry, whose entries carry .id while
+      // report rows carry .ruleId. The point of these two assertions is that a DECLARED rule produced a
+      // real row, so they must read what the report actually contains.
+      const emitted = (S.suites || []).flatMap(s => (s.checks || []).map(c => ({ ...c, _suite: s.key })));
+      for (const id of contentIds) {
+        const row = emitted.find(r => r.ruleId === id);
+        ok(!!row, `seo: ${id} emitted a real row on the content tab — declared AND present, not declared and dropped`);
+        if (row) eq(row._suite, 'copy', `seo: ${id} lands in the Copy Review suite, the content tab's home for content findings`);
+      }
+      eq(declared.filter(id => /^BP-/.test(id)), [],
+        'seo: Best Practices is NOT declared — web hygiene stays on Site Audit');
 
       // ── SCORE NEUTRALITY, MEASURED ─────────────────────────────────────────────────────────────
       // Recompute the SEO quality from the app's own suites with the copy suite REMOVED. If the advisory

@@ -67,7 +67,14 @@ module.exports = {
   // 'manual'. COPY-005 exists because Content & SEO skips every suite except 'seo' at RUN level, so
   // FUNC-004 could never reach the tab named for content; it shares one detector with FUNC-004 rather
   // than restating the patterns. COPY-006 is the first BODY-level duplicate detection in the product.
-  ENGINE_VERSION: '3.5.0',   // + COPY-005 placeholder copy, COPY-006 duplicate body copy (was 3.4.0)
+  // 4.0.0 — MAJOR, and the reason is COVERAGE, not a feature: content findings move off Site Audit.
+  // FUNC-008 (mojibake / unresolved tokens) and FUNC-009 (misspellings) now run in Content & SEO and
+  // NOT in Site Audit. In the Copy Review suite they are advisory (WEIGHTS.copy = 0), so those two
+  // rules are FLAGGED but no longer SCORED anywhere. A Site Audit score from 5.x is therefore NOT
+  // comparable to one from 6.x — its denominator no longer contains them. That is exactly what a major
+  // version is for. Deliberate: the operator's rule is that content belongs on the content tab, and a
+  // mojibake is a content defect, not a technical one.
+  ENGINE_VERSION: '4.0.0',   // content findings move to Content & SEO; FUNC-008/009 unscored (was 3.5.0)
   // 1.6.0 — the report's SHAPE changed, which is what this stream is for. Out: the verdict card, the
   // score ring, the readiness pill and the seven stat tiles (redundant — every number was restated
   // below). In: a status breakdown that says what each HTTP code MEANS, and a link count strip. A

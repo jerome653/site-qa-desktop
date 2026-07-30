@@ -85,11 +85,15 @@ console.log('Score declaration integrity — REAL SERVER e2e (ADR-0011) — test
     // so the Site Audit path no longer evaluates it. The invariant is unchanged and is what actually
     // matters — a rule is declared evaluated IF AND ONLY IF it ran. Both directions are asserted, so
     // this cannot be satisfied by declaring everything or by declaring nothing.
-    for (const id of ['FUNC-008', 'FUNC-009', 'BP-001']) {
-      ok(rep1.coverage.evaluatedRules.includes(id), `default: advisory rule ${id} declared as evaluated in the shipped record`);
+    ok(rep1.coverage.evaluatedRules.includes('BP-001'), 'default: advisory rule BP-001 declared as evaluated in the shipped record');
+    // FUNC-008/009 left this list in 6.0.0 with Copy Review. Content findings — mojibake, unresolved
+    // tokens, misspellings — belong on the Content & SEO tab; Site Audit keeps Best Practices, which is
+    // web hygiene. The invariant is unchanged and is the one that matters: declared IF AND ONLY IF it
+    // ran. Asserted in both directions so it cannot be satisfied by declaring everything or nothing.
+    for (const id of ['COPY-001', 'FUNC-008', 'FUNC-009']) {
+      ok(!rep1.coverage.evaluatedRules.includes(id),
+        `default: ${id} is NOT declared — it does not run in Site Audit, and a rule that did not run must never be declared as evaluated`);
     }
-    ok(!rep1.coverage.evaluatedRules.includes('COPY-001'),
-      'default: COPY-001 is NOT declared — Copy Review does not run in Site Audit, and a rule that did not run must never be declared as evaluated');
     ok(!rep1.suites.some(s => s.key === 'copy'), 'default: no Copy Review suite in a Site Audit report');
     ok(rep1.suites.some(s => s.key === 'best-practices'), 'default: the advisory suites really did run');
 

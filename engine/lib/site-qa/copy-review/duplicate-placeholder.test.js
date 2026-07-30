@@ -114,6 +114,26 @@ const rowOf = (rows, id) => rows.find(r => r.ruleId === id) || MISSING;
   eq(withCopy.overall, without.overall, 'adding the two new rules does not move the score — measured, not assumed');
 }
 
+// ── the copy suite must survive BOTH pass orderings ───────────────────────────────────────────────
+// Regression guard for a real near-miss. contentArtifacts/spelling fall back to the copy suite when
+// there is no functional suite (every Content & SEO run), and they run BEFORE copyReview. The old
+// guard was `if (!suites.some(key === 'copy'))`, so it saw the suite those passes had just created and
+// skipped scanCopyReview entirely: measured, a Content & SEO run emitted FUNC-008/009 and ZERO of
+// COPY-001..006. Presence of the suite is not evidence the pass ran. Both orderings are asserted
+// because ADVISORY_PASSES order is a detail no caller should have to know.
+{
+  const { applyAdvisory } = require('../pipeline');
+  const ctx = { url: 'http://x/a', html: '<html><body><main><p>Lorem ipsum dolor sit amet. As an AI language model, here is copy.</p></main></body></html>' };
+  const base = () => ({ suites: [{ key: 'seo', name: 'SEO', checks: [] }], pages: [ctx], quality: { overall: 50, evaluationDeclared: true }, coverage: { evaluatedRules: ['SEO-001'] }, tally: { pass: 0, warn: 0, fail: 0, manual: 0, notRun: 0 } });
+  const want = ['COPY-001', 'COPY-002', 'COPY-003', 'COPY-004', 'COPY-005', 'COPY-006', 'FUNC-008', 'FUNC-009'];
+  for (const order of [['copyReview', 'contentArtifacts', 'spelling'], ['contentArtifacts', 'spelling', 'copyReview']]) {
+    const out = applyAdvisory(base(), { passes: order });
+    const copy = out.suites.find(s => s.key === 'copy') || { checks: [] };
+    const got = copy.checks.map(c => c.ruleId).sort();
+    eq(JSON.stringify(got), JSON.stringify(want), `pass order [${order.join(', ')}] yields every content row — no pass is skipped because another created the suite`);
+  }
+}
+
 console.log(fails.length ? `\n❌ FAIL — ${pass} passed, ${fails.length} failed\n` : `\n✅ PASS — ${pass}/${pass} assertions\n`);
 for (const f of fails) console.log('   ✗ ' + f);
 process.exitCode = fails.length ? 1 : 0;

@@ -116,8 +116,26 @@ function applyAdvisory(result, opts = {}) {
 
   if (pages.length && passes.length && opts.advisory !== false) {
     // FUNC-008 → Functional suite (scored). One row aggregating all content artifacts across pages.
+    // ── WHERE A CONTENT ROW LANDS ────────────────────────────────────────────────────────────────
+    // FUNC-008/009 used to go into the 'functional' suite and NOWHERE ELSE — `if (func)`, so on a run
+    // with no functional suite the row was built and silently dropped. That is every Content & SEO run
+    // (it skips every suite except 'seo'), which is why simply enabling these passes there would have
+    // shipped nothing at all. Now they fall back to the Copy Review suite, which is the content tab's
+    // home for content findings.
+    //
+    // THE COST, STATED: in 'copy' these rows are advisory (WEIGHTS.copy = 0), so mojibake and
+    // misspellings are FLAGGED but not SCORED once they leave Site Audit. That is a real reduction in
+    // what the score covers and it is why the package version moves major.
     const func = suites.find(s => s.key === 'functional');
-    const pushRow = r => { if (func) func.checks.push({ status: r.status, name: r.name, target: r.target, detail: r.detail, meta: r.ruleId, items: r.items.length ? r.items : undefined, ruleId: r.ruleId, severity: r.severity, suite: 'functional', deduction: r.deduction }); };
+    const ensureCopySuite = () => {
+      let c = suites.find(s => s.key === 'copy');
+      if (!c) { c = { key: 'copy', name: 'Copy Review', desc: 'Advisory · content & copy findings', icon: 'cursor', advisory: true, checks: [] }; suites.push(c); }
+      return c;
+    };
+    const pushRow = r => {
+      const host = func || ensureCopySuite();
+      host.checks.push({ status: func ? r.status : 'manual', name: r.name, target: r.target, detail: r.detail, meta: r.ruleId, items: r.items.length ? r.items : undefined, ruleId: r.ruleId, severity: func ? r.severity : 'manual', suite: host.key, deduction: func ? r.deduction : 0 });
+    };
     if (running('contentArtifacts')) pushRow(scanContentArtifacts(pages)); // FUNC-008 loose symbols / tokens / mojibake
     if (running('spelling')) pushRow(scanSpelling(pages));                  // FUNC-009 common misspellings / doubled words
     // Best Practices → advisory suite (weight 0, never moves the score).
@@ -130,8 +148,15 @@ function applyAdvisory(result, opts = {}) {
     // suite-weight path or the risk path. NOT folded into 'functional' the way FUNC-008/009 are —
     // those are scored defects (a mojibake IS a bug); these are flags a human reads, and putting them
     // in a weight-18 suite would let a phrasing signal act like a defect. See registry Suite 13.
-    if (running('copyReview') && !suites.some(s => s.key === 'copy')) {
-      suites.push({ key: 'copy', name: 'Copy Review', desc: 'Advisory · AI flags & copy artifacts', icon: 'cursor', advisory: true, checks: scanCopyReview(pages) });
+    // APPEND, never skip-if-present. This guard used to be `!suites.some(key === 'copy')`, which was
+    // correct only while nothing else could create the suite. contentArtifacts/spelling now can (they
+    // fall back to it when there is no functional suite) and they run FIRST, so the guard saw a copy
+    // suite that existed and skipped scanCopyReview entirely — measured: a Content & SEO run emitted
+    // FUNC-008/009 and ZERO of COPY-001..006. Presence of the suite is not evidence the pass ran.
+    if (running('copyReview')) {
+      const c = ensureCopySuite();
+      const already = new Set(c.checks.map(x => x.ruleId));
+      for (const row of scanCopyReview(pages)) if (!already.has(row.ruleId)) c.checks.push(row);
     }
     ranAdvisory = true;
     changed = true;

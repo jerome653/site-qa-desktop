@@ -1,6 +1,6 @@
 {
-  "packageVersion": "5.5.0",
-  "engineVersion": "3.5.0",
+  "packageVersion": "6.0.0",
+  "engineVersion": "4.0.0",
   "registryVersion": "1.14.0",
   "contractVersion": "1.0",
   "reportVersion": "1.7.0",
@@ -12,7 +12,7 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "The content tab now sees content problems. Two things were on the wrong side of the line between \"content and SEO\" and \"technical\". PLACEHOLDER COPY: lorem ipsum, \"your text here\", sample/dummy text and TODO markers were caught by Site Audit and invisible to Content & SEO — not because a rule was switched off, but because that check lives in the functional suite and a Content & SEO run skips every suite except SEO before rules are even considered, so no toggle could have reached it. The tab named for content was the one blind to placeholder copy. It now flags there too, calling the SAME detector rather than a second copy of the patterns, which would drift the moment one was edited. Site Audit still scores it; Content & SEO flags it for whoever owns the words. DUPLICATE BODY COPY, for the first time in this product: duplicate detection previously meant page titles and meta descriptions only, so two pages carrying word-for-word identical body text passed clean. Body copy is now compared page to page using word shingles and Jaccard similarity — deterministic and offline, no AI, no network, no third-party service. Two deliberate limits keep the signal readable: pages under 40 words are not compared, because a \"Contact us.\" stub trivially matches every other stub and would bury the one real case, and each duplicate PAIR is reported once rather than in both directions, which would make a site look twice as duplicated as it is. Both are advisory and never move a score: near-duplicate copy is frequently deliberate (regional landing pages, product variants) and the tool cannot see the reason for an editorial decision. \"Nothing found\" and \"nothing could be compared\" stay distinct — a single-page run reports how many pages had enough copy to compare instead of showing a clean tick over a comparison that never happened.",
+  "release": "MAJOR: each tab is now true to its name, and that changes what a Site Audit score covers. Content findings move to Content & SEO — mojibake and unresolved tokens (FUNC-008) and misspellings (FUNC-009) were only ever technical-tab findings because that is where the advisory pass happened to fold them. They now run on the content tab and no longer on Site Audit. THE COST, STATED PLAINLY: in the Copy Review suite these rows are advisory, so those two rules are flagged but no longer scored anywhere, and a Site Audit score from 5.x is NOT comparable to one from 6.x because its denominator no longer contains them. That is what the major version records. Fixing this surfaced two defects that would have shipped silently. First, the advisory pass pushed content rows into the FUNCTIONAL suite behind a guard, and a Content & SEO run has no functional suite because it skips every suite except SEO — so the rows were built and silently dropped, and simply enabling the passes there would have delivered nothing at all. They now fall back to the Copy Review suite. Second, and caught only by checking rather than by the test suite: the Copy Review pass was guarded on the copy suite not already existing, which was correct only while nothing else could create it. The content passes now can, and they run first, so the guard saw a suite that existed and skipped the entire Copy Review scan — measured, a Content and SEO run emitted the two content rows and ZERO of COPY-001 through COPY-006. Presence of a suite is not evidence that the pass which owns it ever ran. Both orderings are now asserted so no caller has to know the pass order.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
@@ -20,6 +20,6 @@
     "near-duplicate content"
   ],
   "generatedAt": "2026-07-30T00:00:00.000Z",
-  "gitTag": "v5.5.0",
+  "gitTag": "v6.0.0",
   "buildBaseCommit": "358e2cf"
 }
