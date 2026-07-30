@@ -1,6 +1,6 @@
 {
-  "packageVersion": "5.1.0",
-  "engineVersion": "3.1.0",
+  "packageVersion": "5.2.0",
+  "engineVersion": "3.2.0",
   "registryVersion": "1.13.0",
   "contractVersion": "1.0",
   "reportVersion": "1.6.0",
@@ -12,7 +12,7 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "Tool 4 is now \"Content & SEO\" — the name matches what it audits. It has not been SEO-only since Copy Review landed: it runs thin content, readability and COPY-001..004 (assistant boilerplate, unfilled placeholders, AI-tell phrasing, paragraph rhythm) alongside titles, canonicals, schema and indexability, and the old label meant the content half was work nobody had reason to look for. Renamed on every user-facing surface; the suite key, route and rule ids are deliberately unchanged because they are identifiers in reports already on disk. THE REPORT LOSES ITS TOP BLOCK. The verdict card, score ring, readiness pill and seven stat tiles are gone as redundant: every number in them was stated again further down (the tally by the status filter, pages crawled by page coverage, rendered by the gallery, copy flags by the Copy Review suite), so the first screen summarised the screens below it. This removes a VIEW, not a measurement — verdict, score, quality, tally and readiness are all still in report.json, on the run event, and in the app status line, and the reachability panel still stops a reader when the run could not see the site. NEW: page statuses now say what they mean. The coverage list rendered a bare number, and 403 and 404 land on completely different desks — one is usually a WAF or an IP allowlist with the site perfectly healthy, the other is a dead page someone has to fix. One vocabulary now serves the whole product (30 codes including the Cloudflare 52x family, class-level fallback for the rest, an action only where the answer is actionable), 401/403/429 group as BLOCKED rather than missing, and a status of 0 reads \"No response\" rather than \"other\". NEW: link counts. internal / external / broken internal / broken external / redirect chains were recorded in report.json all along and rendered nowhere. Wiring them up surfaced a real data defect: audit.js summed internal and external into one total and dropped the components, so a fixture with 4 internal and 1 external links reported \"5 internal, 0 external\". They are now carried separately, with the 300-URL internal cap stated rather than implied. Also: the app raises an OS notification when an update is ready, pending behind a running scan, or applying — the signal used to be in-app only, so an update announced during a minimised scan reached nobody, and discovery moved into the main process because the renderer owned it and the main process is the only side that can raise a notification.",
+  "release": "Each tab is now true to its name. Copy Review (COPY-001..004 — assistant boilerplate left in visible copy, unfilled authoring placeholders, AI-tell phrasing, uniform paragraph rhythm) runs ONLY in the Content & SEO tool. It already ran there by request; it ALSO ran in Site Audit, not by intent but by default, because the advisory pass with no explicit list runs all four. The result was a technical report carrying a copy section and the same finding surfacing in two tools, one of which nobody opens looking for copy problems. Site Audit now names its passes and keeps the ones that are technical: content artifacts (mojibake, unresolved tokens) and misspellings are SCORED functional defects folded into the functional suite — a mojibake is a bug, not a copy opinion — and Best Practices is web hygiene. NO SCORING CHANGE, and it is measured rather than argued from the weights table: the Copy Review suite carries weight 0 and every one of its rows is status manual, which the scorer skips in both the open-risk and total-risk paths, and the suite now proves it from the other direction by taking the app own shipped result, adding a copy suite BACK, recomputing, and asserting the number is identical. A Site Audit score from 5.1.0 is directly comparable to one from 5.2.0. A Site Audit report no longer contains a copy suite and no longer declares COPY-* rules as evaluated in its coverage ledger — a rule is declared if and only if it ran, and that is asserted in both directions so it cannot be satisfied by declaring everything or nothing.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
@@ -20,6 +20,6 @@
     "near-duplicate content"
   ],
   "generatedAt": "2026-07-30T00:00:00.000Z",
-  "gitTag": "v5.1.0",
+  "gitTag": "v5.2.0",
   "buildBaseCommit": "358e2cf"
 }

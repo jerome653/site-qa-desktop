@@ -49,7 +49,13 @@ module.exports = {
   // discarded, and a total cannot be split back apart — measured on a fixture with 4 internal + 1
   // external links, the report read "5 internal, 0 external". Nothing is rescored; a consumer that
   // only reads `checked` is unaffected.
-  ENGINE_VERSION: '3.1.0',   // links: internal/external carried separately (was 3.0.0)
+  // 3.2.0 — Copy Review (COPY-001..004) runs ONLY in the Content & SEO tool. It ran in Site Audit too,
+  // by default rather than by intent (applyAdvisory with no `passes` runs all four), so a technical
+  // report carried a copy section. A Site Audit report no longer contains a 'copy' suite and no longer
+  // declares COPY-* as evaluated. NOT a scoring change and not a major: WEIGHTS.copy = 0 and every
+  // COPY-* row is status 'manual', proven by adding the suite back to a shipped result and recomputing
+  // to the same number (seo-split.test.js). Scores remain comparable across this boundary.
+  ENGINE_VERSION: '3.2.0',   // Copy Review is Content & SEO only (was 3.1.0)
   // 1.6.0 — the report's SHAPE changed, which is what this stream is for. Out: the verdict card, the
   // score ring, the readiness pill and the seven stat tiles (redundant — every number was restated
   // below). In: a status breakdown that says what each HTTP code MEANS, and a link count strip. A
