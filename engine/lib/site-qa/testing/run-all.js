@@ -153,6 +153,8 @@ const SUITES = [
   // same as unverified: the next edit had nothing to fail against. The signal used to be in-app only,
   // so an update announced during a minimised scan reached nobody.
   'updater.test.js',
+  // A bare "403" in the page list is evidence, not a finding — 403 and 404 land on different desks.
+  'http-status.test.js',
 ];
 
 const env = Object.assign({}, process.env, {

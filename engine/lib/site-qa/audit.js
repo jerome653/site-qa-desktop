@@ -994,7 +994,11 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     // stored report (which has no such field) is still valid — absence means "the site was seen".
     ...(reachability ? { reachability } : {}),
     render: { rendered: renderRes.rendered, total: renderRes.total, viewports: renderRes.viewports || [], error: renderRes.error || null },
-    links: { checked: links.totalInternal + links.totalExternal, broken: links.brokenInternal.length + links.brokenExternal.length, brokenInternal: links.brokenInternal.length, brokenExternal: links.brokenExternal.length, chains: links.chains.length },
+    // totalInternal / totalExternal are carried SEPARATELY, not just summed into `checked`. The report
+    // shows internal and external as distinct counts, and a single total cannot be split back apart —
+    // measured on a fixture with 4 internal + 1 external links, the report read "5 internal, 0 external".
+    // `capped` travels too: 300 internal links checked out of 900 is a different claim from "none broken".
+    links: { checked: links.totalInternal + links.totalExternal, totalInternal: links.totalInternal, totalExternal: links.totalExternal, broken: links.brokenInternal.length + links.brokenExternal.length, brokenInternal: links.brokenInternal.length, brokenExternal: links.brokenExternal.length, chains: links.chains.length, capped: !!links.capped },
     suites, shots: renderRes.shots || {}, consent: renderRes.consentByPage || {},
     findings: projected.findings, contractMetrics: projected.metrics,
     lenses: computeLenses(projected.findings), // Phase 2 Inspector Lenses (additive; frozen scoring untouched)

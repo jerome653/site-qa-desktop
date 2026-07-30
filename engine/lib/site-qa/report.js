@@ -7,6 +7,10 @@
 
 const fs = require('fs');
 const path = require('path');
+// One vocabulary for HTTP statuses across the product — see http-status.js. A bare "403" in a list is
+// evidence, not a finding: the reader had to already know that it usually means a filter rather than a
+// dead page.
+const { statusMeaning, summariseStatuses } = require('./http-status');
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
@@ -99,6 +103,27 @@ const STYLE = `
 .rp-a{margin:7px 0 0;font-size:12.5px;color:var(--ink-soft);line-height:1.6;max-width:88ch}
 .rp-e{margin-top:9px;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)}
 .rp-n{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-faint);line-height:1.55}
+/* Status breakdown + link counts. Both sit inside the page-coverage section: "which URLs" is answered
+   by the lists above, "what happened and how much of it" by these. Server-rendered, so they survive in
+   the standalone/printable copy. */
+.statbreak{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.statbreak-h,.lkcount-h{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px}
+.stat-grp{margin-bottom:12px}
+.stat-grp-h{font-size:13px;color:var(--ink);font-weight:600;margin-bottom:6px}
+.stat-code{border-left:2px solid var(--line-strong);padding:5px 0 5px 11px;margin-bottom:7px}
+.stat-code-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.stat-code-h b{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+.stat-n{font-size:11.5px;color:var(--ink-faint)}
+.stat-mean{font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin-top:2px;max-width:92ch}
+.stat-act{font-size:12px;color:var(--ink-soft);line-height:1.55;margin-top:3px;max-width:92ch}
+.lkcount{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.lk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px}
+.lk-cell{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.lk-cell.bad{border-color:var(--fail-line);background:var(--fail-bg)}
+.lk-n{font-size:21px;font-weight:650;color:var(--ink);line-height:1.1}
+.lk-cell.bad .lk-n{color:var(--fail)}
+.lk-l{font-size:11.5px;color:var(--ink-faint);margin-top:3px;line-height:1.4}
+.lk-foot{margin-top:9px;font-size:12px;color:var(--ink-faint);line-height:1.55}
 .summary{display:grid;grid-template-columns:minmax(0,340px) 1fr;gap:16px;align-items:stretch}
 .verdict{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;display:flex;gap:18px;align-items:center;position:relative;overflow:hidden}
 .verdict::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--vc,var(--warn))}
@@ -1037,7 +1062,12 @@ function renderReport(data, outDir, opts = {}) {
     const erroredRows = E.slice(0, LIST_CAP).map(e => {
       const u = (e && e.url != null) ? e.url : '';
       const st = (e && e.status != null) ? e.status : '—';
-      return `<a class="pcov-row err" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}"><span class="pcov-p">${esc(pcPath(u))}</span><span class="pcov-badge">${esc(st)}</span></a>`;
+      // The badge keeps the raw code (it is the evidence) and gains the word for it, so the row reads
+      // "403 Forbidden" rather than "403". Full meaning goes in the tooltip; the counted breakdown
+      // below carries it in full, because 500 rows each repeating a paragraph is unreadable.
+      const m = statusMeaning(e && e.status);
+      const badge = m.code == null ? esc(st) : esc(m.code) + ' ' + esc(m.label);
+      return `<a class="pcov-row err" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}&#10;&#10;${esc(m.label)} — ${esc(m.meaning)}"><span class="pcov-p">${esc(pcPath(u))}</span><span class="pcov-badge">${badge}</span></a>`;
     }).join('');
     const cappedNote = maxP != null ? `not reached (capped at ${esc(maxP)})` : 'not reached';
     const notReachedRows = N.slice(0, LIST_CAP).map(u =>
@@ -1050,6 +1080,46 @@ function renderReport(data, outDir, opts = {}) {
     const cappedFoot = capped
       ? `<div class="pcov-foot">More pages exist beyond the ${maxP != null ? esc(maxP) + '-page ' : ''}cap — raise <code>maxPages</code> to audit them.</div>`
       : '';
+    // ── WHAT THE CODES MEAN, AND HOW MANY OF EACH ────────────────────────────────────────────────
+    // The list above answers "which URLs"; this answers "what happened, and how much of it". A reader
+    // scanning 26 rows of "403" cannot tell whether the site is broken or simply closed to the scanner
+    // — the difference between a morning of work and a one-line email to the host. Rendered only when
+    // something was NOT audited, so a clean run gains nothing to skip past.
+    const statusHtml = (() => {
+      if (!E.length) return '';
+      const sum = summariseStatuses(E);
+      const groups = sum.groups.map(g => {
+        const codes = g.codes.map(c => `<div class="stat-code">
+            <div class="stat-code-h"><b>${c.code == null ? 'No response' : esc(c.code) + ' ' + esc(c.label)}</b><span class="stat-n">${c.count} page${c.count === 1 ? '' : 's'}</span></div>
+            <div class="stat-mean">${esc(c.meaning)}</div>
+            ${c.action ? `<div class="stat-act"><b>What to do:</b> ${esc(c.action)}</div>` : ''}
+          </div>`).join('');
+        return `<div class="stat-grp"><div class="stat-grp-h">${esc(g.count)} ${esc(g.groupLabel)}</div>${codes}</div>`;
+      }).join('');
+      return `<div class="statbreak"><div class="statbreak-h">What those statuses mean</div>${groups}</div>`;
+    })();
+
+    // ── LINK COUNTS ──────────────────────────────────────────────────────────────────────────────
+    // These numbers were already recorded in report.json (links.totalInternal / totalExternal /
+    // brokenInternal / brokenExternal / chains) and rendered NOWHERE: the report only ever showed
+    // pass/fail rows, so "how many links does this site even have" had no answer on the page. A count
+    // is also the honest frame for a cap — 300 internal links checked out of 900 is a different claim
+    // from "no broken links".
+    const linkHtml = (() => {
+      const L = data.links;
+      if (!L) return '';
+      const n = v => (typeof v === 'number' ? v : 0);
+      const cells = [
+        ['Internal links checked', n(L.totalInternal != null ? L.totalInternal : (L.checked - n(L.totalExternal))), false],
+        ['External links checked', n(L.totalExternal), false],
+        ['Broken internal', n(L.brokenInternal), true],
+        ['Broken external', n(L.brokenExternal), true],
+        ['Redirect chains / loops', n(L.chains), true],
+      ].map(([lbl, v, bad]) => `<div class="lk-cell${bad && v > 0 ? ' bad' : ''}"><div class="lk-n">${esc(v)}</div><div class="lk-l">${esc(lbl)}</div></div>`).join('');
+      const capNote = L.capped ? '<div class="lk-foot">Internal link checking is capped at 300 URLs — links beyond the cap were not requested, so they are unknown rather than sound.</div>' : '';
+      return `<div class="lkcount"><div class="lkcount-h">Links</div><div class="lk-grid">${cells}</div>${capNote}</div>`;
+    })();
+
     return `<section class="pcov">
       <div class="pcov-h"><h2>Pages audited — ${esc(nA)} of ${esc(nD)} discovered</h2></div>
       <div class="pcov-body${hasNot ? '' : ' solo'}">
@@ -1059,6 +1129,8 @@ function renderReport(data, outDir, opts = {}) {
         </div>
         ${notCol}
       </div>
+      ${statusHtml}
+      ${linkHtml}
       ${cappedFoot}
     </section>`;
   })();
