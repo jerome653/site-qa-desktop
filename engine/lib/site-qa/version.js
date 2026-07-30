@@ -59,13 +59,16 @@ module.exports = {
   // detected — GA4, GTM") with per-page counts, and the result carries techStack.analytics +
   // analyticsPageCounts for consumers. The vendor list already existed and was discarded on live runs,
   // where present-means-pass returned null; staging named them all along. No rule added or rescored.
-  ENGINE_VERSION: '3.3.0',   // analytics row names the stack; result.techStack (was 3.2.0)
+  // 3.4.0 — additive. result.techStack now also carries cms / framework / ecommerce / server / cdn with
+  // per-signature page counts, detected offline from responses the crawl already made. Signatures only:
+  // techStack.note travels with the data so no surface can present a signature as certainty.
+  ENGINE_VERSION: '3.4.0',   // + tech stack: cms/framework/server/cdn (was 3.3.0)
   // 1.6.0 — the report's SHAPE changed, which is what this stream is for. Out: the verdict card, the
   // score ring, the readiness pill and the seven stat tiles (redundant — every number was restated
   // below). In: a status breakdown that says what each HTTP code MEANS, and a link count strip. A
   // consumer scraping the HTML for .verdict / .tile will find nothing; report.json is unchanged and
   // remains the contract for anything automated.
-  REPORT_VERSION: '1.6.0',   // - verdict card / ring / tiles, + status meaning + link counts
+  REPORT_VERSION: '1.7.0',   // + "Built on" tech-stack panel (was 1.6.0)
   REGISTRY_VERSION,          // rule metadata version (owned by the registry)
 
   // ── Acquisition-boundary streams (ADR-0004 §D5/§D6) ────────────────────────────────────────────

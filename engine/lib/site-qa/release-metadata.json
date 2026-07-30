@@ -1,9 +1,9 @@
 {
-  "packageVersion": "5.3.0",
-  "engineVersion": "3.3.0",
+  "packageVersion": "5.4.0",
+  "engineVersion": "3.4.0",
   "registryVersion": "1.13.0",
   "contractVersion": "1.0",
-  "reportVersion": "1.6.0",
+  "reportVersion": "1.7.0",
   "developerEvidenceTier": 1,
   "ruleCount": 142,
   "v2RuleCount": 32,
@@ -12,7 +12,7 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "\"Analytics / tracking detected\" now says WHAT it detected. The detector has built a vendor list since it was written — GA4, GTM, Meta Pixel and LinkedIn by signature — and threw it away on every live run: present-on-live is a pass, so the check returned nothing and the row fell back to a generic label. On staging the same detector named them. The tool knew, and only the environment decided whether it told anyone. The row now reads \"Analytics / tracking detected - GA4, GTM\" and carries per-page counts, because a tag manager fires on some templates and not others: \"GA4 on 1 of 40 pages\" is the finding, not \"GA4\". The row also states its own limit — presence only; it does not prove the tag fires or reports into the right property, and a green tick implying otherwise would be worse than no tick. The result carries techStack.analytics and techStack.analyticsPageCounts so nothing has to scrape the sentence off the row, and the field is ALWAYS present: an empty array means the tool looked and found none, which is a different claim from a missing field. Also in this release, carried from 5.2.0: Copy Review (assistant boilerplate, unfilled placeholders, AI-tell phrasing, paragraph rhythm) runs only in the Content & SEO tool. It used to run in Site Audit too, by default rather than intent, so a technical report carried a copy section and the same finding surfaced in two tools. No scoring change, measured rather than argued: the Copy Review suite is weight 0 with every row manual, and the suite proves it by adding the suite back to a shipped result and recomputing to the same number. A Site Audit score from 5.1.0 is directly comparable to one from 5.3.0.",
+  "release": "The report now says what the site is BUILT on. A post-deployment check that only proves the new site is a faithful copy has not proved it is a production site — \"is this really WordPress behind Cloudflare, or did the staging build go to production\" is a question every crawl already held the evidence for, in the HTML it fetched and the headers that came back, and never asked. A new \"Built on\" panel names the CMS (WordPress, Shopify, Wix, Squarespace, Webflow, Drupal, Joomla, Ghost, HubSpot), the framework (Next.js, Nuxt, SvelteKit, Gatsby, Angular, Vue, React), e-commerce (WooCommerce, Shopify, Magento, BigCommerce), and the server and CDN read from response headers (nginx, Apache, LiteSpeed, IIS, Caddy; Cloudflare, Vercel, Netlify, CloudFront, Fastly, Akamai). Every signature carries a page count, because a CMS seen on 1 of 40 pages is a part-migrated site and not the same fact as one seen on all 40. Detection is offline and deterministic — no extra requests, no third-party service. IT REPORTS SIGNATURES, NEVER CERTAINTY: a generator tag can be removed and a header can be spoofed or stripped by a proxy, so an empty list means no signature was seen, not that the technology is absent, and that caveat travels ON the data rather than living in the renderer so no surface can show the lists without it. Post-Deployment Check gets all of it for free, because it already runs a full audit of the target as production validation — which is also where Largest Contentful Paint and Cumulative Layout Shift already fire.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
@@ -20,6 +20,6 @@
     "near-duplicate content"
   ],
   "generatedAt": "2026-07-30T00:00:00.000Z",
-  "gitTag": "v5.3.0",
+  "gitTag": "v5.4.0",
   "buildBaseCommit": "358e2cf"
 }
