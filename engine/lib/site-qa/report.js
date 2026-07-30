@@ -897,11 +897,13 @@ window.lensGo=function(name,btn){
   var lt=document.querySelector('.lens-tabs');if(lt)window.scrollTo({top:lt.getBoundingClientRect().top+window.scrollY-70,behavior:'smooth'});
 };
 
-(function(){var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;var hasQ=D.quality&&D.quality.overall!=null;var val=hasQ?D.quality.overall:D.score;
-/* NO NUMBER WHEN NOTHING WAS MEASURED. A blind run (the site was never read) carries score null and
-   quality.overall null. Counting up to 0% would read as "this site scored zero", which is a
-   measurement — the one thing this run cannot make. Show a dash and stop. */
-if(val==null){var e0=document.getElementById('score');if(e0){e0.textContent='\\u2014';e0.style.color='var(--fail)';}var sm=document.querySelector('.ring .sm');if(sm)sm.textContent='not scored';return;}var suffix=hasQ?'':'%';var html='';if(hasQ){var qlen=Math.max(0,Math.min(100,val))/100*C;html='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+gcol(val)+'" stroke-dasharray="'+qlen+' '+(C-qlen)+'"></circle>';}else{var tot=D.tally.pass+D.tally.warn+D.tally.fail;var segs=[['var(--pass)',D.tally.pass],['var(--warn)',D.tally.warn],['var(--fail)',D.tally.fail]];var acc=0;segs.forEach(function(s){var len=tot?s[1]/tot*C:0;html+='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+s[0]+'" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="'+(-acc)+'"></circle>';acc+=len;});}document.getElementById('ringsegs').innerHTML=html;var el=document.getElementById('score');if(el)el.style.color=gcol(val);if(reduce){if(el)el.textContent=val+suffix;return;}var n=0,step=Math.max(1,Math.round(val/28));var iv=setInterval(function(){n+=step;if(n>=val){n=val;clearInterval(iv);}if(el)el.textContent=n+suffix;},22);})();
+/* The score ring was removed with the summary section (see the comment where it used to render).
+   This IIFE drove #ringsegs and #score and is now a no-op guarded on their absence rather than
+   deleted: getElementById('ringsegs').innerHTML on a missing node throws, and ONE uncaught throw here
+   kills every handler defined after it — the filter tabs, the lightbox, Copy MD. That is the 3.0.3
+   escape bug's failure mode, and it is worth a guard rather than a diff that looks tidier. */
+(function(){var host=document.getElementById('ringsegs');if(!host)return;var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;var hasQ=D.quality&&D.quality.overall!=null;var val=hasQ?D.quality.overall:D.score;
+if(val==null){var e0=document.getElementById('score');if(e0){e0.textContent='\\u2014';e0.style.color='var(--fail)';}var sm=document.querySelector('.ring .sm');if(sm)sm.textContent='not scored';return;}var suffix=hasQ?'':'%';var html='';if(hasQ){var qlen=Math.max(0,Math.min(100,val))/100*C;html='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+gcol(val)+'" stroke-dasharray="'+qlen+' '+(C-qlen)+'"></circle>';}else{var tot=D.tally.pass+D.tally.warn+D.tally.fail;var segs=[['var(--pass)',D.tally.pass],['var(--warn)',D.tally.warn],['var(--fail)',D.tally.fail]];var acc=0;segs.forEach(function(s){var len=tot?s[1]/tot*C:0;html+='<circle cx="64" cy="64" r="52" fill="none" stroke-width="11" stroke="'+s[0]+'" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="'+(-acc)+'"></circle>';acc+=len;});}host.innerHTML=html;var el=document.getElementById('score');if(el)el.style.color=gcol(val);if(reduce){if(el)el.textContent=val+suffix;return;}var n=0,step=Math.max(1,Math.round(val/28));var iv=setInterval(function(){n+=step;if(n>=val){n=val;clearInterval(iv);}if(el)el.textContent=n+suffix;},22);})();
 
 document.querySelectorAll('[data-count]').forEach(function(el){var target=+el.getAttribute('data-count');if(matchMedia('(prefers-reduced-motion:reduce)').matches){el.textContent=target;return;}var n=0,step=Math.max(1,Math.round(target/26));var iv=setInterval(function(){n+=step;if(n>=target){n=target;clearInterval(iv);}el.textContent=n;},24);});
 
@@ -947,11 +949,10 @@ initToTop(window);
 `;
 
 function renderReport(data, outDir, opts = {}) {
-  const vc = data.ready ? (data.tally.warn ? 'warn' : 'pass') : 'fail';
-  const vmap = { pass: ['var(--pass)', 'var(--pass-bg)', 'var(--pass-line)'], warn: ['var(--warn)', 'var(--warn-bg)', 'var(--warn-line)'], fail: ['var(--fail)', 'var(--fail-bg)', 'var(--fail-line)'] }[vc];
-  const graded = data.tally.pass + data.tally.warn + data.tally.fail;
-  const failLine = data.tally.fail > 0 ? `${data.tally.fail} test${data.tally.fail > 1 ? 's' : ''} failing before this site can pass`
-    : data.tally.warn > 0 ? `Passing with ${data.tally.warn} warning${data.tally.warn > 1 ? 's' : ''} to review` : 'Every automated check passed';
+  // vc / vmap / graded / failLine went with the verdict card. Deleted rather than left bound: an unused
+  // binding that still reads correctly is exactly how dead code survives review — see drift(), which
+  // shipped dead for two releases while the UI advertised it. verdict / ready / tally are all still in
+  // report.json and still on the /api/run 'done' event; only the view is gone.
   // gallery = full-page shots only; per-issue element close-ups stay attached to their findings
   // (evidence column + Copy MD) — as thumbnails they read as noise and crowd out the page views.
   const shots = Object.entries(data.shots || {}).flatMap(([url, arr]) => (arr || []).filter(s => !s.issue).map(s => ({ url, label: s.label, file: s.file })));
@@ -1015,22 +1016,9 @@ function renderReport(data, outDir, opts = {}) {
   // (2) Belt and braces: the invariant a client depends on is a property of this PAGE — the badge can
   // never contradict the verdict sitting 8px to its left — so it is enforced here, at the last step
   // before ink, not only in the layer that happens to feed it today.
-  const rdBadge = (() => {
-    const rd = data.readiness;
-    if (!rd) return '';
-    let tone = rd.tone || (rd.launchReady ? 'ok' : 'no');
-    let label = rd.verdict;
-    let scope = rd.scope || '';
-    if (tone === 'ok' && data.ready !== true) {
-      tone = 'part';
-      const n = typeof rd.outstanding === 'number'
-        ? rd.outstanding
-        : (data.tally ? data.tally.fail + data.tally.warn : 0);
-      label = n > 0 ? `NO LAUNCH BLOCKERS — ${n} issue${n > 1 ? 's' : ''} outstanding` : 'NO LAUNCH BLOCKERS';
-      scope = scope || 'Checked for launch-blocking (tier-1) faults only — none found. Other checks are still failing. This is NOT an all-clear.';
-    }
-    return `<span class="rlabel ${tone}"${scope ? ` title="${esc(scope)}"` : ''}>${esc(label)}</span>`;
-  })();
+  // rdBadge (the "NO LAUNCH BLOCKERS — N issues outstanding" pill) rendered inside the verdict card and
+  // went with it. data.readiness is untouched in report.json — the launch-readiness veto still computes,
+  // still gates, and is still readable by anything consuming the JSON. Only the pill is gone.
 
   // CHANGE (4.3.0) — PAGE COVERAGE. The crawl already fetched every page (url + status) and holds the
   // sitemap URL list + a capped flag, but the report only ever exposed a COUNT (the "Pages crawled"
@@ -1145,39 +1133,16 @@ function renderReport(data, outDir, opts = {}) {
 <div class="wrap">
   ${reachPanel(data)}
   ${opts.scopePanel || ''}
-  <section class="summary">
-    <div class="verdict" style="--vc:${vmap[0]};--vcb:${vmap[1]};--vcl:${vmap[2]}">
-      <div class="ring"><svg width="118" height="118" viewBox="0 0 128 128"><circle cx="64" cy="64" r="52" fill="none" stroke="var(--line)" stroke-width="11"></circle><g id="ringsegs"></g></svg><div class="center"><div class="big num" id="score">0</div><div class="sm">${data.quality && data.quality.overall != null ? 'quality score' : 'checks passing'}</div></div></div>
-      <div class="vtext"><div class="veyebrow">Overall result — the bottom line</div><span class="vlabel">${esc(data.verdict)}</span>${rdBadge}<h1>${esc(failLine)}</h1><p>${graded} automated checks across ${data.suites.length} suites · ${data.tally.manual} item(s) flagged for manual review.${data.quality && data.quality.overall != null ? ' The score shown is an overall 0–100 quality read.' : ''}</p></div>
-    </div>
-    <div class="tiles">
-      <div class="tile pass" onclick="gotoStatus('pass')" role="button" tabindex="0" title="Show passed checks"><div class="v num" data-count="${data.tally.pass}">0</div><div class="l"><span class="dot"></span>Passed</div></div>
-      <div class="tile warn" onclick="gotoStatus('warn')" role="button" tabindex="0" title="Show warnings"><div class="v num" data-count="${data.tally.warn}">0</div><div class="l"><span class="dot"></span>Warnings</div></div>
-      <div class="tile fail" onclick="gotoStatus('fail')" role="button" tabindex="0" title="Show failed checks"><div class="v num" data-count="${data.tally.fail}">0</div><div class="l"><span class="dot"></span>Failed</div></div>
-      <div class="tile man" onclick="gotoStatus('manual')" role="button" tabindex="0" title="Show items needing manual review"><div class="v num" data-count="${data.tally.manual}">0</div><div class="l"><span class="dot"></span>Manual</div></div>
-      <div class="tile meta" onclick="gotoStatus('all')" role="button" tabindex="0" title="Show all checks"><div class="v mono">${data.crawl.pages}</div><div class="l"><span class="dot"></span>Pages crawled</div></div>
-      <div class="tile meta" onclick="gotoShots()" role="button" tabindex="0" title="Jump to rendered screenshots"><div class="v mono">${data.render.rendered}</div><div class="l"><span class="dot"></span>Rendered</div></div>
-      ${(() => {
-        // COPY REVIEW card (Suite 13). Advisory: WEIGHTS.copy = 0 and every row is status 'manual',
-        // so this number can never move the score — it is a READ, not a verdict. Counts flagged rules
-        // (of 4), not "AI-ness": the tool cannot know who wrote the copy and must never imply it.
-        // Rendered only when the copy suite actually ran, so an older scan's report is unchanged.
-        const cs = (data.suites || []).find(s => s.key === 'copy');
-        if (!cs) return '';
-        const flagged = (cs.checks || []).filter(c => (c.items || []).length > 0).length;
-        const total = (cs.checks || []).length;
-        const title = flagged ? flagged + ' of ' + total + ' copy checks flagged something for review — advisory only, does not affect the score'
-                              : 'No copy flags raised — advisory only, does not affect the score';
-        // Click-through goes to gotoStatus('manual') — an EXISTING, proven handler (window.gotoStatus).
-        // Copy rows are all status 'manual', so the Manual filter is exactly where they live. Do not
-        // invent a gotoSuite(): there is no such function, and a dead onclick here is not a dead link —
-        // it throws at parse and kills EVERY handler on the page (the 3.0.3 escape bug). suite:'copy'
-        // is unreachable from the status tabs otherwise.
-        return '<div class="tile meta" onclick="gotoStatus(\'manual\')" role="button" tabindex="0" title="' + title + '">'
-             + '<div class="v mono">' + flagged + '/' + total + '</div>'
-             + '<div class="l"><span class="dot"></span>Copy flags</div></div>';
-      })()}
-    </div>
+  <!-- The verdict card, the score ring and the seven stat tiles used to sit here. REMOVED as redundant
+       (operator call, 2026-07-30): every number in that block is stated again further down — the tally
+       by the status filter tabs, pages crawled by the page-coverage section, rendered by the gallery,
+       copy flags by the Copy Review suite itself — so the top of the report restated the report. The
+       DATA is untouched: verdict, score, quality and tally are all still in report.json, still carried
+       on the /api/run 'done' event, and still shown in the app's own status line. This removed a VIEW,
+       not a measurement. The reachability panel above still speaks when a run could not see the site,
+       which is the one case where a reader must be stopped before the findings.
+       The colour key stays: the colours it explains are used by every section below it. -->
+  <section class="legendonly">
     <div class="legend" aria-label="Colour key">
       <span class="lg-t">What the colours mean</span>
       <span class="lg"><i style="background:var(--pass)"></i> Green = passing</span>

@@ -142,7 +142,22 @@ ok(untiered.clean === false && untiered.tone === 'part', 'unknown severity is ne
     renderReport(legacy, outDir, {});
     const html = fs.readFileSync(path.join(outDir, 'report.html'), 'utf8');
     ok(!/class="rlabel ok"/.test(html), 'legacy JSON re-render: renderer refuses green when data.ready !== true');
-    ok(/NO LAUNCH BLOCKERS/i.test(html), 'legacy JSON re-render: pill is rewritten to state its scope');
+    // CHANGED 2026-07-30. This used to assert the pill was REWRITTEN to "NO LAUNCH BLOCKERS — N
+    // outstanding". The verdict card and its readiness pill were removed from the report as redundant
+    // (operator decision), so there is no pill to rewrite. The assertion is not deleted, because the
+    // thing it protected still matters and is what actually broke before: a legacy report claiming
+    // LAUNCH-READY must never have that claim REPRINTED. It is now guaranteed structurally rather than
+    // by rewriting — so assert the claim is absent, and that the DATA behind it survived the removal.
+    // Scoped to VISIBLE markup. The embedded data island legitimately still carries
+    // readiness.verdict === "LAUNCH-READY", because that is the stored measurement; the defect was ever
+    // PRINTING it at the top of the report as a current claim. Both halves are asserted, so a future
+    // change cannot satisfy this by dropping the data instead of the display.
+    const visible = html.replace(/<script[\s\S]*?<\/script>/gi, '');
+    ok(!/LAUNCH-READY/i.test(visible), 'legacy JSON re-render: the stale LAUNCH-READY claim is not printed to the reader');
+    ok(/LAUNCH-READY/.test(html), 'the data island still carries it — the view was removed, the record was not');
+    ok(!/class="rlabel/.test(html), 'the readiness pill is gone with the verdict card — no pill to mislead');
+    ok(legacy.readiness && legacy.readiness.verdict === 'LAUNCH-READY',
+      'readiness data is untouched in report.json — the view was removed, not the measurement');
     fs.rmSync(outDir, { recursive: true, force: true });
   } catch (e) { console.error('  (legacy render skipped:', e.message + ')'); }
 }
