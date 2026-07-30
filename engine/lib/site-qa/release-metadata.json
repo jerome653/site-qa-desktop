@@ -19,7 +19,7 @@
     "STB-004 broken fonts",
     "near-duplicate content"
   ],
-  "generatedAt": "2026-07-29T23:10:00.000Z",
+  "generatedAt": "2026-07-30T01:20:00.000Z",
   "gitTag": "v5.0.0",
-  "buildBaseCommit": "3863bf3"
+  "buildBaseCommit": "358e2cf"
 }

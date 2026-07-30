@@ -32,6 +32,14 @@ const INCLUDE = [
   // The live-scan runtime (audit / checks / report / capture / visual-match / tls / cross-browser) stays
   // OUT, per this file's own documented scope: it is covered by golden + integration + live evidence,
   // not unit tests. That exclusion predates this change and is not a percentage decision.
+  // Caught the same way, one release later: this list is maintained BY HAND, so reachability.js and
+  // http-status.js — both pure, deterministic and unit-tested (41 and 60 assertions) — were fully
+  // covered and entirely invisible to this gate. The tell was the total not moving at all when ~300
+  // source lines landed: 2995/3053 before, 2995/3053 after. A denominator that cannot grow is not an
+  // honest denominator, and this is the second time it has happened. If a new pure module is added,
+  // it belongs here.
+  'reachability.js',
+  'http-status.js',
   'inventory/collection.js',
   'immutable-store/index.js',
   'collection-store/index.js',
@@ -53,6 +61,11 @@ const SUITES = [
   'collection-store/producer.test.js', 'evidence-ledger/evidence-ledger.test.js',
   'replay/replay.test.js', 'version-authority.test.js',
   'inventory/contract-parity.test.js', 'inventory/network-ledger.test.js', 'inventory/document-assets.test.js',
+  // The other half of the hand-maintained-list problem. Adding a module to INCLUDE without adding the
+  // suite that exercises it produces a WORSE lie than leaving it out: reachability.js read 36.5% and
+  // http-status.js read "never loaded" while both were fully unit-tested, which looks like thin testing
+  // rather than a mis-wired gate. Both lists have to move together.
+  'reachability.test.js', 'http-status.test.js',
 ];
 
 function toAbs(u) { try { return path.normalize(u.startsWith('file:') ? new URL(u).pathname.replace(/^\/([A-Za-z]:)/, '$1') : u); } catch (_) { return u; } }
