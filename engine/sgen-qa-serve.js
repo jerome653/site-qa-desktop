@@ -820,10 +820,10 @@ function appPage() {
       </div>
     </div>
     <nav class="tabbar" role="tablist" aria-label="Tools">
-      <button data-t="audit" class="on" onclick="tab('audit')"><b>1 · Site Audit</b><span class="nd">technical quality — SEO is tool 4</span></button>
+      <button data-t="audit" class="on" onclick="tab('audit')"><b>1 · Site Audit</b><span class="nd">technical quality — content &amp; SEO is tool 4</span></button>
       <button data-t="visual" onclick="tab('visual')"><b>2 · Visual Comparison</b><span class="nd">old vs new, side by side</span></button>
       <button data-t="cert" onclick="tab('cert')"><b>3 · Post-Deployment Check</b><span class="nd">did everything make it across?</span></button>
-      <button data-t="seo" onclick="tab('seo')"><b>4 · SEO</b><span class="nd">titles · meta · canonical · schema</span></button>
+      <button data-t="seo" onclick="tab('seo')"><b>4 · Content &amp; SEO</b><span class="nd">copy · titles · meta · canonical · schema</span></button>
       <button data-t="reports" onclick="tab('reports');loadReports()"><b>5 · Reports</b><span class="nd">past runs · HTML · PDF</span></button>
     </nav>
   </header>
@@ -953,7 +953,7 @@ function appPage() {
          -retry/-pbar/-pfill/-status/-link/-frame/-ph vocabulary because stream(), setProg(),
          showCtl() and showReport() dereference them by prefix with no null guard. -->
     <section class="panel" id="p-seo">
-      <div class="tthead"><h2 class="tt">SEO</h2><button class="gear" id="gear-seo" onclick="openSettings('seo')" title="SEO settings" aria-label="SEO settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div>
+      <div class="tthead"><h2 class="tt">Content &amp; SEO</h2><button class="gear" id="gear-seo" onclick="openSettings('seo')" title="Content &amp; SEO settings" aria-label="Content and SEO settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div>
       <p class="sub">Titles, meta descriptions, canonicals, indexability, structured data, hreflang, robots.txt and sitemap — scored on their own. Site Audit covers the technical suites and no longer includes SEO, so neither score props up the other.</p>
       <div class="toolgrid">
         <div class="col-left"><div class="card">
@@ -972,11 +972,11 @@ function appPage() {
                second place to set the same thing. The checks themselves have no bound control at all:
                they live in SEO_OFF and are edited in the modal, exactly like Site Audit's scope tree. -->
           <input id="s-max" type="number" min="1" max="1000" value="150" style="display:none" aria-hidden="true" tabindex="-1">
-          <div class="cfg-action"><button class="run" id="s-btn" onclick="runSeo()">Run SEO audit</button><button class="run ghost" id="s-cancel" onclick="cancelScan('s')" style="display:none">Cancel</button><button class="run retry" id="s-retry" onclick="retryScan('s')" style="display:none">Retry</button></div>
+          <div class="cfg-action"><button class="run" id="s-btn" onclick="runSeo()">Run Content &amp; SEO audit</button><button class="run ghost" id="s-cancel" onclick="cancelScan('s')" style="display:none">Cancel</button><button class="run retry" id="s-retry" onclick="retryScan('s')" style="display:none">Retry</button></div>
         </div></div>
       </div>
       <div class="pbar" id="s-pbar"><div class="pfill" id="s-pfill"></div></div><div class="status" id="s-status"></div><div id="s-lead"></div><div class="cmplink" id="s-link"></div><div id="s-frame"></div>
-      <div class="placeholder" id="s-ph"><b>SEO results appear here</b>Run an SEO audit to see indexability and canonical status first, then titles and descriptions with their actual values, then structured data.</div>
+      <div class="placeholder" id="s-ph"><b>Content &amp; SEO results appear here</b>Run a Content &amp; SEO audit to see indexability and canonical status first, then titles and descriptions with their actual values, then structured data, then the copy review.</div>
     </section>
     <section class="panel" id="p-reports">
       <div class="tthead"><h2 class="tt">Reports</h2><button class="gear" id="gear-reports" onclick="openSettings('reports')" title="Reports settings" aria-label="Reports settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div><p class="sub">Review previous runs. Select one to preview its report; open the HTML or save it as a PDF to share.</p>
@@ -1235,8 +1235,8 @@ function appPage() {
       if(!seoOnCount()){$('s-status').innerHTML='Every check is switched off in <b>Settings</b> — an audit with nothing ticked would score nothing. Open the gear and include at least one.';return;}
       $('s-lead').innerHTML='';
       stream('/api/seo',{url:url,scope:scope,maxPages:+$('s-max').value||150,render:false,excludeRules:ex},'s',function(m){
-        if(!m.ok){$('s-status').textContent='SEO audit failed: '+(m.error||'unknown');return;}
-        var q=(m.quality!=null?' · SEO quality '+m.quality:'');
+        if(!m.ok){$('s-status').textContent='Content & SEO audit failed: '+(m.error||'unknown');return;}
+        var q=(m.quality!=null?' · Content &amp; SEO quality '+m.quality:'');
         var sc=(m.scope==='site'?'whole site — '+m.pagesAudited+' page'+(m.pagesAudited===1?'':'s')+' audited':'this page only');
         // A ceiling that BIT is stated, never swallowed: a silent cap makes a partial audit look whole.
         var cap=m.capped?' · <b style="color:var(--warn)">STOPPED AT '+m.ceiling+' PAGES — '+m.notReached+' more were listed and not audited</b>':'';
@@ -1247,7 +1247,7 @@ function appPage() {
         if(m.score==null){var rm2=(m.reach&&m.reach.message)?' — '+m.reach.message:'';
           $('s-status').innerHTML='Done — <b style="color:var(--fail)">'+(m.verdict||'COULD NOT AUDIT')+'</b> · not scored'+rm2+' · saved to history';}
         else $('s-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · <b>scope: '+sc+'</b>'+cap+na+xc+' · saved to history';
-        $('s-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full SEO report</a>';
+        $('s-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full Content &amp; SEO report</a>';
         seoLead(m);
         showReport('s','/report/'+m.id,'report');});}
     // Results lead with what an SEO person needs FIRST — indexability and canonical, then titles and
@@ -1342,7 +1342,7 @@ function appPage() {
         html+='<div class="rgroup"><div class="rghead">'+host+' <span class="rgc">'+items.length+'</span></div>';
         items.forEach(function(x){
           var route=x.kind==='visual'?'/visual/'+x.id:(x.kind==='cert'?'/certify/'+x.id:'/report/'+x.id);
-          html+='<div class="ritem" data-route="'+route+'" data-json="'+route+'/'+x.json+'" onclick="selectReport(this)"><span class="tag '+(x.kind==='visual'?'visual':x.kind==='cert'?'cert':x.kind==='seo'?'seo':'audit')+'">'+(x.kind==='visual'?'Visual':x.kind==='cert'?'Post-Deploy':x.kind==='seo'?'SEO':'Audit')+'</span><span class="nm">'+x.when+'</span></div>';
+          html+='<div class="ritem" data-route="'+route+'" data-json="'+route+'/'+x.json+'" onclick="selectReport(this)"><span class="tag '+(x.kind==='visual'?'visual':x.kind==='cert'?'cert':x.kind==='seo'?'seo':'audit')+'">'+(x.kind==='visual'?'Visual':x.kind==='cert'?'Post-Deploy':x.kind==='seo'?'Content &amp; SEO':'Audit')+'</span><span class="nm">'+x.when+'</span></div>';
         });
         html+='</div>';
       });
@@ -1368,8 +1368,8 @@ function appPage() {
     // per browser; reopen via ? Help). Each step: {tab, target selector, title, body}.
     var WK_KEY='sgenqa_onboarded_v2';
     var TOUR=[
-      {tab:'audit',target:null,lbl:'Welcome',title:'SGEN Site QA',body:"Five offline tools to check any website's quality — audit, compare, verify a migration, check SEO, and review reports. Nothing leaves this machine. Let me show you around."},
-      {tab:'audit',target:'.tabbar',lbl:'Navigation',title:'Five tools, one app',body:'Switch tools here — the header and these tabs stay locked in place as you scroll. On a narrow screen the bar scrolls sideways and keeps the selected tab in view. Site Audit checks one site (technical suites) · Visual Comparison diffs old vs new · Post-Deployment Check verifies a migration · SEO scores SEO on its own · Reports holds past runs.'},
+      {tab:'audit',target:null,lbl:'Welcome',title:'SGEN Site QA',body:"Five offline tools to check any website's quality — audit, compare, verify a migration, check content & SEO, and review reports. Nothing leaves this machine. Let me show you around."},
+      {tab:'audit',target:'.tabbar',lbl:'Navigation',title:'Five tools, one app',body:'Switch tools here — the header and these tabs stay locked in place as you scroll. On a narrow screen the bar scrolls sideways and keeps the selected tab in view. Site Audit checks one site (technical suites) · Visual Comparison diffs old vs new · Post-Deployment Check verifies a migration · Content & SEO scores copy and SEO on their own · Reports holds past runs.'},
       {tab:'audit',target:'#a-url',lbl:'Tool 1 · Site Audit',title:'Enter any site URL',body:'Point it at a live site and run it — that is the whole dashboard. How it scans (max pages, browser render, viewports, which checks score) lives behind Settings, and the URLs you type are saved automatically, so you never re-enter them next launch.'},
       {tab:'audit',target:'#a-btn',lbl:'Tool 1 · Site Audit',title:'Read the result at a glance',body:'The report opens with one clear OVERALL pass/fail up top; the other numbers are 0–100 quality reads, not separate verdicts. The summary cards are clickable — jump straight to the failing checks — and a colour key explains that red means passing.'},
       {tab:'visual',target:'#v-ref',lbl:'Tool 2 · Visual Comparison',title:'Old vs new, side by side',body:'Give a reference URL and a target URL. Every paired page is compared at each viewport on two axes: pixel match and structural diff (missing / extra / moved / restyled elements).'},
@@ -1377,7 +1377,7 @@ function appPage() {
       // node measures 0x0, so spotlighting it would frame nothing in the corner of the screen.
       {tab:'visual',target:'#gear-visual',lbl:'Tool 2 · Settings',title:'Real devices, really emulated',body:'Open Settings to choose what a comparison does: like-for-like or redesign, how many pages, and the viewports. Ten current devices — Desktop, MacBook Air, iPad Air/mini, iPhone, Galaxy S — each checked against the vendor spec and emulated with real touch and pixel density, not just a narrow window. Below the line sit three framework boundary probes: width only, honestly labelled, because a layout breaks exactly on a breakpoint. Every tool has its own gear.'},
       {tab:'cert',target:'#c-src',lbl:'Tool 3 · Post-Deployment Check',title:'Did everything make it across?',body:'After a migration, this inventories every page, section, image, menu and form on the source and verifies each exists intact on the new build — with a PASS / MINOR / FAIL verdict.'},
-      {tab:'seo',target:'[data-t=seo]',lbl:'Tool 4 · SEO',title:'SEO on its own',body:'Titles, meta descriptions, canonicals, sitemap, schema and indexability — scored on their own. Site Audit no longer includes SEO, so this score is not diluted by unrelated technical checks and a technical score is not propped up by good SEO.'},
+      {tab:'seo',target:'[data-t=seo]',lbl:'Tool 4 · Content & SEO',title:'Content and SEO on their own',body:'Titles, meta descriptions, canonicals, sitemap, schema and indexability — plus the content surface: thin copy, readability, and the Copy Review flags (assistant boilerplate, unfilled placeholders, AI-tell phrasing). Scored on their own, so this score is not diluted by unrelated technical checks and a technical score is not propped up by good SEO.'},
       {tab:'reports',target:'[data-t=reports]',lbl:'Tool 5 · Reports',title:'Every run, grouped by site',body:'Past runs are grouped by site, newest first, with a search box and a date filter. Preview any run, open its HTML, or save it as a PDF to hand off. Runs stay on this machine.'},
       {tab:'audit',target:'#upd-btn',lbl:'Updates',title:'Automatic check, manual apply',body:'The app checks for updates on its own — this button turns red and a toast appears when one is ready. Click it to download, then Restart: a one-second in-app update, no installer.'},
       {tab:'audit',target:'#logs-btn',lbl:'Logs & support',title:'Version log + diagnostics',body:'Open Logs to see what changed in each version and your update history. “Generate diagnostics” builds a detailed report you can download and send over if anything looks off.'},
@@ -1526,7 +1526,7 @@ function appPage() {
       audit:{name:'Site Audit',ic:'\\u2713',sub:'CRAWL \\u00b7 RENDER \\u00b7 SCORE'},
       visual:{name:'Visual Comparison',ic:'\\u21c4',sub:'REFERENCE vs TARGET'},
       cert:{name:'Post-Deployment Check',ic:'\\u2605',sub:'DID EVERYTHING MAKE IT ACROSS'},
-      seo:{name:'SEO',ic:'\\u2315',sub:'SCOPE \\u00b7 CHECKS \\u00b7 SCORE'},
+      seo:{name:'Content & SEO',ic:'\\u2315',sub:'SCOPE \\u00b7 CHECKS \\u00b7 SCORE'},
         reports:{name:'Reports',ic:'\\u25a4',sub:'HISTORY \\u00b7 PREVIEW \\u00b7 EXPORT'}
     };
     // t: bool|num|sel|vps|scope · bind: the id of the live control this field is a view of.
@@ -1534,9 +1534,9 @@ function appPage() {
         // Tab 4. DEFAULTS only — the visible scope control stays the PER-RUN choice and is seeded
         // from this on load, the same default-vs-per-run split the rest of the app already uses.
         seo:[
-          {k:'scope',t:'sel',bind:'s-scope-def',opts:[['page','This page'],['site','Whole site']],label:'Default scope',hint:'Which scope a new SEO run starts on. This page audits exactly the URL and issues no crawl; Whole site discovers pages from the sitemap, falling back to same-host links. Still changeable per run.'},
+          {k:'scope',t:'sel',bind:'s-scope-def',opts:[['page','This page'],['site','Whole site']],label:'Default scope',hint:'Which scope a new Content & SEO run starts on. This page audits exactly the URL and issues no crawl; Whole site discovers pages from the sitemap, falling back to same-host links. Still changeable per run.'},
           {k:'maxPages',t:'num',bind:'s-max',min:1,max:1000,label:'Page ceiling (Whole site)',hint:'Safety stop, Whole site only. If the crawl reaches it the result says so — it never truncates silently.'},
-          {k:'checks',t:'seochecks',label:'Checks to run',hint:'Unticking a check leaves it out of the SEO score. The check still runs and still appears in the report — the same rule the rest of the app uses: a whole section off means it did not run, a single check off means it ran and was not counted. Duplicate titles and descriptions compare ACROSS pages, so on a This-page run they are not applicable and are held out of the score whatever is ticked here.'}
+          {k:'checks',t:'seochecks',label:'Checks to run',hint:'Unticking a check leaves it out of the Content & SEO score. The check still runs and still appears in the report — the same rule the rest of the app uses: a whole section off means it did not run, a single check off means it ran and was not counted. Duplicate titles and descriptions compare ACROSS pages, so on a This-page run they are not applicable and are held out of the score whatever is ticked here.'}
         ],
       audit:[
         {k:'maxPages',t:'num',bind:'a-max',min:1,max:500,label:'Max pages to crawl',hint:'1 = homepage only; higher follows the sitemap + internal links up to this cap. Sent to the scan as maxPages.'},
@@ -2561,6 +2561,6 @@ const ensureEngines = () => {
 ensureEngines();
 
 server.listen(PORT, '127.0.0.1', () => {
-  process.stderr.write(`\nSGEN Site QA → http://127.0.0.1:${PORT}\n(5 tools: Site Audit · Visual Comparison · Post-Deployment Check · SEO · Reports. Ctrl+C to stop.)\n`);
+  process.stderr.write(`\nSGEN Site QA → http://127.0.0.1:${PORT}\n(5 tools: Site Audit · Visual Comparison · Post-Deployment Check · Content & SEO · Reports. Ctrl+C to stop.)\n`);
   if (arg('open', false)) { try { spawn(process.platform === 'win32' ? 'cmd' : 'sh', process.platform === 'win32' ? ['/c', 'start', '', `http://127.0.0.1:${PORT}`] : ['-c', `xdg-open http://127.0.0.1:${PORT}`], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {} }
 });
