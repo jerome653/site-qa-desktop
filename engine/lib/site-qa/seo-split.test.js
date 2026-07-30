@@ -108,9 +108,15 @@ console.log('SEO split — Site Audit is technical, SEO is its own tool — REAL
     if (A) {
       const keys = A.suites.map(s => s.key);
       ok(!keys.includes('seo'), 'audit: the seo suite is ABSENT from the report — not merely hidden');
-      // MEASURED, not assumed: a Site Audit report also carries the weight-0 ADVISORY suites
-      // (best-practices, copy) that applyAdvisory() appends and that are NOT part of audit.js's SUITES.
-      // They are orthogonal to this split, so count the scored suites only.
+      // EACH TAB OWNS WHAT ITS NAME SAYS. Copy Review belongs to Content & SEO alone. It used to run
+      // here too — the SEO tool asked for it, and Site Audit got it for free because applyAdvisory()
+      // with no passes runs all four — so a technical report carried a copy section and the same
+      // finding surfaced in two tools. Site Audit keeps the advisory passes that ARE technical.
+      ok(!keys.includes('copy'), 'audit: NO Copy Review suite — copy belongs to Content & SEO, and a tab is true to its name');
+      ok(keys.includes('best-practices'), 'audit: Best Practices stays — web hygiene is technical');
+      // MEASURED, not assumed: a Site Audit report still carries the weight-0 best-practices suite,
+      // which applyAdvisory() appends and which is NOT part of audit.js's SUITES. Orthogonal to this
+      // split, so count the scored suites only.
       const SUITE_KEYS = new Set(SUITES.map(x => x.key));
       eq(keys.filter(k => SUITE_KEYS.has(k)).length, SUITES.length - 1, 'audit: exactly nine of the ten scored suites present');
       // The score contract. SEO must leave the DENOMINATOR with the suite; if its rules stayed declared
@@ -127,6 +133,22 @@ console.log('SEO split — Site Audit is technical, SEO is its own tool — REAL
       }
       ok(!(A.quality.categories || []).some(c => c.suite === 'seo' || c.key === 'seo'),
         'audit: no seo category in the quality breakdown');
+      // ── REMOVING COPY REVIEW DID NOT MOVE THE TECHNICAL SCORE ───────────────────────────────────
+      // The claim is that the suite was score-neutral, so dropping it costs nothing. Measured rather
+      // than asserted from the weights table: put a copy suite BACK into the app's own shipped suites
+      // and recompute. If Copy Review could ever have moved the number, these disagree — and a Site
+      // Audit score from before this change would not be comparable to one after it.
+      {
+        const { compute } = require('./score');
+        const declaredA = (A.coverage && A.coverage.evaluatedRules) || [];
+        const asShipped = compute(A.suites, { evaluatedRules: declaredA });
+        const withCopyBack = compute(A.suites.concat([{
+          key: 'copy', name: 'Copy Review', advisory: true,
+          checks: [{ status: 'manual', name: 'Assistant boilerplate left in visible copy', ruleId: 'COPY-001', suite: 'copy', items: [{ page: '/', section: 'content', id: 'llm-boilerplate-leak', value: 'as an AI language model' }] }],
+        }]), { evaluatedRules: declaredA });
+        eq(asShipped.overall, withCopyBack.overall,
+          'audit: adding Copy Review back does not change the technical score — removing it was free, measured not assumed');
+      }
       // The narrowing is recorded on disk, not just rendered.
       ok(A.scope && Array.isArray(A.scope.suitesNotRun) && A.scope.suitesNotRun.includes('seo'),
         'audit: report.json records seo in scope.suitesNotRun — the narrowing is auditable after the fact');

@@ -2320,7 +2320,20 @@ async function apiRun(req, res, mode = 'audit') {
     // measured on sgen.com 2026-07-29, the SEO report body rendered as JSON text and DOM fragments and
     // the issue list was empty. report.js now escapes the payload too; this stops shipping tens of MB of
     // page source into report.html AND report.json on every site-scope run.
-    const data = mode === 'seo' ? applyAdvisory(raw, { passes: ['copyReview'] }) : applyAdvisory(raw);
+    // ── EACH TAB OWNS WHAT ITS NAME SAYS ─────────────────────────────────────────────────────────
+    // Copy Review (COPY-001..004) belongs to Content & SEO and ONLY to Content & SEO. It used to run
+    // in both: the SEO tool asked for it explicitly, and Site Audit got it for free because
+    // applyAdvisory() with no passes runs all four. So the technical tab carried a copy section — the
+    // same finding surfaced twice across two tools, in the one place a reader is not looking for it.
+    // Site Audit keeps the advisory passes that ARE technical: FUNC-008 content artifacts (mojibake,
+    // unresolved tokens) and FUNC-009 misspellings are scored functional defects folded into the
+    // functional suite, not copy opinions, and Best Practices is web hygiene.
+    // SAFE BY CONSTRUCTION: WEIGHTS.copy = 0 and every COPY-* row is status 'manual', which score.js
+    // skips in both openRisk and totalRisk — so removing the suite cannot move the Site Audit score.
+    // Asserted, not assumed, in seo-split.test.js.
+    const data = mode === 'seo'
+      ? applyAdvisory(raw, { passes: ['copyReview'] })
+      : applyAdvisory(raw, { passes: ['contentArtifacts', 'spelling', 'bestPractices'] });
     emit({ t: 'p', pct: 99, phase: 'writing report' });
     // CHANGE E: auto-compare this scan against the most recent PRIOR recorded scan for this host and
     // embed a "vs previous scan" panel near the top. loadLatestRecord() runs BEFORE recordScan() below,

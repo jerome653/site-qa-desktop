@@ -81,9 +81,16 @@ console.log('Score declaration integrity — REAL SERVER e2e (ADR-0011) — test
     eq(cat(rep1.quality, 'crossbrowser'), null, 'default: crossbrowser is null — nothing ran, so no opinion');
     eq(cat(rep1.quality, 'console'), null, 'default: console is null');
     ok(rep1.coverage && rep1.coverage.counts.rulesNotEvaluated > 0, 'default: the report records un-evaluated rules');
-    for (const id of ['FUNC-008', 'FUNC-009', 'BP-001', 'COPY-001']) {
+    // COPY-001 dropped from this list 2026-07-30: Copy Review now runs ONLY in the Content & SEO tool,
+    // so the Site Audit path no longer evaluates it. The invariant is unchanged and is what actually
+    // matters — a rule is declared evaluated IF AND ONLY IF it ran. Both directions are asserted, so
+    // this cannot be satisfied by declaring everything or by declaring nothing.
+    for (const id of ['FUNC-008', 'FUNC-009', 'BP-001']) {
       ok(rep1.coverage.evaluatedRules.includes(id), `default: advisory rule ${id} declared as evaluated in the shipped record`);
     }
+    ok(!rep1.coverage.evaluatedRules.includes('COPY-001'),
+      'default: COPY-001 is NOT declared — Copy Review does not run in Site Audit, and a rule that did not run must never be declared as evaluated');
+    ok(!rep1.suites.some(s => s.key === 'copy'), 'default: no Copy Review suite in a Site Audit report');
     ok(rep1.suites.some(s => s.key === 'best-practices'), 'default: the advisory suites really did run');
 
     // ── 2 · SCOPED RUN — the inversion must be gone ──────────────────────────────────────────────
