@@ -126,7 +126,7 @@ function contractToMarkdown(c, ctx = {}) {
     if (c.locator.outerHTML) L.push('', '```html', c.locator.outerHTML, '```');
   }
   L.push(`- **Fingerprint:** \`${c.fingerprint.slice(0, 16)}\``);
-  L.push('', `_Source: SGEN Site QA · ${ctx.host || ''} · ${ctx.generated || ''}_`);
+  L.push('', `_Source: Site Audit · ${ctx.host || ''} · ${ctx.generated || ''}_`);
   return L.join('\n');
 }
 
@@ -156,7 +156,7 @@ function checkMarkdown(check, findings, ctx = {}) {
     }
     if (findings.length > 30) L.push('', `+${findings.length - 30} more in report.json`);
   }
-  L.push('', `_Source: SGEN Site QA · ${ctx.host || ''} · ${ctx.generated || ''}_`);
+  L.push('', `_Source: Site Audit · ${ctx.host || ''} · ${ctx.generated || ''}_`);
   return L.join('\n');
 }
 

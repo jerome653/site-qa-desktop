@@ -56,7 +56,7 @@ function renderCompare(d, outDir) {
     <td>${s.a.pass}/${s.a.warn}/${s.a.fail}</td><td>${s.b.pass}/${s.b.warn}/${s.b.fail}</td>
     <td>${s.dFail > 0 ? '+' : ''}${s.dFail}</td><td class="tg-${s.trend}">${s.trend}</td></tr>`).join('');
 
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SGEN Site QA — Comparison</title><style>${STYLE}${EXTRA}</style></head><body>
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Site Audit — Comparison</title><style>${STYLE}${EXTRA}</style></head><body>
 <div class="bar"><div class="bar-in"><div class="brand"><span class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.2 4.2L19 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>Site QA</b><span>SGEN · Comparison</span></div></div></div></div>
 <div class="wrap">
   <div class="cmp-head">

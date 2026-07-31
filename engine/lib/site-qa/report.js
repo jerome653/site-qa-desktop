@@ -1271,7 +1271,7 @@ function renderReport(data, outDir, opts = {}) {
     </section>`;
   })();
 
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SGEN Site QA — ${esc(data.host)}</title><style>${STYLE}</style></head><body>
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Site Audit — ${esc(data.host)}</title><style>${STYLE}</style></head><body>
 <div class="brand-wm" aria-hidden="true"><b>SGEN</b></div>
 <div class="bar"><div class="bar-in">
   <div class="brand"><span class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.2 4.2L19 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>Site QA</b><span>SGEN · Tester</span></div></div>
@@ -1315,7 +1315,7 @@ function renderReport(data, outDir, opts = {}) {
   <section class="issec" id="findsec"></section>
   <section class="lenses" id="lenses"></section>
   ${shotHtml}
-  <footer><span>SGEN Site QA · ${esc(data.host)} · ${esc(data.generated)}</span><span>${renderFooter(data)}</span></footer>
+  <footer><span>Site Audit · ${esc(data.host)} · ${esc(data.generated)}</span><span>${renderFooter(data)}</span></footer>
 </div>
 ${lightbox}
 <script>window.__DATA=${jsonIsland(data)};</script>

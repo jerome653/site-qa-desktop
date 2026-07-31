@@ -516,7 +516,7 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
   const skipBatch = (ids) => ids.every(skipCheck);
   if (skipped.size) log(`Sections switched off by the operator (not run): ${[...skipped].join(', ')}`);
   bus.fire('scan.started', { url, host, versions: VERSIONS });
-  log(`\n=== SGEN Site QA · ${url} ===`);
+  log(`\n=== Site Audit · ${url} ===`);
   progress(4, 'starting scan');
 
   // 1) crawl

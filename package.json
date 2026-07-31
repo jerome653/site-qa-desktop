@@ -1,8 +1,8 @@
 {
   "name": "sgen-site-qa-desktop",
-  "productName": "SGEN Site QA",
-  "version": "6.1.5",
-  "description": "SGEN Site QA — developer-first website quality auditing, as a desktop app.",
+  "productName": "Site Audit",
+  "version": "6.2.0",
+  "description": "Site Audit — developer-first website quality auditing, as a desktop app.",
   "main": "main.js",
   "author": "SGEN",
   "license": "UNLICENSED",
@@ -23,7 +23,7 @@
   },
   "build": {
     "appId": "com.sgen.siteqa",
-    "productName": "SGEN Site QA",
+    "productName": "Site Audit",
     "publish": [
       {
         "provider": "github",

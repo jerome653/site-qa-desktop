@@ -1,4 +1,4 @@
-# SGEN Site QA — Developer Handoff
+# Site Audit — Developer Handoff
 
 Everything you need to **continue development on another machine** (laptop, etc.).
 Last updated 2026-07-10. Current shipped state: **shell 2.5.3**, **engine 2.5.4** (on the update feed).
@@ -7,7 +7,7 @@ Last updated 2026-07-10. Current shipped state: **shell 2.5.3**, **engine 2.5.4*
 
 ## 1. What this project is
 
-A **Windows desktop app** (`SGEN Site QA`) that audits websites. It is split into two parts:
+A **Windows desktop app** (`Site Audit`) that audits websites. It is split into two parts:
 
 - **Shell** — a thin Electron wrapper (`main.js` + `preload.js`). Ships once via an installer. Rarely changes.
 - **Engine** — the actual QA code + web UI (`engine/sgen-qa-serve.js` + `engine/lib/`). This is what changes almost every release.
@@ -77,7 +77,7 @@ gh repo create docssgen-admin/site-qa-desktop --private
 
 # 2. from D:\AI\_dist\siteqa-app  (Git Bash — Windows path with cd /d works, or just open here):
 git add .
-git commit -m "SGEN Site QA desktop — shell 2.5.3 + engine 2.5.4"
+git commit -m "Site Audit desktop — shell 2.5.3 + engine 2.5.4"
 git branch -M main
 git remote add origin https://github.com/docssgen-admin/site-qa-desktop.git
 git push -u origin main
@@ -144,7 +144,7 @@ This zips `engine/` (JS only), uploads `engine.zip` + `version.txt` + `.sha256` 
 ```bash
 # bump "version" in package.json to match, then build the installer:
 npm run dist
-#   -> release/SGEN Site QA Setup <ver>.exe   (self-contained, ~296 MB)
+#   -> release/Site Audit Setup <ver>.exe   (self-contained, ~296 MB)
 ```
 Users install this **once** (uninstall the old copy first — a fresh install avoids the old NSIS "cannot be closed" bug). After that they hot-update forever. Keep the shell's `package.json` version == the latest engine version so a fresh install isn't immediately "out of date".
 

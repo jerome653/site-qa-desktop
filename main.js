@@ -1,5 +1,5 @@
 'use strict';
-// SGEN Site QA — Electron desktop shell.
+// Site Audit — Electron desktop shell.
 //
 // Architecture (why updates are reliable): the app is split into a STABLE shell and a VOLATILE engine.
 //   • Shell  = Electron + Chromium + the engine's node_modules (playwright/sharp) + browsers. Installed
@@ -28,6 +28,38 @@ const os = require('os');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const Module = require('module');
+
+// ── ONE-TIME userData MIGRATION — "SGEN Site QA" -> "Site Audit" ─────────────────────────────────
+// Electron derives userData from package.json "productName", so RENAMING THE PRODUCT SILENTLY MOVES
+// THE APP'S ENTIRE DATA ROOT. Everything the operator has lives under it:
+//   engines/          every hot-updated engine plus active.json  (rename => rolled back to the engine
+//                     bundled in the installer, losing every update since)
+//   …/_ui-runs/       every stored report
+//   ui-state.json     saved URLs and per-tool settings
+//   logs/             update + diagnostics history
+// Without this the app would boot after the rename looking brand new, and the cause would be invisible.
+//
+// Runs BEFORE any constant below reads a path — ENGINES_DIR is computed a few lines down — and only
+// when the new root does not exist yet, so it is a no-op on every launch after the first and on a
+// genuinely fresh install. Same parent directory, so the rename is atomic and cheap.
+//
+// A failure here must never block startup: the app still runs, it just starts empty, and the old
+// directory is left untouched so nothing is destroyed. That is why it logs loudly rather than throwing
+// — silent data that "vanished" is far worse than a started app with a line in the log.
+(function migrateUserDataOnRename() {
+  try {
+    const oldDir = path.join(app.getPath('appData'), 'SGEN Site QA');
+    const newDir = app.getPath('userData');
+    if (oldDir === newDir) return;            // product name unchanged — nothing to do
+    if (fs.existsSync(newDir)) return;        // already migrated, or a fresh install
+    if (!fs.existsSync(oldDir)) return;       // nothing to carry over
+    fs.renameSync(oldDir, newDir);
+    log.info('[migrate] userData moved ' + oldDir + ' -> ' + newDir);
+  } catch (e) {
+    log.error('[migrate] userData migration FAILED — the app will start with empty history; the old '
+      + 'directory is intact at %APPDATA%\\SGEN Site QA and can be renamed by hand', e);
+  }
+})();
 
 const isPackaged = app.isPackaged;
 // Bundled BASE engine that ships with the shell (fallback + the source of the shared node_modules).
@@ -133,7 +165,7 @@ async function startServer() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1360, height: 900, minWidth: 900, minHeight: 600, backgroundColor: '#000000',
-    title: 'SGEN Site QA', show: false, icon: path.join(__dirname, 'build', 'icon.ico'),
+    title: 'Site Audit', show: false, icon: path.join(__dirname, 'build', 'icon.ico'),
     webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, 'preload.js') },
   });
   Menu.setApplicationMenu(null);
@@ -337,7 +369,7 @@ function wireIpc() {
 
 app.whenReady().then(async () => {
   try { await startServer(); createWindow(); wireIpc(); }
-  catch (e) { dialog.showErrorBox('SGEN Site QA — startup failed', String(e && e.message || e)); app.quit(); }
+  catch (e) { dialog.showErrorBox('Site Audit — startup failed', String(e && e.message || e)); app.quit(); }
   // DOWNLOADS are manual: nothing is fetched, staged, or applied unless the user clicks the update
   // control (ipc update:check -> download+stage, update:install -> relaunch). What IS automatic is
   // NOTICING — a version-only feed poll, so the app can tell the user an update exists even when its

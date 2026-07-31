@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// sgen qa-serve — local web UI for the SGEN Site QA suite. FIVE independent tools, one browser app,
+// sgen qa-serve — local web UI for the Site Audit suite. FIVE independent tools, one browser app,
 // bound to 127.0.0.1 only. No AI at runtime; no fake results. Every button POSTs to the SAME frozen
 // engines the CLIs use — this file is UI-exposure ONLY and modifies none of them:
 //
@@ -353,7 +353,7 @@ function safeResolve(m) { try { require.resolve(m); return true; } catch (_) { r
 function tailFile(p, n) { try { const t = fs.readFileSync(p, 'utf8').split(/\r?\n/); return t.slice(-n).join('\n'); } catch (_) { return ''; } }
 function buildDiagnostics() {
   const L = [], now = new Date().toISOString();
-  L.push('# SGEN Site QA — Diagnostics', '', '_Generated ' + now + '_', '');
+  L.push('# Site Audit — Diagnostics', '', '_Generated ' + now + '_', '');
   L.push('## Version');
   L.push('- Running engine: **' + (SELF_VER || 'base (bundled with the app)') + '**');
   L.push('- Latest on update feed: **' + (FEED_VERSION || 'unknown / offline') + '**');
@@ -482,7 +482,7 @@ function buildScopePanel(f) {
 
 // ---- shared page chrome (nav + shared runner) ---------------------------------------------------
 function appPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SGEN Site QA</title><style>${STYLE}
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Site Audit</title><style>${STYLE}
   :root{--nav-h:56px}
   /* header row: brand (left) + utility actions (right). Tool tabs live in their OWN full-width bar below. */
   .topbar{position:sticky;top:0;z-index:20;background:var(--surface)}
@@ -811,7 +811,7 @@ function appPage() {
   </style></head><body>
   <header class="topbar">
     <div class="top">
-      <div class="brand"><span class="mk"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M5 12.5l4.2 4.2L19 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="bt">SGEN Site QA<span class="bv" id="brand-ver"></span></span></div>
+      <div class="brand"><span class="mk"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M5 12.5l4.2 4.2L19 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="bt">Site Audit<span class="bv" id="brand-ver"></span></span></div>
       <div class="hdr-actions">
         <div class="upd" id="upd" style="display:none"><button class="upd-btn" id="upd-btn" onclick="updClick()">Check for updates</button><span class="upd-st" id="upd-st"></span></div>
         <button class="help-btn" id="logs-btn" onclick="openLog()" title="Version log &amp; what changed">Logs</button>
@@ -1086,7 +1086,7 @@ function appPage() {
       chime();flashTitle('\\u2713 '+tool+' done');
       if(!('Notification' in window))return;
       if((document.hidden||!document.hasFocus())&&Notification.permission==='granted'){
-        try{var nt=new Notification('SGEN Site QA \\u2014 '+tool+' finished',{body:body,tag:'sgenqa-'+pre,requireInteraction:false});nt.onclick=function(){try{window.focus();}catch(e){}nt.close();};}catch(e){}
+        try{var nt=new Notification('Site Audit \\u2014 '+tool+' finished',{body:body,tag:'sgenqa-'+pre,requireInteraction:false});nt.onclick=function(){try{window.focus();}catch(e){}nt.close();};}catch(e){}
       }
     }
     // per-tool abort controllers + last-run args, so a scan can be Cancelled mid-flight and Retried.
@@ -1387,7 +1387,7 @@ function appPage() {
     // per browser; reopen via ? Help). Each step: {tab, target selector, title, body}.
     var WK_KEY='sgenqa_onboarded_v2';
     var TOUR=[
-      {tab:'audit',target:null,lbl:'Welcome',title:'SGEN Site QA',body:"Five offline tools to check any website's quality — audit, compare, verify a migration, check content & SEO, and review reports. Nothing leaves this machine. Let me show you around."},
+      {tab:'audit',target:null,lbl:'Welcome',title:'Site Audit',body:"Five offline tools to check any website's quality — audit, compare, verify a migration, check content & SEO, and review reports. Nothing leaves this machine. Let me show you around."},
       // TOUR ORDER FOLLOWS TAB ORDER. It walks the user across the bar left to right, so a step out of
       // sequence sends them backwards through tabs they have already been shown. Both orders changed
       // together when Content and SEO moved to position 2 — the numbers in the lbl field are the same
@@ -2616,6 +2616,6 @@ const ensureEngines = () => {
 ensureEngines();
 
 server.listen(PORT, '127.0.0.1', () => {
-  process.stderr.write(`\nSGEN Site QA → http://127.0.0.1:${PORT}\n(5 tools: Site Audit · Content & SEO · Visual Comparison · Post-Deployment Check · Reports. Ctrl+C to stop.)\n`);
+  process.stderr.write(`\nSite Audit → http://127.0.0.1:${PORT}\n(5 tools: Site Audit · Content & SEO · Visual Comparison · Post-Deployment Check · Reports. Ctrl+C to stop.)\n`);
   if (arg('open', false)) { try { spawn(process.platform === 'win32' ? 'cmd' : 'sh', process.platform === 'win32' ? ['/c', 'start', '', `http://127.0.0.1:${PORT}`] : ['-c', `xdg-open http://127.0.0.1:${PORT}`], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {} }
 });

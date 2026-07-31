@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://sgen.com/schemas/finding-contract-1.0.json",
-  "title": "SGEN Site QA — Finding Contract v1",
+  "title": "Site Audit — Finding Contract v1",
   "description": "Frozen canonical finding shape (ADR-0003). Every rule emits exactly this. Superset of finding-1.0; additive + backward-compatible. No rule invents its own format.",
   "type": "object",
   "required": ["id", "ruleId", "category", "severity", "evidenceQuality", "fingerprint", "evidence", "relationships", "impacts", "fix", "metadata", "timestamps", "contractVersion"],

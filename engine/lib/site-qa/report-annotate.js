@@ -302,7 +302,11 @@ function coverHtml(model) {
   // MATCH percentage over a single-site run — that would describe a comparison that never happened.
   const isAudit = model.mode === 'audit';
   return `<section class="cover">
-    <p class="ann-eyebrow">SGEN Site QA · ${isAudit ? 'Site Audit' : 'Site Comparison'}</p>
+    <!-- Product name and report kind, collapsed when they would repeat. The product is now called
+         "Site Audit" and tool 1 is also called Site Audit, so the old "<product> · <kind>" template
+         rendered "Site Audit · Site Audit". A duplicated word reads as a rendering bug even when the
+         data behind it is right. -->
+    <p class="ann-eyebrow">${isAudit ? 'Site Audit' : 'Site Audit · Comparison'}</p>
     <h1 class="ann-h1" style="font-size:30px">${esc(model.domain)}</h1>
     <p class="ann-sub" style="font-size:14px;margin-top:8px">${isAudit ? 'Audited screenshots, annotated.' : 'Live vs staging, annotated.'}</p>
     <div style="margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--ink-soft);line-height:2">

@@ -1,12 +1,12 @@
-# SGEN Site QA — Desktop App
+# Site Audit — Desktop App
 
-The SGEN Site QA platform (v2.0.0) wrapped as a double-click Windows desktop app for non-technical
+The Site Audit platform (v2.0.0) wrapped as a double-click Windows desktop app for non-technical
 users. Everything runs locally — nothing leaves the machine. Bundles the certified engine + Playwright
 Chromium, so audits (including browser render) work offline with no separate install.
 
 ## Run it (three ways)
 
-1. **Packaged app (ready now):** `release/win-unpacked/SGEN Site QA.exe` — double-click. Self-contained;
+1. **Packaged app (ready now):** `release/win-unpacked/Site Audit.exe` — double-click. Self-contained;
    share by zipping the `win-unpacked` folder (~981 MB, includes Chromium).
 2. **Dev mode:** `npm start` (needs `npm install` first).
 3. **Installer (.exe):** `npm run dist` — builds an NSIS one-click installer. **Requires Windows

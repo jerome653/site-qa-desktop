@@ -20,7 +20,7 @@ function post(port, p, body) { return new Promise(res => { const data = Buffer.f
 function fixture() { return new Promise(r => { const s = http.createServer((q, s2) => { s2.setHeader('content-type', 'text/html'); s2.end('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Desktop Smoke Fixture Page</title></head><body><h1>Hi</h1><a href="#">dead</a></body></html>'); }).listen(0, '127.0.0.1', () => r(s)); }); }
 
 (async () => {
-  console.log('=== SGEN Site QA Desktop — engine-integration smoke ===');
+  console.log('=== Site Audit Desktop — engine-integration smoke ===');
   ok(fs.existsSync(ENGINE), 'engine present at ' + path.relative(__dirname, ENGINE));
   if (!fs.existsSync(ENGINE)) { console.log('\n❌ engine not bundled — run copy-engine first'); process.exit(1); }
   const PORT = await freePort();
@@ -33,7 +33,7 @@ function fixture() { return new Promise(r => { const s = http.createServer((q, s
   ok(up, 'engine server booted on a free port (' + PORT + ')');
   if (up) {
     const home = await get(PORT, '/');
-    ok(/SGEN Site QA/.test(home.body), 'UI serves (brand present)');
+    ok(/Site Audit/.test(home.body), 'UI serves (brand present)');
     ok(/tour-hi/.test(home.body), 'guided tour present');
     // malformed request must NOT crash (the stress-fix)
     await post(PORT, '/api/run', 'null'); await post(PORT, '/api/run', '[]');
