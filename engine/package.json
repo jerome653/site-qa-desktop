@@ -1,6 +1,6 @@
 {
   "name": "sgen-migration-qa",
-  "version": "6.1.4",
+  "version": "6.1.5",
   "description": "SGEN Migration QA — deterministic, evidence-based website migration certification (Site Audit, Visual Comparison, Migration Certification, Reports). No AI at runtime.",
   "bin": {
     "sgen": "sgen.js"
