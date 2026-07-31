@@ -101,7 +101,11 @@ module.exports = {
   // separately, because a group naming googlebot and a `*` group are different rule sets and a site can
   // be open to one engine and closed to the other). Additive to the HTML; report.json gains
   // `indexability` and remains the contract for anything automated.
-  REPORT_VERSION: '1.8.0',   // + per-URL indexability panel (was 1.7.0)
+  // 1.9.0 — the "In sitemap" column renders THREE states (yes / no / not checked), and the page
+  // coverage panel explains its own fraction. Both are the same correction: a single-page run never
+  // fetches the sitemap, and "92 of 119" does not say whether the other 27 were skipped or simply
+  // are not pages. Additive to the HTML; report.json is unchanged in shape.
+  REPORT_VERSION: '1.9.0',   // + three-state sitemap column, coverage explainer (was 1.8.0)
   REGISTRY_VERSION,          // rule metadata version (owned by the registry)
 
   // ── Acquisition-boundary streams (ADR-0004 §D5/§D6) ────────────────────────────────────────────

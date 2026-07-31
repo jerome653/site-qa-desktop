@@ -177,10 +177,18 @@ async function scanIndexability({ origin, host, crawlPages = [], probeCap = DEFA
   const byUrl = new Map();
   const norm = (u) => { try { const x = new URL(u); x.hash = ''; return x.href; } catch (e) { return u; } };
 
+  // ── `inSitemap` IS THREE-VALUED, NOT TWO ────────────────────────────────────────────────────────
+  // true = listed · false = looked and it is not listed · NULL = never looked.
+  // On a single-page run the sitemap set is deliberately not fetched (the contract above), so `false`
+  // there is a claim of absence from a check that never ran. MEASURED: a "This page" run against
+  // /local-seo-aeo reported "not in sitemap" for a URL the whole-site run proves IS in the sitemap.
+  // That is the same defect class as the dead-host green tick and redirect-means-absent — this engine's
+  // one standing rule is that not-looked and not-there must never render the same.
+  const sitemapUnknown = !siteLevel;
   for (const p of crawlPages.filter(Boolean)) {
     const url = norm(p.url);
     byUrl.set(url, {
-      url, inSitemap: false, checked: true, source: 'crawl',
+      url, inSitemap: sitemapUnknown ? null : false, checked: true, source: 'crawl',
       status: p.status || 0, error: p.error || null, redirectTo: p.location || null,
       contentType: p.contentType || '', isHtml: isHtmlLike(p.contentType, p.body),
       metaRobots: metaRobotsFrom(p.body), xRobotsTag: xRobotsFrom(p.headers),
@@ -240,6 +248,9 @@ async function scanIndexability({ origin, host, crawlPages = [], probeCap = DEFA
     total: urls.length,
     crawled: urls.filter(r => r.source === 'crawl').length,
     inSitemap: urls.filter(r => r.inSitemap).length,
+    // Whether sitemap membership was established at all. Without this a renderer cannot tell "0 of these
+    // are listed" from "we never opened the sitemap", and would print the first while meaning the second.
+    sitemapKnown: siteLevel,
     probed: toProbe.length,
     notProbed: Math.max(0, unprobed.length - toProbe.length),
     capped: unprobed.length > toProbe.length,

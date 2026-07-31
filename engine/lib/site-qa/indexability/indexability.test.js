@@ -272,6 +272,14 @@ const { metaRobotsFrom, xRobotsFrom, canonicalFrom, sameUrl, verdictFor } = requ
   // vanish just because its markup is excluded from schema validation.
   eq(res.urls.length, 3, 'every crawled URL still appears in the verdict table, including the non-200s');
   eq(res.urls.find(u => u.url === ORIGIN + '/old').verdict.google, 'redirect', 'the 301 is still reported as a redirect');
+
+  // ── `inSitemap` MUST BE NULL, NOT FALSE, WHEN THE SITEMAP WAS NEVER FETCHED ────────────────────
+  // Found by an operator, not by this suite. A "This page" run against a URL that IS in the sitemap
+  // reported "not in sitemap", because the single-page contract skips the sitemap fetch and the field
+  // defaulted to false. `false` asserts "we looked and it is not listed"; nothing looked. Same defect
+  // class as the dead-host green tick — not-looked and not-there must never render the same.
+  ok(res.urls.every(u => u.inSitemap === null), 'a single-page run marks sitemap membership UNKNOWN (null), never false');
+  eq(res.summary.sitemapKnown, false, 'the summary declares that sitemap membership was not established');
 })();
 
 // ── end to end: a fixture that is individually clean and collectively broken ─────────────────────

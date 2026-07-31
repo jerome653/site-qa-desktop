@@ -1,9 +1,9 @@
 {
-  "packageVersion": "6.1.1",
+  "packageVersion": "6.1.2",
   "engineVersion": "4.1.0",
   "registryVersion": "1.15.0",
   "contractVersion": "1.0",
-  "reportVersion": "1.8.0",
+  "reportVersion": "1.9.0",
   "developerEvidenceTier": 1,
   "ruleCount": 161,
   "v2RuleCount": 32,
@@ -12,7 +12,7 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "PATCH on 6.1.0, driven by a real 119-page run. FIX: schema validation read every crawl record, not just HTML 200s. That run held 92 HTML pages and 27 redirects/errors and reported schema on 93 - so a NON-200 record carried JSON-LD, and SEO-049 is SCORED, meaning a redirect page's leftover markup could deduct points from a site whose real pages are clean. Same false-positive class as the redirect-is-absent gate in 6.1.0, one layer along; every other static check already ran over HTML 200s only and this now does too. The verdict table still lists non-200 URLs - a redirect is a real fact about the site and must not vanish because its markup is excluded from schema validation. DOCS: the in-app manual was two releases stale - it described FOUR tools and never mentioned Content & SEO at all. It now covers all five in the shipped order, adds a section on indexability written for non-technical readers (what each verdict means, why Google and Bing can differ, and the robots.txt plus noindex trap that keeps a page in search results forever), states that each tool keeps its own Settings, and answers the question everyone actually asks - does this tell me if my site is on Google - with the honest distinction between CAN be indexed and IS indexed.",
+  "release": "PATCH on 6.1.1. Both fixes were found by the operator reading a real report, not by the test suite. FIX 1 - sitemap membership is THREE-VALUED, not two. A This-page run deliberately never fetches the sitemap (the single-page contract), and inSitemap defaulted to FALSE, so the table printed a dash meaning not-in-sitemap for a URL that IS in the sitemap - proven by the whole-site run on the same page. false asserts we looked and it is not listed; nothing had looked. It is now null when unknown, the summary carries sitemapKnown, and the table renders yes / no / not checked with a footer that says why. Same defect class as the dead-host green tick and redirect-means-absent: not-looked and not-there must never render the same, which is the one rule this engine is built on. FIX 2 - Pages audited 92 of 119 read as though the crawl gave up on 27. It had not: every discovered URL was requested and 27 answered as redirects or errors, which are not pages to audit. The panel now states the breakdown by status and distinguishes NOT REACHED (unknown) from NOT A PAGE (known and fine), because the bare fraction cannot tell those apart and they mean opposite things.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",

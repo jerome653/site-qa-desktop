@@ -514,6 +514,11 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);display
 .pcov{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 16px}
 .pcov-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 12px}
 .pcov-h h2{font-size:11px;font-family:var(--mono);letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint);margin:0;font-weight:700}
+/* The fraction alone reads as "it gave up on the rest". This line says which of the two it was:
+   not-a-page (a redirect or error, fine) or never-reached (unknown, not fine). Full width so it
+   wraps under the heading rather than fighting it for the baseline row. */
+.pcov-explain{flex:1 0 100%;margin:2px 0 0;font-size:12.5px;color:var(--ink-soft);line-height:1.5}
+.pcov-explain b{color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums}
 .pcov-body{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .pcov-body.solo{grid-template-columns:1fr}
 .pcov-col{min-width:0}
@@ -1196,8 +1201,11 @@ function renderReport(data, outDir, opts = {}) {
       const rank = (r) => (r.verdict.google === 'indexable' && r.verdict.bing === 'indexable') ? 1 : 0;
       const rows = (X.urls || []).slice().sort((a, b) => rank(a) - rank(b) || a.url.localeCompare(b.url)).slice(0, 300).map(r => {
         const why = (r.reasons && (r.reasons.google || [])[0]) || '';
+        // THREE STATES, because `inSitemap` has three. A dash for "we never opened the sitemap" reads
+        // as "not listed", which is a different — and on a single-page run, frequently wrong — claim.
+        const sm = r.inSitemap == null ? '<span class="ixv">not checked</span>' : (r.inSitemap ? 'yes' : 'no');
         return `<tr><td class="u">${esc(r.url)}</td>`
-          + `<td>${r.inSitemap ? 'yes' : '—'}</td>`
+          + `<td>${sm}</td>`
           + `<td><span class="ixv ${esc(r.verdict.google)}">${esc(r.verdict.google)}</span></td>`
           + `<td><span class="ixv ${esc(r.verdict.bing)}">${esc(r.verdict.bing)}</span></td>`
           + `<td>${esc(why)}</td></tr>`;
@@ -1207,6 +1215,8 @@ function renderReport(data, outDir, opts = {}) {
       // Caps are stated, always. A truncated table that looks whole is the same lie as a suite that
       // never ran scoring 100.
       const caps = [
+        // Stated first, because it changes how the whole "In sitemap" column must be read.
+        S.sitemapKnown === false ? 'This run audited a single page, so the sitemap was never fetched — "In sitemap" is NOT CHECKED for every row here, which is not the same as not listed. Run the whole-site scope to establish it.' : '',
         hidden ? `${hidden} further URL(s) are not listed here.` : '',
         S.capped ? `${S.notProbed} sitemap URL(s) beyond the probe cap were NOT requested — their status is unknown, not sound.` : '',
       ].filter(Boolean).join(' ');
@@ -1220,7 +1230,25 @@ function renderReport(data, outDir, opts = {}) {
     })();
 
     return `<section class="pcov">
-      <div class="pcov-h"><h2>Pages audited — ${esc(nA)} of ${esc(nD)} discovered</h2></div>
+      <div class="pcov-h"><h2>Pages audited — ${esc(nA)} of ${esc(nD)} discovered</h2>${(() => {
+        // "92 of 119" reads as "it gave up on 27". Usually it did not: the crawl requested every URL and
+        // 27 of them were REDIRECTS OR ERRORS, which are not pages to audit. That is a completely
+        // different fact from a cap, and the bare fraction cannot tell them apart — an operator asked
+        // exactly this question about a run where nothing had been skipped at all.
+        // The distinction the whole engine turns on: NOT REACHED (unknown) vs NOT A PAGE (known, and fine).
+        const err = E.length, not = N.length;
+        if (!err && !not) return '';
+        const parts = [];
+        if (err) {
+          const by = {};
+          for (const e of E) { const k = String(e && e.status || '?'); by[k] = (by[k] || 0) + 1; }
+          const shape = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([s, n]) => `${n}× ${s}`).join(', ');
+          parts.push(`<b>${err}</b> answered but are not pages to audit (${esc(shape)})`);
+        }
+        if (not) parts.push(`<b>${not}</b> were never reached — unknown, not clean`);
+        else if (err) parts.push('nothing was skipped');
+        return `<p class="pcov-explain">Every discovered URL was requested. ${parts.join(' · ')}.</p>`;
+      })()}</div>
       <div class="pcov-body${hasNot ? '' : ' solo'}">
         <div class="pcov-col">
           <div class="pcov-lbl">Audited <span class="pcov-n">${A.length}</span></div>
