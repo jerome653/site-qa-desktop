@@ -105,7 +105,12 @@ module.exports = {
   // coverage panel explains its own fraction. Both are the same correction: a single-page run never
   // fetches the sitemap, and "92 of 119" does not say whether the other 27 were skipped or simply
   // are not pages. Additive to the HTML; report.json is unchanged in shape.
-  REPORT_VERSION: '1.9.0',   // + three-state sitemap column, coverage explainer (was 1.8.0)
+  // 1.9.1 — the coverage explainer added in 1.9.0 led with "Every discovered URL was requested"
+  // UNCONDITIONALLY, so a single-page run printed that sentence directly above "89 were never
+  // reached" — two claims contradicting each other in one line, about a run where 89 were
+  // deliberately not requested. The lead is now conditional and the wording says NOT REQUESTED
+  // rather than never reached, because a scope choice is not a coverage failure.
+  REPORT_VERSION: '1.9.1',   // conditional coverage lead (was 1.9.0)
   REGISTRY_VERSION,          // rule metadata version (owned by the registry)
 
   // ── Acquisition-boundary streams (ADR-0004 §D5/§D6) ────────────────────────────────────────────

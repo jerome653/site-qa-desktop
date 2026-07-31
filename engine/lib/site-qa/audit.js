@@ -682,7 +682,10 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
       progress(90, 'checking indexability (robots · sitemap · canonical)');
       // siteLevel is the single-page contract, threaded end to end. See indexability/index.js: a "This
       // page" run must not fetch another page, and this pass was caught HEAD-probing three of them.
-      indexability = await scanIndexability({ origin: crawl.origin, host, crawlPages: crawl.pages, siteLevel: !singlePage, log });
+      // knownSitemapUrls: the crawl resolves sitemaps for page DISCOVERY even on a single-page run, so
+      // membership is already paid for. Handing it over turns "not checked" into a real answer at zero
+      // extra request — see the scanIndexability header.
+      indexability = await scanIndexability({ origin: crawl.origin, host, crawlPages: crawl.pages, knownSitemapUrls: crawl.sitemapUrls || null, siteLevel: !singlePage, log });
     } catch (e) { indexabilityError = String(e && e.message || e); log(`indexability pass failed: ${indexabilityError}`); }
   }
 

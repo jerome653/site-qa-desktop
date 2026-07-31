@@ -1245,9 +1245,16 @@ function renderReport(data, outDir, opts = {}) {
           const shape = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([s, n]) => `${n}× ${s}`).join(', ');
           parts.push(`<b>${err}</b> answered but are not pages to audit (${esc(shape)})`);
         }
-        if (not) parts.push(`<b>${not}</b> were never reached — unknown, not clean`);
+        // The LEAD SENTENCE is conditional, because the unconditional version was itself false data:
+        // on a single-page run it printed "Every discovered URL was requested. 89 were never reached"
+        // — two claims that contradict each other in one line, on a run where 89 were deliberately not
+        // requested because the operator asked for one page.
+        if (not) parts.push(`<b>${not}</b> were not requested — their status is unknown, not clean`);
         else if (err) parts.push('nothing was skipped');
-        return `<p class="pcov-explain">Every discovered URL was requested. ${parts.join(' · ')}.</p>`;
+        const lead = not
+          ? `${nA + err} of ${nD} discovered URL(s) were requested.`
+          : 'Every discovered URL was requested.';
+        return `<p class="pcov-explain">${esc(lead)} ${parts.join(' · ')}.</p>`;
       })()}</div>
       <div class="pcov-body${hasNot ? '' : ' solo'}">
         <div class="pcov-col">

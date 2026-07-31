@@ -278,8 +278,22 @@ const { metaRobotsFrom, xRobotsFrom, canonicalFrom, sameUrl, verdictFor } = requ
   // reported "not in sitemap", because the single-page contract skips the sitemap fetch and the field
   // defaulted to false. `false` asserts "we looked and it is not listed"; nothing looked. Same defect
   // class as the dead-host green tick — not-looked and not-there must never render the same.
-  ok(res.urls.every(u => u.inSitemap === null), 'a single-page run marks sitemap membership UNKNOWN (null), never false');
+  ok(res.urls.every(u => u.inSitemap === null), 'a single-page run with NO crawl sitemap data marks membership UNKNOWN (null), never false');
   eq(res.summary.sitemapKnown, false, 'the summary declares that sitemap membership was not established');
+
+  // …but when the CRAWL already resolved the sitemap (it does, to build the page seed, even on a
+  // single-page run), membership is free and "not checked" understates the evidence. Membership and
+  // file VALIDATION are separate: the first comes from the crawl, the second needs the extra fetches.
+  const withList = await scanIndexability({
+    origin: ORIGIN, host: `127.0.0.1:${PORT}`, crawlPages: pages, siteLevel: false,
+    knownSitemapUrls: [ORIGIN + '/', ORIGIN + '/somewhere-else'],
+  });
+  eq(withList.summary.sitemapKnown, true, 'crawl-supplied sitemap URLs establish membership without any extra fetch');
+  eq(withList.urls.find(u => u.url === ORIGIN + '/').inSitemap, true, 'the audited page is correctly reported as listed');
+  eq(withList.urls.find(u => u.url === ORIGIN + '/old').inSitemap, false, 'a page genuinely absent from the list reads false, not null');
+  // The operator asked for ONE page. Crawl-sourced membership must flag rows, never invent them.
+  eq(withList.urls.length, 3, 'crawl-sourced membership does NOT expand the table with unfetched sitemap URLs');
+  ok(!withList.urls.some(u => u.url === ORIGIN + '/somewhere-else'), 'an unfetched sitemap URL is not minted as a row on a single-page run');
 })();
 
 // ── end to end: a fixture that is individually clean and collectively broken ─────────────────────

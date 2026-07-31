@@ -158,7 +158,14 @@ function verdictFor(rec, agentToken) {
 // duplicate-title, they cannot mean anything for one page, and the caller declares their checks
 // not-applicable rather than passing them. robots.txt alone is kept because it is the only thing that
 // makes "is THIS page indexable" answerable at all, and the site-check pass already fetches it.
-async function scanIndexability({ origin, host, crawlPages = [], probeCap = DEFAULT_PROBE_CAP, concurrency = 6, siteLevel = true, log = () => {} } = {}) {
+// `knownSitemapUrls` — membership the CRAWL already established, at no extra cost.
+// A single-page run still resolves sitemaps for page DISCOVERY (crawl.js does it to build the seed), so
+// `crawl.sitemapUrls` is populated even when this pass is forbidden from fetching sitemaps itself. Not
+// using it reported "not checked" for a URL whose membership was sitting in the crawl result — a weaker
+// claim than the evidence supported, which is its own kind of wrong. Membership and VALIDATION are now
+// separate: membership comes free from the crawl, while file validation (limits, lastmod, foreign hosts)
+// genuinely needs the extra fetches and stays site-level only.
+async function scanIndexability({ origin, host, crawlPages = [], knownSitemapUrls = null, probeCap = DEFAULT_PROBE_CAP, concurrency = 6, siteLevel = true, log = () => {} } = {}) {
   // 1) robots.txt, fetched once and parsed properly (per-agent groups, longest-match rules).
   // getText, NOT a raw get: it is the fetch helper the whole engine shares, so it returns the parsed
   // {status, body, error} shape and — the part that matters — it is the seam the test suite stubs.
@@ -184,7 +191,10 @@ async function scanIndexability({ origin, host, crawlPages = [], probeCap = DEFA
   // /local-seo-aeo reported "not in sitemap" for a URL the whole-site run proves IS in the sitemap.
   // That is the same defect class as the dead-host green tick and redirect-means-absent — this engine's
   // one standing rule is that not-looked and not-there must never render the same.
-  const sitemapUnknown = !siteLevel;
+  // Membership is established when THIS pass read the sitemaps (siteLevel) or when the CRAWL already
+  // did and handed the list over. Only when neither happened is it genuinely unknown.
+  const membershipKnown = siteLevel || (Array.isArray(knownSitemapUrls) && knownSitemapUrls.length > 0);
+  const sitemapUnknown = !membershipKnown;
   for (const p of crawlPages.filter(Boolean)) {
     const url = norm(p.url);
     byUrl.set(url, {
@@ -195,9 +205,13 @@ async function scanIndexability({ origin, host, crawlPages = [], probeCap = DEFA
       canonical: canonicalFrom(p.body, p.url),
     });
   }
-  const sitemapSet = new Set(sitemaps.onHostUrls.map(norm));
+  // Membership flags come from whichever source established them. When only the CRAWL knows (a
+  // single-page run), flag the pages we HAVE and do NOT mint rows for the other 89 — the operator asked
+  // for one page and the table must show one page.
+  const sitemapSet = new Set((siteLevel ? sitemaps.onHostUrls : (knownSitemapUrls || [])).map(norm));
   for (const u of sitemapSet) {
     if (byUrl.has(u)) { byUrl.get(u).inSitemap = true; continue; }
+    if (!siteLevel) continue;                    // crawl-sourced membership: flag only, never expand
     byUrl.set(u, { url: u, inSitemap: true, checked: false, source: 'sitemap', status: 0, error: null, redirectTo: null, contentType: '', isHtml: false, metaRobots: { all: null }, xRobotsTag: { all: null }, canonical: null });
   }
 
@@ -250,7 +264,8 @@ async function scanIndexability({ origin, host, crawlPages = [], probeCap = DEFA
     inSitemap: urls.filter(r => r.inSitemap).length,
     // Whether sitemap membership was established at all. Without this a renderer cannot tell "0 of these
     // are listed" from "we never opened the sitemap", and would print the first while meaning the second.
-    sitemapKnown: siteLevel,
+    // True when the crawl established it too — membership and file-validation are different questions.
+    sitemapKnown: membershipKnown,
     probed: toProbe.length,
     notProbed: Math.max(0, unprobed.length - toProbe.length),
     capped: unprobed.length > toProbe.length,

@@ -1,9 +1,9 @@
 {
-  "packageVersion": "6.1.2",
+  "packageVersion": "6.1.3",
   "engineVersion": "4.1.0",
   "registryVersion": "1.15.0",
   "contractVersion": "1.0",
-  "reportVersion": "1.9.0",
+  "reportVersion": "1.9.1",
   "developerEvidenceTier": 1,
   "ruleCount": 161,
   "v2RuleCount": 32,
@@ -12,7 +12,7 @@
     "derived": 3,
     "heuristic": 1
   },
-  "release": "PATCH on 6.1.1. Both fixes were found by the operator reading a real report, not by the test suite. FIX 1 - sitemap membership is THREE-VALUED, not two. A This-page run deliberately never fetches the sitemap (the single-page contract), and inSitemap defaulted to FALSE, so the table printed a dash meaning not-in-sitemap for a URL that IS in the sitemap - proven by the whole-site run on the same page. false asserts we looked and it is not listed; nothing had looked. It is now null when unknown, the summary carries sitemapKnown, and the table renders yes / no / not checked with a footer that says why. Same defect class as the dead-host green tick and redirect-means-absent: not-looked and not-there must never render the same, which is the one rule this engine is built on. FIX 2 - Pages audited 92 of 119 read as though the crawl gave up on 27. It had not: every discovered URL was requested and 27 answered as redirects or errors, which are not pages to audit. The panel now states the breakdown by status and distinguishes NOT REACHED (unknown) from NOT A PAGE (known and fine), because the bare fraction cannot tell those apart and they mean opposite things.",
+  "release": "PATCH on 6.1.2, from a full false-data audit of 62 stored reports. Two findings, both in code shipped hours earlier. FIX 1 - single-page runs reported sitemap membership as NOT CHECKED when the answer was already paid for: crawl.js resolves sitemaps to build the page seed even on a one-page run, so crawl.sitemapUrls was populated and simply not read. Membership and file VALIDATION are now separate concerns - membership comes free from the crawl, validation (limits, lastmod, foreign hosts) still needs the extra fetches and stays whole-site only. A This-page run on a listed URL now correctly says yes. Crawl-sourced membership FLAGS existing rows and never mints new ones, so the table still shows exactly the page that was asked for. FIX 2 - the coverage explainer added in 6.1.2 led with Every discovered URL was requested unconditionally, printing it directly above 89 were never reached on a single-page run: two claims contradicting each other in one line. The lead is conditional now, and the wording says NOT REQUESTED rather than never reached, because a deliberate scope choice is not a coverage failure. NEW TOOL: testing/report-integrity.js, a false-data hunter that interrogates stored report ARTIFACTS rather than code - reconciles every count, refuses green ticks without evidence, catches verdicts that contradict their own stated reason, and fails any report claiming live index membership. It found both defects above plus the two already fixed in 6.1.1/6.1.2, none of which the unit suites had caught. Its own first draft raised 150 phantom violations by substring-matching no noindex inside a clean reason string; an auditor that cries wolf is worse than none, so every rule matches exact shapes.",
   "deferred": [
     "SEO-032/033/034 image/video/news sitemaps",
     "HTML-001 broken markup",
