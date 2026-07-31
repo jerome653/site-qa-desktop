@@ -1,7 +1,7 @@
 # Content & SEO audit — what the tool actually checks today
 
-Read off `engine/lib/site-qa/rules/registry.js` (v1.13.0, 142 rules) and the detector sources, on
-2026-07-30. Weights are the SGEN Quality Score contribution; **weight 0 + severity `manual` = advisory,
+Read off `engine/lib/site-qa/rules/registry.js` (v1.15.0, 161 rules) and the detector sources, on
+2026-07-31. Weights are the SGEN Quality Score contribution; **weight 0 + severity `manual` = advisory,
 cannot move the score by any path.**
 
 ---
@@ -48,25 +48,41 @@ knowable, and the most damaging false positive the tool could ship.
 
 ---
 
-## 2. SEO — 36 rules
+## 2. SEO — 46 rules
 
 **Metadata** — SEO-001 title missing (10) · 002 title length (2) · 003 description missing (6) ·
 004 description length (2) · 014 favicon missing (1) · 015 favicon does not load (1)
 
 **Indexability** — SEO-007 **live page NOINDEX (critical, 22)** · 008 staging indexable (5) ·
 030 **staging host referenced on live (critical, 20)** · 035 noindex + cross-URL canonical conflict (5) ·
-036 meta robots vs X-Robots-Tag disagree (5)
+036 meta robots vs X-Robots-Tag disagree (5) · **047 noindex on a URL robots.txt blocks (8)**
+
+> SEO-047 is the row none of the others could produce. robots.txt forbids the fetch, so the crawler
+> **never reads the noindex** — the URL can sit in the index as a bare link indefinitely. Both
+> directives are individually correct; together they do the opposite of what either intends. It is
+> only visible when the signals are joined, which is what §3c exists to do.
 
 **Canonical** — SEO-005 missing (8) · 006 **points off the production domain (critical, 18)**
 
 **Crawlability** — SEO-020 **robots.txt blocks the whole site on live (critical, 20)** · 029 no robots.txt (4) ·
-021 no `Sitemap:` line (2) · 022 no XML sitemap (6) · 023 dead URL in sitemap (4) · 024 orphan page (4)
+021 no `Sitemap:` line (2) · 022 no XML sitemap (6) · 023 dead URL in sitemap (4) · 024 orphan page (4) ·
+**048 robots.txt blocks a NAMED search engine (critical, 18)** · 039 sitemap lists a robots-blocked URL (8) ·
+040 sitemap lists a noindex URL (6) · 041 sitemap URL canonicals elsewhere (4) · 042 sitemap URL redirects (3) ·
+043 sitemap declared but unreadable (6) · 044 sitemap over the 50,000-URL / 50 MB limit (6) ·
+045 `<lastmod>` not a valid W3C datetime (2) · 046 sitemap lists a foreign host (3)
 
 **Duplication** — SEO-009 duplicate title across pages (5) · SEO-010 duplicate description (4)
 → *this is the only duplicate detection that exists today. See §4.*
 
 **Structured data** — SEO-016 no JSON-LD (3) · 017 invalid (3) · 018 item missing `@type` (3) ·
-019 `@context` not schema.org (3)
+019 `@context` not schema.org (3) · **049 required property missing for the declared `@type` (4)**
+
+> SEO-016..019 stop at "is there JSON-LD and does it parse". A `Product` with no `name` or an `Article`
+> with no `headline` passes all four and is still ineligible for every rich result. SEO-049 validates
+> only **documented-as-required** properties; the recommended tier is advisory (DISC-005), because a
+> padded "required" list fails correct markup and a structured-data checker that cries wolf gets
+> switched off. `@graph` + `@id` cross-references are resolved before anything is called missing —
+> that is how Yoast/RankMath markup is written, and not handling it is the classic false positive.
 
 **Social** — SEO-011 incomplete Open Graph (4) · 012 missing `twitter:card` (2) · 013 og:image does not load (4)
 
@@ -125,6 +141,79 @@ just a faithful copy" is now largely answered.
 
 ---
 
+## 3c. Indexability — can Google and Bing actually index this? (new in 6.1.0)
+
+Lives in `engine/lib/site-qa/indexability/`. Runs inside `audit.js` (**not** the advisory pipeline —
+that seam hands passes `{url, html}` and this needs response **headers**, status codes and redirect
+locations). Deterministic, offline apart from the target site itself, no third-party service, no key.
+
+**Per URL, per engine.** Google and Bing get **separate** verdicts, because a group naming `googlebot`
+and a `*` group are different rule sets — a site can be fully indexable in Bing and invisible in Google.
+Averaging them produces a number true of neither.
+
+| Verdict | Means |
+|---|---|
+| `indexable` | crawlable, no noindex, self-canonical |
+| `blocked-robots` | robots.txt disallows the path **for that agent** |
+| `noindex` | meta robots or `X-Robots-Tag` (agent-specific tags override the generic one) |
+| `canonicalized-away` | the canonical names a different URL as the one to index |
+| `redirect` / `error` / `non-html` | 3xx · 4xx/5xx/no response · not an HTML document |
+| `not-checked` | never fetched in this run — **never** assumed clean |
+
+**robots.txt is parsed properly** (RFC 9309): longest-match group selection, `*` only as fallback, `*`
+and `$` in paths, longest-matching rule wins with Allow breaking ties, empty `Disallow:` matches
+nothing. A 404 robots.txt means *everything allowed*; a **5xx means disallow** (Google's documented
+behaviour) — collapsing those two would report a site as fully crawlable during an outage.
+
+**The URL universe** = everything crawled ∪ every on-host URL any sitemap lists. Sitemap URLs the crawl
+did not reach are HEAD-probed (status + content-type + `X-Robots-Tag`), capped at 500 and **declared** —
+`summary.capped` / `summary.notProbed`, so a partial sweep can never read as a complete one. Those rows
+carry `headOnly`, and are excluded from the canonical check rather than assumed self-canonical.
+
+**Sitemap files are validated for real**, not just expanded for discovery: XML parses, urlset vs index,
+50,000-URL and 50 MB protocol limits, `<lastmod>` as W3C datetime, foreign-host entries, one level of
+index nesting, `&amp;` decoded in `<loc>`. A `.gz` sitemap is recorded **present and unread**, never
+"malformed". A *guessed* conventional path that 404s or redirects raises **nothing** — only a sitemap
+the site itself pointed at (robots.txt, or a child of a real index) is held to the standard.
+
+### The boundary — INDEXABLE ships, INDEXED does not
+
+`result.indexability.indexStatus.measured` is **`false`**, with the reason on the data so no surface can
+render the table as "indexed in Google". Live index membership is not derivable from a site. It needs a
+credentialed, ownership-verified API per engine (Search Console URL Inspection; Bing Webmaster URL
+Info). The other route — scraping `site:` queries — is non-deterministic, captchas within a few dozen
+URLs, and is against both engines' terms; a check whose answer depends on whether a captcha fired
+cannot ship in a deterministic engine. **Not measured, stated as such, never estimated.**
+
+## 3d. Suite 14 · Discovery & AI — advisory, weight 0 (new in 6.1.0)
+
+The machine-readable surface a site publishes about itself. **Every row is `manual` and
+`WEIGHTS.discovery = 0`** — score-neutral by the same two independent mechanisms as Best Practices,
+Visual and Copy Review.
+
+| Rule | Reports |
+|---|---|
+| DISC-001 `llms-txt` | `/llms.txt` presence + llmstxt.org shape (H1, sections, link count) |
+| DISC-002 `ai-crawler-policy` | which of 13 AI agents robots.txt **names**, and allow/block for each |
+| DISC-003 `machine-readable-files` | security.txt · ai.txt · humans.txt · **openapi.yaml / .json** · ai-plugin.json · assetlinks.json · apple-app-site-association |
+| DISC-004 `content-feeds` | RSS / Atom / JSON feed `<link rel="alternate">` |
+| DISC-005 `schema-coverage` | every `@type` seen with counts, types this engine has **no rules for** (declared unvalidated, never silently passed), and recommended-property gaps |
+| DISC-006 `index-status-not-measured` | the honest row — see the boundary above |
+
+**Why none of it is scored.** `llms.txt` is a 2024 convention with no registrar. `ai.txt` is one
+vendor's proposal. Publishing an OpenAPI document is a product decision. Blocking GPTBot is a *policy
+choice* — `checks-static.js` already shipped that mistake once, calling sgen.com CRITICAL for a
+deliberate AI-training opt-out. Deducting points here would be the tool inventing a standard and then
+failing sites against it. **AI-training agents are not search agents** and never affect a search verdict.
+
+**Absent arrives in more shapes than 404.** Measured on sgen.com, where every unknown path answers
+`301 → /404?from=…` with an empty body: a redirect, an empty body, or an HTML shell on a JSON path all
+mean *no file here*. Before that gate the report claimed four well-known files were present **and
+invalid** — four files the site does not have, each with a defect it does not have.
+
+**YAML is a shape check, and the row says so.** No YAML parser is taken as a runtime dependency for an
+advisory row, so it asserts "reads as a mapping document" and never "the YAML is valid".
+
 ## 4. Gaps worth your decision
 
 1. **Duplicate content — only titles and descriptions.** SEO-009/010 compare `<title>` and
@@ -134,18 +223,33 @@ just a faithful copy" is now largely answered.
    Separate proposal — needs an external search API, which is the first runtime network dependency on a
    third party this engine would take. Scored 72/100 on the tribunal rubric; the recommendation was to
    split it — internal near-duplicate detection needs no external anything.
-3. **Content & SEO runs skip FUNC-004.** The tool runs with `passes: ['copyReview']` only, so it gets
-   the COPY flags but **not** the scored lorem/placeholder check. Site Audit gets it. Now sharper than
-   when this was first written: with Copy Review moved out of Site Audit, the tab named for content is
-   the one that cannot flag lorem ipsum. One-line fix if unintended — **still awaiting your call.**
-4. **COPY-002 `\bTK\b`** will fire on legitimate uses (ticker symbols, initials). Advisory only, so the
+3. ~~**Content & SEO runs skip FUNC-004.**~~ **Closed in 6.0.0.** The tab now runs
+   `['copyReview', 'contentArtifacts', 'spelling']`, and COPY-005 shares `detectPlaceholders()` with
+   FUNC-004 so the patterns cannot drift. The content tab flags lorem ipsum. Stated cost: advisory
+   there, so those rows are flagged and no longer scored anywhere.
+4. **COPY-002 TK** will fire on legitimate uses (ticker symbols, initials). Advisory only, so the
    blast radius is a flag a human reads.
+5. **Live index status is not measured, and cannot be at zero architectural cost.** §3c ships
+   INDEXABLE. To answer *"is this URL in Google's index right now"* the engine needs a credentialed,
+   ownership-verified API per property — Search Console URL Inspection (free, OAuth + verified
+   property, ~2,000 URLs/day) and Bing Webmaster URL Info (free, API key + verified site). Both are
+   free in money and neither is free in architecture: they would be the first runtime third-party
+   network dependencies this engine takes, they are per-site credentialed so they cannot ship
+   configured, and a run that reaches them is no longer reproducible offline. That is a
+   tribunal-scored decision, not a code change — **your call, nothing built.** The scraping route is
+   not on the table: non-deterministic, captchas within a few dozen URLs, against both engines' terms.
+6. **`.gz` sitemaps are recorded, not parsed.** A gzipped sitemap is reported present-and-unread
+   rather than decompressed — honest today, and `zlib` is a Node builtin, so closing it costs no
+   dependency.
+7. **Sitemap URL probing is capped at 500** beyond what the crawl already fetched, and those probes
+   are HEAD-only (no body, so meta robots and canonical are unknown for them). Both limits are
+   declared on the result — a partial sweep never reads as a complete one.
 
 ---
 
 ## 5. How to read a score
 
-- **Advisory suites (Best Practices, Visual, Copy Review) are weight 0** and every row is `manual` —
+- **Advisory suites (Best Practices, Visual, Copy Review, Discovery & AI) are weight 0** and every row is `manual` —
   score-neutral by two independent mechanisms.
 - A rule that **did not run** is not a pass. It is subtracted from the denominator and declared in the
   coverage ledger (ADR-0011).

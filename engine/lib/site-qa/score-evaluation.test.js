@@ -7,7 +7,9 @@
 // from the TOP of the fraction alone — and it pays out as RESOLVED RISK. The engine cannot tell
 // "I looked and it is clean" from "I never looked", and it resolves that ambiguity in the client's
 // favour every time. Measured on the REAL sgen.com data below, not theorised:
-//   · with the render pass merely ABSENT: console 0 -> 100, performance 27 -> 79, overall 72 -> 86.
+//   · with the render pass merely ABSENT: console 0 -> 100, performance 27 -> 79, overall 72 -> 87.
+//     (87 since registry 1.15.0; it was 86 — the undeclared model inflates FURTHER every time the
+//     registry grows, because it credits each new rule as resolved risk. See the assertion below.)
 //     A suite that measured NOTHING scored a perfect 100 and banked its full weight.
 //   · a run against a host that DOES NOT RESOLVE scored 93 / quality 98 with 38 green ticks and
 //     zero pages fetched. The worse the target, the better the report.
@@ -109,7 +111,12 @@ const RENDER_IDS = new Set(RULES.filter(r => r.method === 'render').map(r => r.i
 const noRender = REAL.three.map(s => ({ ...s, checks: s.checks.filter(c => !(c.ruleId && RENDER_IDS.has(c.ruleId))) }));
 const oldWay = compute(noRender);                                             // rows gone, nobody declared it
 const newWay = compute(noRender, { evaluatedRules: allBut(...RENDER_IDS) });  // rows gone, caller declares it
-ok(oldWay.overall === 86, `premise: un-declared, a render-less run still inflates to 86 vs the real 72 (got ${oldWay.overall})`);
+// 86 -> 87 at registry 1.15.0, and the direction is the point. `oldWay` is the UNDECLARED computation:
+// it builds each suite's denominator from the registry and assumes every rule ran. Adding SEO-039..049
+// therefore hands it eleven more rules it never saw a row for and credits them all as resolved risk, so
+// the inflation gets WORSE as the registry grows. The declared number (72, asserted above) does not move
+// at all, because it only ever counted what actually ran. That divergence is this suite's whole thesis.
+ok(oldWay.overall === 87, `premise: un-declared, a render-less run still inflates to 87 vs the real 72 (got ${oldWay.overall})`);
 ok(cat(oldWay, 'console').score === 100, 'premise: un-declared, a console suite that measured NOTHING scores 100');
 // the fix:
 ok(cat(newWay, 'console').score === null, `console scores null when every one of its rules is render-only and none ran (got ${cat(newWay, 'console').score})`);

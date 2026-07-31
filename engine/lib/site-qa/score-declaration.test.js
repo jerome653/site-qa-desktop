@@ -4,9 +4,21 @@
 // Pins the three numbers that define this defect, forever, measured from a REAL audit against a REAL
 // local server (the ADR-0006 pattern: an oracle in the test, not a fixture that can agree with a bug):
 //
-//     79  HONEST     audit.js's declared score, before the advisory passes run
+//     80  HONEST     audit.js's declared score, before the advisory passes run
 //     90  INFLATED   what the bug shipped — compute(suites) with NO declaration
 //     80  CORRECT    the declaration COMPLETED with the advisory rules that genuinely ran
+//
+// RE-BASELINED at registry 1.15.0 (indexability & sitemap integrity, SEO-039..049 + Suite 14). HONEST
+// moved 79 -> 80: the seo suite gained evaluated, passing rules on this fixture (chiefly SEO-048 — no
+// robots.txt means neither Googlebot nor Bingbot is blocked), which lifts the weighted mean by a point.
+// INFLATED is UNMOVED at 90, which is the assertion that actually matters: the defect signature is
+// preserved and still reproduces on demand.
+//
+// HONEST and CORRECT now round to the SAME integer, so "naive < correct" no longer discriminates at the
+// overall level. The over-penalty is unchanged and still measurable — it was never really about the
+// rounded overall — so the assertion moved to where the mechanism lives: the FUNCTIONAL category, which
+// the naive computation scores 91 against a correct 92 because FUNC-008/009 are missing from its
+// declaration. Restated, not relaxed: deleting it would have thrown away the oracle.
 //
 // The suite fails if any future change reproduces 90. That is its entire purpose.
 //
@@ -27,7 +39,11 @@ function ok(c, n) { if (c) pass++; else { fail++; failures.push(n); console.log(
 function eq(a, b, n) { ok(JSON.stringify(a) === JSON.stringify(b), n + (JSON.stringify(a) === JSON.stringify(b) ? '' : ` (got ${JSON.stringify(a)})`)); }
 
 // The golden trio. Do not edit without re-measuring.
-const HONEST = 79, INFLATED = 90, CORRECT = 80;
+const HONEST = 80, INFLATED = 90, CORRECT = 80;
+// The category the over-penalty actually lands in, and by how much. FUNC-008/009 run but are absent
+// from audit.js's pre-advisory declaration, so the naive computation subtracts them from the top of
+// `functional`'s fraction only. Pinned as its own pair because the overall score can round the gap away.
+const NAIVE_FUNCTIONAL = 91, CORRECT_FUNCTIONAL = 92;
 
 // A page with REAL open functional risk (placeholder copy trips FUNC-004) and no mojibake/typos, so
 // FUNC-008/009 do NOT fire. That combination is what makes the naive fix visibly wrong: `functional`
@@ -84,7 +100,14 @@ console.log('Score declaration integrity (ADR-0011) — test suite\n');
     // ── 4 · THE NAIVE FIX IS WRONG — pinned so nobody "simplifies" to it ──────────────────────────
     const naive = compute(data.suites, { evaluatedRules: raw.coverage.evaluatedRules });
     eq(naive.overall, HONEST, `naive: threading audit's declaration UNCHANGED scores ${HONEST}`);
-    ok(naive.overall < CORRECT, 'naive: …which is BELOW the correct value — it over-penalises');
+    // The over-penalty, measured where it lives. At registry 1.15.0 HONEST and CORRECT round to the same
+    // overall, so comparing the two integers proves nothing; the FUNCTIONAL category is where the
+    // missing FUNC-008/009 declaration actually costs points, and it still does.
+    const catOf = (q, key) => ((q.categories || []).find(c => (c.key || c.suite || c.name) === key) || {}).score;
+    eq(catOf(naive, 'functional'), NAIVE_FUNCTIONAL, `naive: the functional category scores ${NAIVE_FUNCTIONAL}`);
+    eq(catOf(data.quality, 'functional'), CORRECT_FUNCTIONAL, `FIX: the functional category scores ${CORRECT_FUNCTIONAL} once the declaration is completed`);
+    ok(catOf(naive, 'functional') < catOf(data.quality, 'functional'),
+      'naive: …which is BELOW the correct value — it over-penalises the suite the advisory rules land in');
     const advisory = ['FUNC-008', 'FUNC-009',
       ...RULES.filter(r => r.suite === 'best-practices').map(r => r.id),
       ...RULES.filter(r => r.suite === 'copy').map(r => r.id)];
@@ -126,7 +149,7 @@ console.log('Score declaration integrity (ADR-0011) — test suite\n');
     eq(declaredR.ready, undeclared.ready, 'scope: …nor `ready`');
     ok(declaredR.quality.overall !== undeclared.quality.overall, 'scope: it changes ONLY the Quality Score — which is the entire point');
     eq(data.readiness, raw.readiness, 'scope: the launch-readiness verdict is untouched by the fix');
-    eq(RULES.length, 144, 'scope: registry unchanged — ADR-0011 adds NO rule');
+    eq(RULES.length, 161, 'scope: registry unchanged — ADR-0011 adds NO rule');
     const scoreSrc = fs.readFileSync(require.resolve('./score.js'), 'utf8');
     ok(/MODEL = 'sgen-quality-v2'/.test(scoreSrc), 'scope: score.js model untouched — the fix is transport, not maths');
   } catch (e) {

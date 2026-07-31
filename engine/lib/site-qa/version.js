@@ -74,13 +74,34 @@ module.exports = {
   // comparable to one from 6.x — its denominator no longer contains them. That is exactly what a major
   // version is for. Deliberate: the operator's rule is that content belongs on the content tab, and a
   // mojibake is a content defect, not a technical one.
-  ENGINE_VERSION: '4.0.0',   // content findings move to Content & SEO; FUNC-008/009 unscored (was 3.5.0)
+  // 4.1.0 — INDEXABILITY. Additive, and a real scoring change that is NOT a major because it only ever
+  // ADDS coverage: eleven new scored rules (SEO-039..049) join the seo suite, plus advisory Suite 14
+  // (Discovery & AI). Scores from 4.0.x are comparable in MODEL but not in VALUE — the seo denominator
+  // grew, so a site with a clean sitemap scores slightly higher and one that publishes URLs it forbids
+  // scores lower. Nothing was removed and nothing was reweighted.
+  //
+  // What it answers that nothing did before: "can Google and Bing actually index this?", per URL. Every
+  // input was already fetched and every signal was already checked in isolation — SEO-007 sees noindex,
+  // SEO-020 sees a blanket robots block, SEO-023 sees dead sitemap URLs. The defect class lives in the
+  // INTERSECTION, which no single-signal rule could reach: a URL the sitemap advertises, that robots.txt
+  // forbids, carrying a noindex the crawler will never be allowed to read (SEO-047).
+  //
+  // THE BOUNDARY, because it is the part that matters: this ships INDEXABLE, never INDEXED. Live index
+  // membership needs a credentialed, ownership-verified API per engine, and scraping "site:" queries is
+  // non-deterministic and against both engines' terms. `result.indexability.indexStatus.measured` is
+  // false with a stated reason, and it travels WITH the data so no surface can render the verdict table
+  // as "indexed in Google".
+  ENGINE_VERSION: '4.1.0',   // + indexability, sitemap integrity, Discovery & AI (was 4.0.0)
   // 1.6.0 — the report's SHAPE changed, which is what this stream is for. Out: the verdict card, the
   // score ring, the readiness pill and the seven stat tiles (redundant — every number was restated
   // below). In: a status breakdown that says what each HTTP code MEANS, and a link count strip. A
   // consumer scraping the HTML for .verdict / .tile will find nothing; report.json is unchanged and
   // remains the contract for anything automated.
-  REPORT_VERSION: '1.7.0',   // + "Built on" tech-stack panel (was 1.6.0)
+  // 1.8.0 — + the "Indexability" panel: a per-URL, per-engine verdict table (Google and Bing scored
+  // separately, because a group naming googlebot and a `*` group are different rule sets and a site can
+  // be open to one engine and closed to the other). Additive to the HTML; report.json gains
+  // `indexability` and remains the contract for anything automated.
+  REPORT_VERSION: '1.8.0',   // + per-URL indexability panel (was 1.7.0)
   REGISTRY_VERSION,          // rule metadata version (owned by the registry)
 
   // ── Acquisition-boundary streams (ADR-0004 §D5/§D6) ────────────────────────────────────────────

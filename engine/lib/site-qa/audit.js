@@ -21,6 +21,7 @@ const { computeLenses } = require('./lib/lenses');
 const { interactionCheck } = require('./lib/checks-interaction');
 const { securityPageChecks, securitySiteProbes } = require('./lib/checks-security');
 const { seoPageChecks } = require('./lib/checks-seo');
+const { scanIndexability } = require('./indexability');
 const { stabilityPageChecks } = require('./lib/checks-stability');
 const { enrichSuites } = require('./finding');
 const { createBus } = require('./events');
@@ -38,6 +39,12 @@ const SUITES = [
   { key: 'security', name: 'Security', desc: 'HTTPS · TLS cert · headers · mixed content', icon: 'shield' },
   { key: 'crossbrowser', name: 'Cross-Browser', desc: 'Firefox · WebKit (Safari engine)', icon: 'browsers' },
   { key: 'console', name: 'Console & Network', desc: 'JS errors · failed requests', icon: 'terminal' },
+  // Suite 14 · ADVISORY (WEIGHTS.discovery = 0). The machine-readable surface a site publishes about
+  // itself — llms.txt, the robots.txt AI-crawler policy, well-known descriptors, feeds, schema
+  // coverage. Advisory by construction: see the DISC-* block in rules/registry.js for why none of it
+  // may be scored. It sits in SUITES (not bolted on by the advisory pipeline like best-practices) so
+  // that a Content & SEO run — which skips every suite except the ones it names — can carry it.
+  { key: 'discovery', name: 'Discovery & AI', desc: 'llms.txt · AI crawler policy · well-known files · schema coverage', icon: 'search', advisory: true },
 ];
 
 const STATIC_SUITE = {
@@ -183,6 +190,14 @@ const CHECK_RULES = {
   'sec-cookie': ['SEC-016', 'SEC-017', 'SEC-018'], 'sec-js': ['SEC-023'],
   'sec-transport': ['SEC-024', 'SEC-025'], 'sec-exposure': ['SEC-022'],
   'seo-hreflang': ['SEO-031'], 'seo-index': ['SEO-035', 'SEO-036'], 'seo-content': ['SEO-037', 'SEO-038'],
+  // indexability/ — one pass, several check families, so a failure in the sitemap fetch cannot silently
+  // declare the robots or schema rules evaluated. Split by what each family actually observed.
+  'sitemap-integrity': ['SEO-043', 'SEO-044', 'SEO-045', 'SEO-046'],
+  'sitemap-indexability': ['SEO-039', 'SEO-040', 'SEO-041', 'SEO-042'],
+  'index-gate': ['SEO-047', 'SEO-048'],
+  'schema-required': ['SEO-049'],
+  'discovery-llms': ['DISC-001'], 'discovery-ai-policy': ['DISC-002'], 'discovery-wellknown': ['DISC-003'],
+  'discovery-feeds': ['DISC-004'], 'discovery-schema': ['DISC-005'], 'discovery-index-status': ['DISC-006'],
   'stb-dup-id': ['DOM-003'], 'stb-dom': ['DOM-004'], 'stb-form': ['FORM-002'], 'stb-uri': ['LINK-010'],
   // render pass (checks-render.js / font-checks.js)
   'console-errors': ['CON-001'], 'failed-requests': ['CON-002'], 'blocking-overlay': ['CON-003'],
@@ -279,6 +294,12 @@ const NOT_RUN_LABEL = {
   'stb-dom': 'DOM size within budget', 'stb-form': 'Form fields carry valid semantics',
   'stb-uri': 'mailto: / tel: links are valid',
   'link-audit': 'Internal / external links and redirect chains',
+  // indexability/ — site-level families. Each names the QUESTION, because a not-run row is read by
+  // someone who needs to know precisely what was left unanswered.
+  'index-gate': 'Google and Bing can crawl the site',
+  'sitemap-integrity': 'Sitemap files are valid',
+  'sitemap-indexability': 'Every sitemap URL is indexable',
+  'schema-required': 'Structured data carries every required property',
   'cross-browser': 'Cross-browser render (Firefox · WebKit)',
   'axe': 'Deep WCAG 2.1 A/AA scan (axe-core)',
   'render:console': 'Console & network errors (browser render pass)',
@@ -299,6 +320,12 @@ function notRunRow(checkId, suite, reason, ruleIds, detail, l) {
                                   // reach travel in unverified.ruleIds, where nothing mistakes them
                                   // for an observed finding.
     notRun: true,                 // machine flag: THIS ROW IS NOT A RESULT
+    // The check family this row belongs to, stamped for the SAME reason every static row carries it:
+    // the Content & SEO lead card maps rows to cards by `check`, falling back to `ruleId` — and a
+    // not-run row deliberately has ruleId null. Without this the card could not find the row and
+    // printed its generic "This check produced no row in this run", replacing a stated evidence gap
+    // with a vaguer one. An unverified check must read as unverified, not as absent.
+    check: checkId,
     verified: false,
     unverified: {
       checkId, suite, reason,
@@ -640,6 +667,25 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     coverage = { dead, orphans };
   }
 
+  // 9b) INDEXABILITY — "can Google and Bing actually index this?", per URL, from evidence.
+  // Runs HERE and not in the advisory pipeline for one concrete reason: the pipeline seam hands passes
+  // `{url, html}` pairs, and this needs response HEADERS (X-Robots-Tag), status codes and redirect
+  // locations. Those exist on `crawl.pages` and nowhere downstream.
+  //
+  // GUARDED END TO END. A failure to reach robots.txt or a sitemap must never fail an audit that
+  // otherwise succeeded — same discipline as the ADR-0009 collection producer below. On error the
+  // result is null, the coverage rows below record NOT verified with the reason, and the rules drop out
+  // of both sides of the score rather than banking a pass nobody earned.
+  let indexability = null, indexabilityError = null;
+  if (!isSkipped('seo') || !isSkipped('discovery')) {
+    try {
+      progress(90, 'checking indexability (robots · sitemap · canonical)');
+      // siteLevel is the single-page contract, threaded end to end. See indexability/index.js: a "This
+      // page" run must not fetch another page, and this pass was caught HEAD-probing three of them.
+      indexability = await scanIndexability({ origin: crawl.origin, host, crawlPages: crawl.pages, siteLevel: !singlePage, log });
+    } catch (e) { indexabilityError = String(e && e.message || e); log(`indexability pass failed: ${indexabilityError}`); }
+  }
+
   // ---- assemble suites ----
   const suiteRows = {}; SUITES.forEach(s => suiteRows[s.key] = []);
   const cap = (arr, n) => arr.slice(0, n);
@@ -836,6 +882,193 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
     }
   }
 
+  // ── INDEXABILITY & DISCOVERY -> seo (scored) + discovery (advisory) ─────────────────────────────
+  // Every `name` below is the registry TITLE verbatim. That is constitutional, not stylistic: the
+  // engine maps a row to its rule BY TITLE (see rules/registry.js field docs), so a reworded string
+  // here silently unhooks the row from its severity, deduction and tier.
+  if (indexability) {
+    const IX = indexability;
+    const asItems = (recs, why) => recs.slice(0, 200).map(r => ({ page: r.url, section: 'sitemap.xml', id: r.url, value: typeof why === 'function' ? why(r) : why }));
+    const seoRow = (id, checkId, status, name, target, detail, meta, items) => { const r = row(status, name, target, detail, meta, items, id); r.check = checkId; suiteRows.seo.push(r); };
+    const discRow = (id, checkId, name, detail, meta, items) => {
+      // Suite 14 rows are 'manual' WITHOUT EXCEPTION — the second of the two mechanisms that make this
+      // suite score-neutral (the first is WEIGHTS.discovery = 0). Hardcoded here rather than passed in,
+      // so no call site below can introduce a graded row by mistake.
+      const r = row('manual', name, '', detail, meta, items, id); r.check = checkId; suiteRows.discovery.push(r);
+    };
+
+    // -- site-level crawl gate: is a NAMED search engine shut out? (SEO-048) ----------------------
+    // THE GREEN TICK COSTS EVIDENCE — the rule this whole file is built on, and this row broke it.
+    // buildRobots() reports `unreachable` when the request itself failed, and allows() then answers
+    // "allowed" (no robots.txt = nothing forbidden), which is right for a live site and catastrophic
+    // for a dead one: measured on a host that answered NOTHING, this printed the green
+    // "Google and Bing can crawl the site". A site nobody could reach was certified crawlable.
+    // A pass is now minted only when the origin ANSWERED and robots.txt was genuinely resolved —
+    // `present` (parsed) or `absent` (a real 404, which is itself a real answer). Anything else is
+    // unverified, and its rules leave both sides of the score instead of banking a tick.
+    const robotsResolved = IX.robots.state === 'present' || IX.robots.state === 'absent';
+    const gateKnown = originResponded && robotsResolved;
+    const blockedEngines = IX.robots.searchAgents.filter(a => !a.allowed);
+    recordCoverage('index-gate', 'seo', gateKnown, gateKnown ? null : (originResponded ? `robots-${IX.robots.state}` : 'no-response'), null);
+    if (!gateKnown) {
+      suiteRows.seo.push(notRunRow('index-gate', 'seo', originResponded ? 'no-evidence' : 'no-response', CHECK_RULES['index-gate'],
+        originResponded
+          ? `robots.txt could not be read (${IX.robots.state}), so whether Googlebot and Bingbot may crawl this site is UNKNOWN. This is NOT a pass.`
+          : 'the origin never answered, so no crawl-permission claim can be made about it. This is NOT a pass.',
+        { applicable: 0, err: 0, error: null }));
+    } else if (blockedEngines.length) {
+      seoRow('SEO-048', 'index-gate', 'fail', 'robots.txt blocks a named search engine (Google or Bing)',
+        blockedEngines.map(a => a.label).join(', '),
+        `robots.txt disallows the site root for ${blockedEngines.map(a => `${a.label} (${a.rule || a.reason})`).join(' and ')} — those engines cannot crawl this site at all`,
+        `${blockedEngines.length} engine(s)`,
+        blockedEngines.map(a => ({ page: crawl.origin + '/robots.txt', section: 'robots.txt', id: a.label, value: a.rule || a.reason })));
+    } else {
+      seoRow(null, 'index-gate', 'pass', 'Google and Bing can crawl the site', null,
+        `robots.txt (${IX.robots.state}) allows the site root for Googlebot and Bingbot`, 'ok');
+    }
+
+    // -- the trap no single-directive rule can see (SEO-047) --------------------------------------
+    if (IX.conflicts.noindexUnreadable.length) {
+      seoRow('SEO-047', 'index-gate', 'fail', 'noindex on a URL robots.txt blocks — the crawler can never read it',
+        `${IX.conflicts.noindexUnreadable.length} URL(s)`,
+        'robots.txt forbids fetching these URLs, so the noindex on them is never read — they can stay in the index as bare links. Remove the robots.txt block OR the noindex; keeping both does the opposite of what either intends.',
+        String(IX.conflicts.noindexUnreadable.length),
+        asItems(IX.conflicts.noindexUnreadable, 'noindex + robots-disallowed'));
+    }
+
+    // ── SITE-LEVEL FROM HERE. On a single-page run none of it was looked at, so none of it is
+    // declared evaluated: the rules leave BOTH sides of the score rather than banking free passes.
+    // Same reasoning as duplicate-title on a one-page run — a check that cannot mean anything for this
+    // run shape is Unknown, never Clean.
+    if (!IX.siteLevel) {
+      for (const id of ['sitemap-integrity', 'sitemap-indexability', 'discovery-llms', 'discovery-ai-policy', 'discovery-wellknown', 'discovery-feeds'])
+        recordCoverage(id, id.startsWith('discovery') ? 'discovery' : 'seo', false, 'not-applicable-single-page', null);
+    }
+
+    // -- sitemap FILE integrity (SEO-043..046) ----------------------------------------------------
+    const files = IX.sitemaps.files;
+    const badFiles = files.filter(f => f.problems.some(p => ['declared-but-missing', 'not-xml', 'malformed-structure', 'unreachable', 'nested-too-deep', 'empty'].includes(p)));
+    const overLimit = files.filter(f => f.problems.some(p => p === 'over-url-limit' || p === 'over-size-limit'));
+    const badLastmod = files.filter(f => f.problems.includes('invalid-lastmod'));
+    const foreign = files.filter(f => f.problems.includes('foreign-host'));
+    // Coverage is claimed only when a sitemap was actually READ. A site with no sitemap at all has
+    // nothing to be right or wrong about, so these rules are NOT declared evaluated — they leave both
+    // sides of the ratio instead of banking four free passes. SEO-022 already owns "no sitemap".
+    if (IX.siteLevel) recordCoverage('sitemap-integrity', 'seo', IX.sitemaps.found, IX.sitemaps.found ? null : 'no-sitemap-found', null);
+    if (IX.sitemaps.found) {
+      if (badFiles.length) seoRow('SEO-043', 'sitemap-integrity', 'fail', 'Sitemap is declared but unreadable (missing, not XML, or malformed)',
+        `${badFiles.length} file(s)`, badFiles.map(f => `${f.url} — ${f.problems.join(', ')}`).slice(0, 3).join(' · '), String(badFiles.length),
+        badFiles.map(f => ({ page: f.url, section: f.source, id: f.url, value: f.problems.join(', ') })));
+      if (overLimit.length) seoRow('SEO-044', 'sitemap-integrity', 'fail', 'Sitemap exceeds the 50,000-URL / 50 MB protocol limit',
+        `${overLimit.length} file(s)`, 'a file over either limit is rejected wholesale by Google and Bing — every URL in it, not just the overflow', String(overLimit.length),
+        overLimit.map(f => ({ page: f.url, section: 'sitemap.xml', id: f.url, value: `${f.urlCount} URLs · ${Math.round(f.bytes / 1048576)} MB` })));
+      if (badLastmod.length) seoRow('SEO-045', 'sitemap-integrity', 'warn', 'Sitemap <lastmod> is not a valid W3C datetime',
+        `${badLastmod.length} file(s)`, 'a lastmod outside the W3C datetime profile is ignored silently, so recrawl scheduling loses the signal', String(badLastmod.length),
+        badLastmod.flatMap(f => (f.badLastmod || []).map(b => ({ page: b.loc || f.url, section: f.url, id: b.loc || f.url, value: String(b.lastmod) }))));
+      if (foreign.length) seoRow('SEO-046', 'sitemap-integrity', 'warn', 'Sitemap lists URLs on another host',
+        `${IX.sitemaps.counts.foreignHost} URL(s)`, 'a sitemap may only list URLs on the host that serves it — cross-host entries are ignored', String(IX.sitemaps.counts.foreignHost),
+        foreign.flatMap(f => (f.foreignHost || []).map(u => ({ page: u, section: f.url, id: u, value: 'foreign host' }))));
+      if (!badFiles.length && !overLimit.length && !badLastmod.length && !foreign.length)
+        seoRow(null, 'sitemap-integrity', 'pass', 'Sitemap files are valid', null,
+          `${IX.sitemaps.counts.files} file(s) parsed · ${IX.sitemaps.counts.listed} URL(s) listed · within protocol limits`, 'ok');
+    }
+
+    // -- does the sitemap agree with what the site permits? (SEO-039..042) ------------------------
+    // This is the join the product did not have: SEO-023 already checks that a sitemap URL is not DEAD.
+    // Whether it is CRAWLABLE, INDEXABLE and SELF-CANONICAL was never asked.
+    const C = IX.conflicts;
+    const smChecked = IX.summary.inSitemap > 0;
+    if (IX.siteLevel) recordCoverage('sitemap-indexability', 'seo', smChecked, smChecked ? null : 'no-sitemap-urls', null);
+    if (smChecked) {
+      if (C.blocked.length) seoRow('SEO-039', 'sitemap-indexability', 'fail', 'Sitemap lists a URL that robots.txt blocks',
+        `${C.blocked.length} URL(s)`, 'the sitemap asks the engines to crawl URLs robots.txt forbids them to fetch — the two files contradict each other', String(C.blocked.length),
+        asItems(C.blocked, r => (r.robots.google.rule || r.robots.bing.rule || 'disallowed')));
+      if (C.noindex.length) seoRow('SEO-040', 'sitemap-indexability', 'fail', 'Sitemap lists a URL that carries noindex',
+        `${C.noindex.length} URL(s)`, 'a sitemap is a request to index; noindex is a refusal. One of the two is wrong on these URLs', String(C.noindex.length),
+        asItems(C.noindex, r => (r.metaRobots.all || r.xRobotsTag.all || 'noindex')));
+      if (C.nonCanonical.length) seoRow('SEO-041', 'sitemap-indexability', 'warn', 'Sitemap lists a URL whose canonical points elsewhere',
+        `${C.nonCanonical.length} URL(s)`, 'the canonical names a different URL as the one to index, so these entries send the crawler to a page it will then discard', String(C.nonCanonical.length),
+        asItems(C.nonCanonical, r => `canonical → ${r.canonical}`));
+      if (C.redirect.length) seoRow('SEO-042', 'sitemap-indexability', 'warn', 'Sitemap lists a URL that redirects',
+        `${C.redirect.length} URL(s)`, 'a sitemap should list final destination URLs — every redirect here is a wasted crawl request', String(C.redirect.length),
+        asItems(C.redirect, r => `HTTP ${r.status}${r.redirectTo ? ` → ${r.redirectTo}` : ''}`));
+      if (!C.blocked.length && !C.noindex.length && !C.nonCanonical.length && !C.redirect.length)
+        seoRow(null, 'sitemap-indexability', 'pass', 'Every sitemap URL is indexable', null,
+          `${IX.summary.inSitemap} sitemap URL(s) checked — all crawlable, none noindexed, all self-canonical`, 'ok');
+    }
+
+    // -- structured data, past "does it parse" (SEO-049) ------------------------------------------
+    const schemaSeen = IX.schema.pagesWithSchema > 0;
+    recordCoverage('schema-required', 'seo', schemaSeen, schemaSeen ? null : 'no-json-ld-on-any-page', null);
+    if (schemaSeen) {
+      if (IX.schema.missingRequired.length) seoRow('SEO-049', 'schema-required', 'warn', 'Structured-data item is missing a required property',
+        `${IX.schema.missingRequired.length} item(s)`, 'these items parse and declare a @type, and are still ineligible for the rich result the type exists to earn', String(IX.schema.missingRequired.length),
+        IX.schema.missingRequired.slice(0, 200));
+      else seoRow(null, 'schema-required', 'pass', 'Structured data carries every required property', null,
+        `${IX.schema.pagesWithSchema} page(s) with JSON-LD · ${IX.schema.types.length} type(s) · no required property missing`, 'ok');
+    }
+
+    // -- Suite 14 · DISCOVERY (advisory, every row manual) ----------------------------------------
+    // DISC-001..004 are site-level PROBES and are emitted only when this run was allowed to make them.
+    // Emitting them on a single-page run would print "llms.txt not published" about a path nobody
+    // requested — a claim of absence from a check that never looked, which is the one thing this engine
+    // refuses to do. DISC-005/006 run in both scopes: schema reads HTML already fetched, and
+    // "index status was not measured" is true regardless of scope.
+    const D = IX.discovery;
+    if (IX.siteLevel) {
+    const llms = D.byKey.llmsTxt || {};
+    recordCoverage('discovery-llms', 'discovery', true, null, null);
+    discRow('DISC-001', 'discovery-llms', 'llms.txt — AI answer-engine discovery file',
+      llms.present ? `present and ${llms.valid ? 'well-formed' : 'malformed'} — ${llms.note}`
+        : `not published (${llms.note || 'absent'}). llms.txt is a convention, not a standard — its absence is not a defect, and publishing one lets answer engines read a curated map of the site instead of inferring one.`,
+      llms.present ? (llms.valid ? 'present' : 'malformed') : 'absent',
+      llms.present && llms.meta ? (llms.meta.links || []).slice(0, 50).map(u => ({ page: u, section: 'llms.txt', id: u, value: 'listed' })) : undefined);
+
+    recordCoverage('discovery-ai-policy', 'discovery', IX.robots.state === 'present', IX.robots.state === 'present' ? null : `robots-${IX.robots.state}`, null);
+    const declared = IX.robots.aiPolicy.filter(a => a.declared);
+    discRow('DISC-002', 'discovery-ai-policy', 'AI crawler policy declared in robots.txt',
+      declared.length
+        ? `${declared.length} AI crawler(s) named: ${declared.map(a => `${a.label} → ${a.blocked ? 'blocked' : 'allowed'}`).join(' · ')}. Reported, never scored — blocking training crawlers is a policy choice, and these agents do not control the search index.`
+        : 'no AI crawler is named in robots.txt, so they fall under the * group by default. That is a default, not a decision — worth making explicit either way.',
+      declared.length ? `${declared.filter(a => a.blocked).length} blocked / ${declared.length} named` : 'undeclared',
+      declared.map(a => ({ page: crawl.origin + '/robots.txt', section: 'robots.txt', id: a.label, value: a.blocked ? 'blocked' : 'allowed' })));
+
+    recordCoverage('discovery-wellknown', 'discovery', true, null, null);
+    const wk = D.files.filter(f => f.key !== 'llmsTxt');
+    const wkPresent = wk.filter(f => f.present);
+    discRow('DISC-003', 'discovery-wellknown', 'Machine-readable descriptors (security.txt · OpenAPI YAML/JSON · app association)',
+      wkPresent.length ? `${wkPresent.length} found: ${wkPresent.map(f => `${f.label} (${f.valid ? 'valid' : 'INVALID — ' + f.note})`).join(' · ')}`
+        : 'none of the probed well-known paths served a file. All optional; listed so the absence is a known fact rather than an unasked question.',
+      `${wkPresent.length} / ${wk.length}`,
+      wk.map(f => ({ page: f.url, section: 'well-known', id: f.label, value: f.present ? (f.valid ? 'valid' : 'invalid') : (f.softHtml ? 'soft-404' : 'absent') })));
+
+    recordCoverage('discovery-feeds', 'discovery', true, null, null);
+    discRow('DISC-004', 'discovery-feeds', 'RSS / Atom / JSON feed declared',
+      D.feeds.length ? `${D.feeds.length} feed(s) declared on the homepage` : 'no feed <link rel="alternate"> on the homepage',
+      String(D.feeds.length), D.feeds.map(f => ({ page: f.url, section: f.type, id: f.url, value: 'declared' })));
+    }
+
+    recordCoverage('discovery-schema', 'discovery', schemaSeen, schemaSeen ? null : 'no-json-ld-on-any-page', null);
+    discRow('DISC-005', 'discovery-schema', 'Structured-data type coverage and recommended properties',
+      schemaSeen
+        ? `${IX.schema.types.length} type(s) across ${IX.schema.pagesWithSchema} page(s): ${IX.schema.types.slice(0, 12).map(t => `${t.type}×${t.count}`).join(', ')}`
+          + (IX.schema.unvalidatedTypes.length ? ` · ${IX.schema.unvalidatedTypes.length} type(s) have no rules in this engine and were NOT validated: ${IX.schema.unvalidatedTypes.map(t => t.type).slice(0, 8).join(', ')}` : '')
+          + (IX.schema.missingRecommended.length ? ` · ${IX.schema.missingRecommended.length} item(s) missing a RECOMMENDED property (legal, improves eligibility)` : '')
+        : 'no JSON-LD found on any audited page',
+      schemaSeen ? `${IX.schema.types.length} type(s)` : 'none',
+      IX.schema.missingRecommended.slice(0, 100));
+
+    // The honest row. See indexability/index.js `indexStatus` for the full reasoning.
+    recordCoverage('discovery-index-status', 'discovery', true, null, null);
+    discRow('DISC-006', 'discovery-index-status', 'Live Google / Bing index status — not measured',
+      `${IX.indexStatus.reason} ${IX.indexStatus.whatWasMeasured}`, 'not measured');
+  } else if (!isSkipped('seo')) {
+    // The pass did not run. Its rules are declared NOT evaluated, which drops them from both sides of
+    // the score — never silently treated as clean.
+    for (const id of ['sitemap-integrity', 'sitemap-indexability', 'index-gate', 'schema-required'])
+      recordCoverage(id, 'seo', false, indexabilityError ? 'check-errored' : 'not-run', { applicable: 0, err: indexabilityError ? 1 : 0, error: indexabilityError });
+  }
+
   // real cross-browser render -> crossbrowser
   // crossbrowser carries NO static rules, so when no engine runs this suite measures nothing and
   // scores 100 on its full registry weight. It must say "unmeasured", per engine.
@@ -1026,6 +1259,24 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
       // honest: an empty list means no signature was seen, not that the technology is absent.
       note: SIGNATURE_ONLY_NOTE,
     },
+    // Machine-readable indexability, on the same terms as techStack above: present as an object with
+    // its own caveat attached (`indexStatus.measured === false`), so no consumer can render the verdict
+    // table as "indexed in Google". `urls` is the per-URL join — the table the report draws.
+    ...(indexability ? {
+      indexability: {
+        summary: indexability.summary,
+        robots: indexability.robots,
+        sitemaps: { counts: indexability.sitemaps.counts, found: indexability.sitemaps.found, declaredInRobots: indexability.sitemaps.declaredInRobots, files: indexability.sitemaps.files.map(f => ({ url: f.url, source: f.source, status: f.status, kind: f.kind, urlCount: f.urlCount, bytes: f.bytes, problems: f.problems })) },
+        discovery: { present: indexability.discovery.present, invalid: indexability.discovery.invalid, feeds: indexability.discovery.feeds, files: indexability.discovery.files.map(f => ({ label: f.label, url: f.url, status: f.status, present: f.present, valid: f.valid, note: f.note })) },
+        schema: { pagesWithSchema: indexability.schema.pagesWithSchema, types: indexability.schema.types, unvalidatedTypes: indexability.schema.unvalidatedTypes, missingRequired: indexability.schema.missingRequired.length, missingRecommended: indexability.schema.missingRecommended.length },
+        indexStatus: indexability.indexStatus,
+        // Capped for the stored record — the full table is drawn from this and 2,000 rows is already
+        // more than any reader consumes. The cap is DECLARED so a truncated table cannot read as whole.
+        urls: indexability.urls.slice(0, 2000).map(r => ({ url: r.url, inSitemap: r.inSitemap, source: r.source, status: r.status, headOnly: !!r.headOnly, canonical: r.canonical, canonicalSelf: r.canonicalSelf, verdict: r.verdict, reasons: r.reasons, agree: r.agree })),
+        urlsTruncated: Math.max(0, indexability.urls.length - 2000),
+      },
+    } : {}),
+    ...(indexabilityError ? { indexabilityError } : {}),
     render: { rendered: renderRes.rendered, total: renderRes.total, viewports: renderRes.viewports || [], error: renderRes.error || null },
     // totalInternal / totalExternal are carried SEPARATELY, not just summed into `checked`. The report
     // shows internal and external as distinct counts, and a single total cannot be split back apart —

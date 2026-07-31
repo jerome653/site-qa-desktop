@@ -133,6 +133,29 @@ const STYLE = `
 .tk{display:inline-flex;align-items:baseline;gap:6px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:7px;padding:3px 9px;font-size:12.5px;color:var(--ink)}
 .tk i{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)}
 .ts-note{margin-top:10px;font-size:12px;color:var(--ink-faint);line-height:1.55;max-width:92ch}
+/* Indexability — per URL, per engine. The not-measured caveat is part of the panel for the same reason
+   the "Built on" caveat is: a surface must not be able to render the verdicts without it. */
+.ixp{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.ixp-h{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px}
+.ix-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+.ix-cell{background:var(--surface-2);border:1px solid var(--line-strong);border-radius:8px;padding:9px 11px}
+.ix-cell.bad{border-color:var(--fail);background:color-mix(in srgb,var(--fail) 7%,var(--surface-2))}
+.ix-n{font-family:var(--mono);font-size:19px;line-height:1.15;color:var(--ink)}
+.ix-l{margin-top:3px;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em}
+.ix-eng{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.ix-badge{display:inline-flex;align-items:baseline;gap:7px;border:1px solid var(--line-strong);border-radius:7px;padding:4px 10px;font-size:12.5px;background:var(--surface-2)}
+.ix-badge.no{border-color:var(--fail);color:var(--fail)}
+.ix-badge b{font-weight:600}
+.ixtbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px}
+.ixtbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);padding:6px 8px;border-bottom:1px solid var(--line-strong);font-weight:500}
+.ixtbl td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.ixtbl td.u{font-family:var(--mono);font-size:11.5px;word-break:break-all;max-width:46ch}
+.ixv{display:inline-block;font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;padding:2px 7px;border-radius:5px;border:1px solid var(--line-strong);color:var(--ink-faint);white-space:nowrap}
+.ixv.indexable{color:var(--pass);border-color:var(--pass)}
+.ixv.blocked-robots,.ixv.error{color:var(--fail);border-color:var(--fail)}
+.ixv.noindex,.ixv.canonicalized-away,.ixv.redirect{color:var(--warn);border-color:var(--warn)}
+.ix-scroll{overflow-x:auto;max-height:520px;overflow-y:auto;border:1px solid var(--line);border-radius:8px}
+.ix-foot{margin-top:10px;font-size:12px;color:var(--ink-faint);line-height:1.55;max-width:92ch}
 .summary{display:grid;grid-template-columns:minmax(0,340px) 1fr;gap:16px;align-items:stretch}
 .verdict{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;display:flex;gap:18px;align-items:center;position:relative;overflow:hidden}
 .verdict::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--vc,var(--warn))}
@@ -1143,6 +1166,59 @@ function renderReport(data, outDir, opts = {}) {
         <div class="ts-note">${esc(t.note || '')}</div></div>`;
     })();
 
+    // ── CAN GOOGLE AND BING INDEX THIS? ──────────────────────────────────────────────────────────
+    // The per-URL join. Every signal in it was already fetched and already checked in isolation; what
+    // no single row could show is a URL the sitemap advertises, that robots.txt forbids, carrying a
+    // noindex the crawler will never be allowed to read.
+    //
+    // The panel renders INDEXABLE and says so. `indexStatus.measured` is false and its reason is
+    // printed in the footer, not tucked into a tooltip — a reader must not be able to take this table
+    // for "these pages are in Google", because that is a different fact and this tool cannot see it.
+    const indexHtml = (() => {
+      const X = data.indexability;
+      if (!X || !X.summary) return '';
+      const S = X.summary;
+      const eng = (X.robots && X.robots.searchAgents) || [];
+      const badges = eng.map(a => `<span class="ix-badge${a.allowed ? '' : ' no'}"><b>${esc(a.label)}</b>${a.allowed ? 'may crawl' : 'BLOCKED by robots.txt'}${a.rule ? ` <i>${esc(a.rule)}</i>` : ''}</span>`).join('');
+      // Google's column is the headline count; where Bing differs it is called out below rather than
+      // averaged into one number that is true of neither engine.
+      const g = S.google || {};
+      const cells = [
+        ['Indexable', g.indexable || 0, false],
+        ['Blocked by robots', g['blocked-robots'] || 0, true],
+        ['noindex', g.noindex || 0, true],
+        ['Canonicalised away', g['canonicalized-away'] || 0, false],
+        ['Redirects', g.redirect || 0, false],
+        ['Errors', g.error || 0, true],
+      ].map(([l, v, bad]) => `<div class="ix-cell${bad && v > 0 ? ' bad' : ''}"><div class="ix-n">${esc(v)}</div><div class="ix-l">${esc(l)}</div></div>`).join('');
+
+      // Problem URLs first — a table nobody scrolls is a table nobody reads. Clean URLs follow.
+      const rank = (r) => (r.verdict.google === 'indexable' && r.verdict.bing === 'indexable') ? 1 : 0;
+      const rows = (X.urls || []).slice().sort((a, b) => rank(a) - rank(b) || a.url.localeCompare(b.url)).slice(0, 300).map(r => {
+        const why = (r.reasons && (r.reasons.google || [])[0]) || '';
+        return `<tr><td class="u">${esc(r.url)}</td>`
+          + `<td>${r.inSitemap ? 'yes' : '—'}</td>`
+          + `<td><span class="ixv ${esc(r.verdict.google)}">${esc(r.verdict.google)}</span></td>`
+          + `<td><span class="ixv ${esc(r.verdict.bing)}">${esc(r.verdict.bing)}</span></td>`
+          + `<td>${esc(why)}</td></tr>`;
+      }).join('');
+      const shown = Math.min(300, (X.urls || []).length);
+      const hidden = Math.max(0, (X.urls || []).length - shown) + (X.urlsTruncated || 0);
+      // Caps are stated, always. A truncated table that looks whole is the same lie as a suite that
+      // never ran scoring 100.
+      const caps = [
+        hidden ? `${hidden} further URL(s) are not listed here.` : '',
+        S.capped ? `${S.notProbed} sitemap URL(s) beyond the probe cap were NOT requested — their status is unknown, not sound.` : '',
+      ].filter(Boolean).join(' ');
+
+      return `<div class="ixp"><div class="ixp-h">Indexability — can Google and Bing index this?</div>
+        <div class="ix-eng">${badges}</div>
+        <div class="ix-grid">${cells}</div>
+        ${rows ? `<div class="ix-scroll"><table class="ixtbl"><thead><tr><th>URL</th><th>In sitemap</th><th>Google</th><th>Bing</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}
+        <div class="ix-foot"><b>Indexable, not indexed.</b> ${esc((X.indexStatus && X.indexStatus.reason) || '')} ${esc((X.indexStatus && X.indexStatus.whatWasMeasured) || '')} ${esc(caps)}</div>
+      </div>`;
+    })();
+
     return `<section class="pcov">
       <div class="pcov-h"><h2>Pages audited — ${esc(nA)} of ${esc(nD)} discovered</h2></div>
       <div class="pcov-body${hasNot ? '' : ' solo'}">
@@ -1153,6 +1229,7 @@ function renderReport(data, outDir, opts = {}) {
         ${notCol}
       </div>
       ${stackHtml}
+      ${indexHtml}
       ${statusHtml}
       ${linkHtml}
       ${cappedFoot}

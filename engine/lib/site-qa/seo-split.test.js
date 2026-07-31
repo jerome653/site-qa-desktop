@@ -118,7 +118,13 @@ console.log('SEO split — Site Audit is technical, SEO is its own tool — REAL
       // which applyAdvisory() appends and which is NOT part of audit.js's SUITES. Orthogonal to this
       // split, so count the scored suites only.
       const SUITE_KEYS = new Set(SUITES.map(x => x.key));
-      eq(keys.filter(k => SUITE_KEYS.has(k)).length, SUITES.length - 1, 'audit: exactly nine of the ten scored suites present');
+      // TWO suites are absent from Site Audit, not one. 'discovery' (Suite 14 — llms.txt, the robots.txt
+      // AI-crawler policy, well-known descriptors, schema coverage) joined SUITES in registry 1.15.0 and
+      // is an INDEXING surface, so the same tab-ownership rule that moved Copy Review out of Site Audit
+      // keeps Discovery out of it. It is advisory (WEIGHTS.discovery = 0) and every row is 'manual', so
+      // its absence here cannot move the technical score — the neutrality block below still measures that.
+      ok(!keys.includes('discovery'), 'audit: NO Discovery suite — indexing discovery belongs to Content & SEO');
+      eq(keys.filter(k => SUITE_KEYS.has(k)).length, SUITES.length - 2, 'audit: exactly nine of the ten scored suites present (seo and the advisory discovery suite both absent)');
       // The score contract. SEO must leave the DENOMINATOR with the suite; if its rules stayed declared
       // as evaluated they would bank as resolved risk and removing SEO would RAISE the technical score.
       const declared = A.coverage && Array.isArray(A.coverage.evaluatedRules) ? A.coverage.evaluatedRules : null;
@@ -169,7 +175,12 @@ console.log('SEO split — Site Audit is technical, SEO is its own tool — REAL
       // WEIGHTS.copy = 0, and every COPY-* row is status 'manual', which score.js skips in BOTH openRisk
       // and totalRisk. Proven below rather than asserted. Best Practices and FUNC-008/009 are deliberately
       // NOT here: FUNC-008/009 are SCORED rules of the functional suite, which an SEO run does not run.
-      eq(S.suites.map(x => x.key), ['seo', 'copy'], 'seo: the seo suite plus the weight-0 Copy Review advisory pass — nothing else');
+      // Three suites, all accounted for: the scored 'seo' suite, the weight-0 'discovery' suite (Suite
+      // 14, added to audit.js's SUITES in registry 1.15.0 — the indexing-discovery surface this tab
+      // owns), and the weight-0 'copy' advisory pass. Best Practices and FUNC-008/009 are still
+      // deliberately absent: FUNC-008/009 are SCORED rules of the functional suite, which an SEO run
+      // does not run.
+      eq(S.suites.map(x => x.key), ['seo', 'discovery', 'copy'], 'seo: the seo suite, the weight-0 Discovery suite, and the weight-0 Copy Review pass — nothing else');
       eq(S.quality && S.quality.evaluationDeclared, true, 'seo: evaluationDeclared stays TRUE — an SEO score that states its coverage');
       const declared = S.coverage && Array.isArray(S.coverage.evaluatedRules) ? S.coverage.evaluatedRules : [];
       const rules = require('./rules/registry');
@@ -183,8 +194,20 @@ console.log('SEO split — Site Audit is technical, SEO is its own tool — REAL
       // SILENTLY DROPPED while the pass still reported having run. They now fall back to the Copy
       // Review suite, so declaration and rows agree again.
       const contentIds = ['FUNC-008', 'FUNC-009'];
-      eq(declared.filter(id => nonSeo.has(id)).sort(), copyIds.concat(contentIds).sort(),
-        'seo: the non-seo rules declared evaluated are exactly the COPY-* and content rules that ran — no rule is declared without a row');
+      // The COPY-* and content rules are an EXACT set: those passes either run whole or not at all.
+      // DISC-* is not, and must not be asserted as one. Suite 14's rules are declared PER FAMILY against
+      // what each could actually observe — DISC-005 emits an informative "no JSON-LD found" row on a site
+      // that has none while staying OUT of the declaration, because nothing was evaluated. That asymmetry
+      // is the ADR-0011 contract working, so the invariant is asserted in the direction that matters: a
+      // declaration must never outrun the rows. The converse (a row with no declaration) is the safe
+      // side — an undeclared rule banks nothing.
+      eq(declared.filter(id => nonSeo.has(id) && !/^DISC-/.test(id)).sort(), copyIds.concat(contentIds).sort(),
+        'seo: the non-seo, non-Discovery rules declared evaluated are exactly the COPY-* and content rules that ran');
+      const discEmitted = new Set((S.suites || []).flatMap(s => (s.checks || []).map(c => c.ruleId)).filter(id => /^DISC-/.test(id)));
+      const discDeclared = declared.filter(id => /^DISC-/.test(id));
+      ok(discEmitted.size > 0, 'seo: the Discovery suite actually emitted rows on the content tab');
+      eq(discDeclared.filter(id => !discEmitted.has(id)), [],
+        'seo: every DECLARED Discovery rule produced a real row — no rule is declared without a row (ADR-0011)');
       // REPORT rows, not registry entries — `all` above is the registry, whose entries carry .id while
       // report rows carry .ruleId. The point of these two assertions is that a DECLARED rule produced a
       // real row, so they must read what the report actually contains.

@@ -162,6 +162,10 @@ const SUITES = [
   'analytics-stack.test.js',
   // What is the deployed site BUILT on — a faithful copy is not proof of a production site.
   'tech-stack.test.js',
+  // Can Google and Bing actually index this, per URL? Every signal was already checked in isolation;
+  // the defect class lives in the INTERSECTION (a sitemap URL robots.txt forbids, carrying a noindex
+  // the crawler may never read). Also pins the boundary: indexABLE ships, indexED is declared unmeasured.
+  'indexability/indexability.test.js',
 ];
 
 const env = Object.assign({}, process.env, {

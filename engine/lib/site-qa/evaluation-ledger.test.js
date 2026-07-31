@@ -107,6 +107,12 @@ const DEAD = 'https://sgen-qa-evaluation-ledger-probe.example.invalid';
   });
   delete require.cache[require.resolve('../migration-qa/crawl')];
   delete require.cache[require.resolve('../migration-qa/checks-static')];
+  // Every module that DESTRUCTURES http's exports at load time captures the real functions and must be
+  // re-required after the stub replaces them — the same reason crawl and checks-static are cleared
+  // above. indexability/ joined that set at registry 1.15.0; without these lines it made a live DNS
+  // lookup inside a fully-mocked run and reported the crawl gate unverifiable on a page the fixture
+  // had served.
+  for (const m of ['./indexability', './indexability/sitemap', './indexability/discovery']) delete require.cache[require.resolve(m)];
   delete require.cache[auditPath];
   const poisoned2 = require('./audit');
   const pr = await poisoned2.runAudit('https://probe.test/', { maxPages: 1, render: false, log() {}, progress() {} });
@@ -129,6 +135,12 @@ const DEAD = 'https://sgen-qa-evaluation-ledger-probe.example.invalid';
   delete require.cache[auditPath];
   delete require.cache[require.resolve('../migration-qa/crawl')];
   delete require.cache[require.resolve('../migration-qa/checks-static')];
+  // Every module that DESTRUCTURES http's exports at load time captures the real functions and must be
+  // re-required after the stub replaces them — the same reason crawl and checks-static are cleared
+  // above. indexability/ joined that set at registry 1.15.0; without these lines it made a live DNS
+  // lookup inside a fully-mocked run and reported the crawl gate unverifiable on a page the fixture
+  // had served.
+  for (const m of ['./indexability', './indexability/sitemap', './indexability/discovery']) delete require.cache[require.resolve(m)];
   const healthy = require('./audit');
   const hr = await healthy.runAudit('https://probe.test/', { maxPages: 1, render: false, log() {}, progress() {} });
   const hGreens = [];
@@ -174,7 +186,13 @@ const DEAD = 'https://sgen-qa-evaluation-ledger-probe.example.invalid';
   const unmapped = Object.keys(PASS_LABEL).filter(k => !CHECK_RULES[k] && !NOT_APPLICABLE.has(k));
   ok(unmapped.length === 0, `T5 every PASS_LABEL key maps to registry rules in CHECK_RULES (${unmapped.join(', ')})`);
   const notInSuite = Object.keys(CHECK_RULES).filter(k => STATIC_SUITE[k] === undefined
-    && !['link-audit', 'cross-browser', 'axe', 'console-errors', 'failed-requests', 'blocking-overlay', 'cwv-lcp', 'cwv-cls', 'page-weight', 'low-contrast', 'horizontal-overflow', 'overflow-element', 'element-wider-than-viewport', 'tap-target-small', 'input-font-small'].includes(k));
+    // STATIC_SUITE maps the families emitted by the per-page STATIC loop. Everything below is emitted
+    // by a different pass and so is legitimately absent from it: the link audit, the render pass, and —
+    // added at registry 1.15.0 — the indexability pass, whose families are site-level (robots.txt, the
+    // sitemap set, the well-known probes) or read HTML the crawl already fetched (schema).
+    && !['link-audit', 'cross-browser', 'axe', 'console-errors', 'failed-requests', 'blocking-overlay', 'cwv-lcp', 'cwv-cls', 'page-weight', 'low-contrast', 'horizontal-overflow', 'overflow-element', 'element-wider-than-viewport', 'tap-target-small', 'input-font-small',
+      'sitemap-integrity', 'sitemap-indexability', 'index-gate', 'schema-required',
+      'discovery-llms', 'discovery-ai-policy', 'discovery-wellknown', 'discovery-feeds', 'discovery-schema', 'discovery-index-status'].includes(k));
   ok(notInSuite.length === 0, `T5 every static CHECK_RULES key is a real STATIC_SUITE family (${notInSuite.join(', ')})`);
 
   // ── T6 · THE LEDGER RULE ITSELF: a pass costs evidence ───────────────────────────────────────

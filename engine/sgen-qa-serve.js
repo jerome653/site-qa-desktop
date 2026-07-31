@@ -820,10 +820,16 @@ function appPage() {
       </div>
     </div>
     <nav class="tabbar" role="tablist" aria-label="Tools">
-      <button data-t="audit" class="on" onclick="tab('audit')"><b>1 · Site Audit</b><span class="nd">technical quality — content &amp; SEO is tool 4</span></button>
-      <button data-t="visual" onclick="tab('visual')"><b>2 · Visual Comparison</b><span class="nd">old vs new, side by side</span></button>
-      <button data-t="cert" onclick="tab('cert')"><b>3 · Post-Deployment Check</b><span class="nd">did everything make it across?</span></button>
-      <button data-t="seo" onclick="tab('seo')"><b>4 · Content &amp; SEO</b><span class="nd">copy · titles · meta · canonical · schema</span></button>
+      <!-- ORDER = the two SINGLE-SITE tools first, then the two COMPARISON tools, then history.
+           Site Audit and Content & SEO both answer "how good is this one site" and are the pair a user
+           switches between constantly; Visual Comparison and Post-Deployment Check both need a SECOND
+           URL. Content & SEO sat at position 4, separated from its sibling by both comparison tools.
+           The numbers are part of the label, so moving a tab means renumbering it here — there is no
+           second place that restates the order. -->
+      <button data-t="audit" class="on" onclick="tab('audit')"><b>1 · Site Audit</b><span class="nd">technical quality — content &amp; SEO is tool 2</span></button>
+      <button data-t="seo" onclick="tab('seo')"><b>2 · Content &amp; SEO</b><span class="nd">copy · titles · meta · canonical · schema · indexability</span></button>
+      <button data-t="visual" onclick="tab('visual')"><b>3 · Visual Comparison</b><span class="nd">old vs new, side by side</span></button>
+      <button data-t="cert" onclick="tab('cert')"><b>4 · Post-Deployment Check</b><span class="nd">did everything make it across?</span></button>
       <button data-t="reports" onclick="tab('reports');loadReports()"><b>5 · Reports</b><span class="nd">past runs · HTML · PDF</span></button>
     </nav>
   </header>
@@ -831,7 +837,7 @@ function appPage() {
 
     <!-- 1 SITE AUDIT -->
     <section class="panel on" id="p-audit">
-      <div class="tthead"><h2 class="tt">Site Audit</h2><button class="gear" id="gear-audit" onclick="openSettings('audit')" title="Site Audit settings" aria-label="Site Audit settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div><p class="sub">Technical single-site tester — links, forms, responsive, accessibility (axe-core), performance, security (TLS), cross-browser (Firefox + WebKit), console. Nine suites; the Quality Score covers those nine. SEO moved out to its own tool (tab 4), so a score here is NOT comparable to one from before 4.8.0. Independent: needs no inventory, comparison, or certification.</p>
+      <div class="tthead"><h2 class="tt">Site Audit</h2><button class="gear" id="gear-audit" onclick="openSettings('audit')" title="Site Audit settings" aria-label="Site Audit settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div><p class="sub">Technical single-site tester — links, forms, responsive, accessibility (axe-core), performance, security (TLS), cross-browser (Firefox + WebKit), console. Nine suites; the Quality Score covers those nine. SEO moved out to its own tool (tab 2), so a score here is NOT comparable to one from before 4.8.0. Independent: needs no inventory, comparison, or certification.</p>
       <div class="card">
         <div class="cfg-split cfg-au">
           <label class="fld" style="min-width:0">Site URL<input id="a-url" type="text" placeholder="e.g. sgen.com" spellcheck="false"></label>
@@ -1199,7 +1205,11 @@ function appPage() {
     // 4 SEO — standalone. The UI asks for a SCOPE; the page count is an advanced ceiling only.
     // Check toggles are mapped to registry rule ids and sent as excludeRules, which is the mechanism
     // the app already has — a check left unticked is dropped from the SCORE, not hidden from the report.
-    var SEO_CHECK_RULES={"page-status":["FUNC-001","FUNC-002","FUNC-003"],"placeholder-content":["FUNC-004"],"global-components":["FUNC-005"],"broken-rich-content":["FUNC-006","FUNC-007"],"viewport-meta":["RESP-001"],"title":["SEO-001","SEO-002"],"meta-description":["SEO-003","SEO-004"],"canonical":["SEO-005","SEO-006"],"indexability":["SEO-007","SEO-008"],"social-meta":["SEO-011","SEO-012"],"favicon":["SEO-014"],"schema":["SEO-016","SEO-017","SEO-018","SEO-019"],"duplicate-title":["SEO-009"],"duplicate-description":["SEO-010"],"analytics":["SEO-025","SEO-026"],"mobile-web":["SEO-027"],"privacy-links":["SEO-028"],"headings":["A11Y-003","A11Y-004","A11Y-005"],"html-lang":["A11Y-009"],"images":["A11Y-006","A11Y-007","A11Y-008"],"image-perf":["PERF-003","PERF-004"],"compression":["PERF-007"],"render-blocking":["PERF-005"],"mixed-content":["SEC-009"],"anchor-target":["LINK-005"],"robots-txt":["SEO-020","SEO-021","SEO-029"],"sitemap":["SEO-022"],"404-config":["LINK-004"],"https-enforce":["SEC-007","SEC-008"],"interactive-link":["LINK-006","LINK-007","LINK-008","LINK-009"],"interactive-control":["DOM-010","DOM-011"],"interactive-nesting":["DOM-012","DOM-013"],"sec-header":["SEC-011","SEC-012","SEC-013","SEC-014","SEC-015"],"sec-cookie":["SEC-016","SEC-017","SEC-018"],"sec-js":["SEC-023"],"sec-transport":["SEC-024","SEC-025"],"sec-exposure":["SEC-022"],"seo-hreflang":["SEO-031"],"seo-index":["SEO-035","SEO-036"],"seo-content":["SEO-037","SEO-038"],"stb-dup-id":["DOM-003"],"stb-dom":["DOM-004"],"stb-form":["FORM-002"],"stb-uri":["LINK-010"],"console-errors":["CON-001"],"failed-requests":["CON-002"],"blocking-overlay":["CON-003"],"cwv-lcp":["PERF-001"],"cwv-cls":["PERF-002"],"page-weight":["PERF-006"],"low-contrast":["A11Y-002"],"axe":["A11Y-001"],"horizontal-overflow":["RESP-002"],"overflow-element":["RESP-003"],"element-wider-than-viewport":["RESP-004"],"tap-target-small":["RESP-005"],"input-font-small":["RESP-006"],"link-audit":["LINK-001","LINK-002","LINK-003"],"cross-browser":["XBR-001","XBR-002","XBR-003"]};
+    var SEO_CHECK_RULES={"page-status":["FUNC-001","FUNC-002","FUNC-003"],"placeholder-content":["FUNC-004"],"global-components":["FUNC-005"],"broken-rich-content":["FUNC-006","FUNC-007"],"viewport-meta":["RESP-001"],"title":["SEO-001","SEO-002"],"meta-description":["SEO-003","SEO-004"],"canonical":["SEO-005","SEO-006"],"indexability":["SEO-007","SEO-008"],"social-meta":["SEO-011","SEO-012"],"favicon":["SEO-014"],"schema":["SEO-016","SEO-017","SEO-018","SEO-019"],"duplicate-title":["SEO-009"],"duplicate-description":["SEO-010"],"analytics":["SEO-025","SEO-026"],"mobile-web":["SEO-027"],"privacy-links":["SEO-028"],"headings":["A11Y-003","A11Y-004","A11Y-005"],"html-lang":["A11Y-009"],"images":["A11Y-006","A11Y-007","A11Y-008"],"image-perf":["PERF-003","PERF-004"],"compression":["PERF-007"],"render-blocking":["PERF-005"],"mixed-content":["SEC-009"],"anchor-target":["LINK-005"],"robots-txt":["SEO-020","SEO-021","SEO-029"],"sitemap":["SEO-022"],
+    // indexability/ (registry 1.15.0). Same contract as every entry here: unticking a check drops its
+    // rules from the SCORE, never from the report.
+    "sitemap-integrity":["SEO-043","SEO-044","SEO-045","SEO-046"],"sitemap-indexability":["SEO-039","SEO-040","SEO-041","SEO-042"],
+    "index-gate":["SEO-047","SEO-048"],"schema-required":["SEO-049"],"404-config":["LINK-004"],"https-enforce":["SEC-007","SEC-008"],"interactive-link":["LINK-006","LINK-007","LINK-008","LINK-009"],"interactive-control":["DOM-010","DOM-011"],"interactive-nesting":["DOM-012","DOM-013"],"sec-header":["SEC-011","SEC-012","SEC-013","SEC-014","SEC-015"],"sec-cookie":["SEC-016","SEC-017","SEC-018"],"sec-js":["SEC-023"],"sec-transport":["SEC-024","SEC-025"],"sec-exposure":["SEC-022"],"seo-hreflang":["SEO-031"],"seo-index":["SEO-035","SEO-036"],"seo-content":["SEO-037","SEO-038"],"stb-dup-id":["DOM-003"],"stb-dom":["DOM-004"],"stb-form":["FORM-002"],"stb-uri":["LINK-010"],"console-errors":["CON-001"],"failed-requests":["CON-002"],"blocking-overlay":["CON-003"],"cwv-lcp":["PERF-001"],"cwv-cls":["PERF-002"],"page-weight":["PERF-006"],"low-contrast":["A11Y-002"],"axe":["A11Y-001"],"horizontal-overflow":["RESP-002"],"overflow-element":["RESP-003"],"element-wider-than-viewport":["RESP-004"],"tap-target-small":["RESP-005"],"input-font-small":["RESP-006"],"link-audit":["LINK-001","LINK-002","LINK-003"],"cross-browser":["XBR-001","XBR-002","XBR-003"]};
     function seoScope(){var r=document.querySelector('#s-scope input[name=s-scope]:checked');return r?r.value:'page';}
     // duplicate-* compare ACROSS pages. On THIS PAGE they cannot mean anything, so they are disabled
     // with the reason visible rather than left tickable and silently reported as passing. The server
@@ -1258,11 +1268,18 @@ function appPage() {
     // page. The COPY-* rows come from the Copy Review advisory pass the SEO tool now runs (weight 0,
     // status manual — see the applyAdvisory call on the server): flags a human reads, never a verdict.
     var COPY_LEAD_RULES={'copy-artifacts':['COPY-001'],'copy-placeholders':['COPY-002'],'copy-phrasing':['COPY-003'],'copy-rhythm':['COPY-004']};
+    // Suite 14 rows are keyed by their own check ids, exactly like the COPY rows above — one card, three
+    // source suites (seo, discovery, copy), still no second source of truth.
+    var DISC_LEAD_RULES={'discovery-llms':['DISC-001'],'discovery-ai-policy':['DISC-002'],'discovery-wellknown':['DISC-003'],'discovery-feeds':['DISC-004'],'discovery-schema':['DISC-005'],'discovery-index-status':['DISC-006']};
     var SEO_LEAD=[
-      ['Indexing & canonical',['indexability','canonical','seo-index','robots-txt','sitemap','seo-hreflang']],
+      // Indexability leads, because "can this be found at all" outranks every other SEO question — and
+      // it is the one the tab could not previously answer as a whole.
+      ['Indexing & canonical',['index-gate','indexability','canonical','seo-index','robots-txt','sitemap','seo-hreflang']],
+      ['Sitemap integrity',['sitemap-integrity','sitemap-indexability']],
       ['Titles & descriptions',['title','meta-description','duplicate-title','duplicate-description']],
-      ['Structured data & social',['schema','social-meta','favicon']],
-      ['Content & readability',['seo-content','copy-artifacts','copy-placeholders','copy-phrasing','copy-rhythm']]];
+      ['Structured data & social',['schema','schema-required','social-meta','favicon']],
+      ['Content & readability',['seo-content','copy-artifacts','copy-placeholders','copy-phrasing','copy-rhythm']],
+      ['Discovery & AI (advisory)',['discovery-llms','discovery-ai-policy','discovery-wellknown','discovery-feeds','discovery-schema','discovery-index-status']]];
     function seoLead(m){var host=$('s-lead');if(!host)return;
       fetch('/report/'+m.id+'/report.json').then(function(r){return r.json()}).then(function(d){
         var suite=(d.suites||[]).filter(function(x){return x.key==='seo'})[0];if(!suite)return;
@@ -1270,8 +1287,10 @@ function appPage() {
         // advisory suite, so both suites are read — one card, two sources, no third source of truth.
         var R2C={};Object.keys(SEO_CHECK_RULES).forEach(function(ck){(SEO_CHECK_RULES[ck]||[]).forEach(function(rid){R2C[rid]=ck;});});
         Object.keys(COPY_LEAD_RULES).forEach(function(ck){COPY_LEAD_RULES[ck].forEach(function(rid){R2C[rid]=ck;});});
+        Object.keys(DISC_LEAD_RULES).forEach(function(ck){DISC_LEAD_RULES[ck].forEach(function(rid){R2C[rid]=ck;});});
         var copy=(d.suites||[]).filter(function(x){return x.key==='copy'})[0]||{checks:[]};
-        var rows0=(suite.checks||[]).concat(copy.checks||[]);
+        var disc=(d.suites||[]).filter(function(x){return x.key==='discovery'})[0]||{checks:[]};
+        var rows0=(suite.checks||[]).concat(copy.checks||[],disc.checks||[]);
         // c.check FIRST (backticks are forbidden in here — this comment lives inside a template literal).
         // A row that failed carries a ruleId; a row that PASSED carries ruleId null (a
         // clean check emits one generic summary row, by design), so ruleId alone could only ever match
@@ -1369,15 +1388,22 @@ function appPage() {
     var WK_KEY='sgenqa_onboarded_v2';
     var TOUR=[
       {tab:'audit',target:null,lbl:'Welcome',title:'SGEN Site QA',body:"Five offline tools to check any website's quality — audit, compare, verify a migration, check content & SEO, and review reports. Nothing leaves this machine. Let me show you around."},
-      {tab:'audit',target:'.tabbar',lbl:'Navigation',title:'Five tools, one app',body:'Switch tools here — the header and these tabs stay locked in place as you scroll. On a narrow screen the bar scrolls sideways and keeps the selected tab in view. Site Audit checks one site (technical suites) · Visual Comparison diffs old vs new · Post-Deployment Check verifies a migration · Content & SEO scores copy and SEO on their own · Reports holds past runs.'},
+      // TOUR ORDER FOLLOWS TAB ORDER. It walks the user across the bar left to right, so a step out of
+      // sequence sends them backwards through tabs they have already been shown. Both orders changed
+      // together when Content and SEO moved to position 2 — the numbers in the lbl field are the same
+      // numbers printed on the buttons, and a tour that says "Tool 4" over a button reading "2" is
+      // worse than no tour at all.
+      // NO BACKTICKS IN HERE — this comment sits inside a template literal and one would close it.
+      {tab:'audit',target:'.tabbar',lbl:'Navigation',title:'Five tools, one app',body:'Switch tools here — the header and these tabs stay locked in place as you scroll. On a narrow screen the bar scrolls sideways and keeps the selected tab in view. The first two check ONE site: Site Audit for technical quality · Content & SEO for copy, SEO and indexability. The next two need a SECOND URL: Visual Comparison diffs old vs new · Post-Deployment Check verifies a migration. Reports holds past runs.'},
       {tab:'audit',target:'#a-url',lbl:'Tool 1 · Site Audit',title:'Enter any site URL',body:'Point it at a live site and run it — that is the whole dashboard. How it scans (max pages, browser render, viewports, which checks score) lives behind Settings, and the URLs you type are saved automatically, so you never re-enter them next launch.'},
       {tab:'audit',target:'#a-btn',lbl:'Tool 1 · Site Audit',title:'Read the result at a glance',body:'The report opens with one clear OVERALL pass/fail up top; the other numbers are 0–100 quality reads, not separate verdicts. The summary cards are clickable — jump straight to the failing checks — and a colour key explains that red means passing.'},
-      {tab:'visual',target:'#v-ref',lbl:'Tool 2 · Visual Comparison',title:'Old vs new, side by side',body:'Give a reference URL and a target URL. Every paired page is compared at each viewport on two axes: pixel match and structural diff (missing / extra / moved / restyled elements).'},
+      {tab:'seo',target:'[data-t=seo]',lbl:'Tool 2 · Content & SEO',title:'Content and SEO on their own',body:'Titles, meta descriptions, canonicals, sitemap, schema and indexability — plus the content surface: thin copy, readability, and the Copy Review flags (assistant boilerplate, unfilled placeholders, AI-tell phrasing). Scored on their own, so this score is not diluted by unrelated technical checks and a technical score is not propped up by good SEO.'},
+      {tab:'seo',target:'#gear-seo',lbl:'Tool 2 · Settings',title:'Indexability, sitemap and discovery',body:'This tab answers "can Google and Bing actually index this?" per URL — robots.txt as each engine reads it, meta robots, X-Robots-Tag, canonical, and whether the sitemap agrees with all of it. Its own gear picks which of those checks SCORE; an unticked check still runs and still appears in the report. It reports what is INDEXABLE. Whether a URL is already INDEXED needs a credentialed Search Console / Bing Webmaster connection, so the report states that as not measured rather than guessing.'},
+      {tab:'visual',target:'#v-ref',lbl:'Tool 3 · Visual Comparison',title:'Old vs new, side by side',body:'Give a reference URL and a target URL. Every paired page is compared at each viewport on two axes: pixel match and structural diff (missing / extra / moved / restyled elements).'},
       // Targets the gear, not #v-vps: the viewport chips are settings-owned (display:none) and a hidden
       // node measures 0x0, so spotlighting it would frame nothing in the corner of the screen.
-      {tab:'visual',target:'#gear-visual',lbl:'Tool 2 · Settings',title:'Real devices, really emulated',body:'Open Settings to choose what a comparison does: like-for-like or redesign, how many pages, and the viewports. Ten current devices — Desktop, MacBook Air, iPad Air/mini, iPhone, Galaxy S — each checked against the vendor spec and emulated with real touch and pixel density, not just a narrow window. Below the line sit three framework boundary probes: width only, honestly labelled, because a layout breaks exactly on a breakpoint. Every tool has its own gear.'},
-      {tab:'cert',target:'#c-src',lbl:'Tool 3 · Post-Deployment Check',title:'Did everything make it across?',body:'After a migration, this inventories every page, section, image, menu and form on the source and verifies each exists intact on the new build — with a PASS / MINOR / FAIL verdict.'},
-      {tab:'seo',target:'[data-t=seo]',lbl:'Tool 4 · Content & SEO',title:'Content and SEO on their own',body:'Titles, meta descriptions, canonicals, sitemap, schema and indexability — plus the content surface: thin copy, readability, and the Copy Review flags (assistant boilerplate, unfilled placeholders, AI-tell phrasing). Scored on their own, so this score is not diluted by unrelated technical checks and a technical score is not propped up by good SEO.'},
+      {tab:'visual',target:'#gear-visual',lbl:'Tool 3 · Settings',title:'Real devices, really emulated',body:'Open Settings to choose what a comparison does: like-for-like or redesign, how many pages, and the viewports. Ten current devices — Desktop, MacBook Air, iPad Air/mini, iPhone, Galaxy S — each checked against the vendor spec and emulated with real touch and pixel density, not just a narrow window. Below the line sit three framework boundary probes: width only, honestly labelled, because a layout breaks exactly on a breakpoint. Every tool has its own gear.'},
+      {tab:'cert',target:'#c-src',lbl:'Tool 4 · Post-Deployment Check',title:'Did everything make it across?',body:'After a migration, this inventories every page, section, image, menu and form on the source and verifies each exists intact on the new build — with a PASS / MINOR / FAIL verdict.'},
       {tab:'reports',target:'[data-t=reports]',lbl:'Tool 5 · Reports',title:'Every run, grouped by site',body:'Past runs are grouped by site, newest first, with a search box and a date filter. Preview any run, open its HTML, or save it as a PDF to hand off. Runs stay on this machine.'},
       {tab:'audit',target:'#upd-btn',lbl:'Updates',title:'Automatic check, manual apply',body:'The app checks for updates on its own — this button turns red and a toast appears when one is ready. Click it to download, then Restart: a one-second in-app update, no installer.'},
       {tab:'audit',target:'#logs-btn',lbl:'Logs & support',title:'Version log + diagnostics',body:'Open Logs to see what changed in each version and your update history. “Generate diagnostics” builds a detailed report you can download and send over if anything looks off.'},
@@ -1531,7 +1557,7 @@ function appPage() {
     };
     // t: bool|num|sel|vps|scope · bind: the id of the live control this field is a view of.
     var FIELDS={
-        // Tab 4. DEFAULTS only — the visible scope control stays the PER-RUN choice and is seeded
+        // Tab 2. DEFAULTS only — the visible scope control stays the PER-RUN choice and is seeded
         // from this on load, the same default-vs-per-run split the rest of the app already uses.
         seo:[
           {k:'scope',t:'sel',bind:'s-scope-def',opts:[['page','This page'],['site','Whole site']],label:'Default scope',hint:'Which scope a new Content & SEO run starts on. This page audits exactly the URL and issues no crawl; Whole site discovers pages from the sitemap, falling back to same-host links. Still changeable per run.'},
@@ -1574,15 +1600,19 @@ function appPage() {
     };
     var SCOPE_CAT=${JSON.stringify(SCOPE_CATALOG).replace(/</g, '\\u003c')};
     var SCOPE_EXCLUDED=[];        // ruleIds excluded from SCORING (the checks still run + still report)
-    // ---- SEO check catalogue (tab 4) --------------------------------------------------------------
+    // ---- SEO check catalogue (tab 2) --------------------------------------------------------------
     // ONE source for the SEO check list. It used to be authored twice: as chips in the panel markup and
     // as the ids seoExcluded() read back out of that markup. Now the modal renders from this and
     // seoExcluded() maps from it, so a check cannot exist in one place and not the other.
     // mp:1 = compares ACROSS pages, so it cannot mean anything on a This-page run.
     var SEO_CAT=[
-      ['Indexing & canonical',[['indexability','Indexability (robots meta, x-robots)'],['canonical','Canonical tag'],['seo-index','Index directives'],['robots-txt','robots.txt'],['sitemap','XML sitemap'],['seo-hreflang','hreflang']]],
+      // mp:1 = compares ACROSS pages. The sitemap families are marked mp because a "This page" run
+      // never fetches the sitemap set at all (the single-page contract — see indexability/index.js),
+      // so leaving them tickable there would offer to score a check that could not run.
+      ['Indexing & canonical',[['indexability','Indexability (robots meta, x-robots)'],['canonical','Canonical tag'],['seo-index','Index directives'],['robots-txt','robots.txt'],['sitemap','XML sitemap'],['index-gate','Google &amp; Bing can crawl the site'],['seo-hreflang','hreflang']]],
+      ['Sitemap integrity',[['sitemap-integrity','Sitemap files valid (limits, lastmod, host)',1],['sitemap-indexability','Every sitemap URL is indexable',1]]],
       ['Titles & descriptions',[['title','Title tag'],['meta-description','Meta description'],['duplicate-title','Duplicate titles',1],['duplicate-description','Duplicate descriptions',1]]],
-      ['Structured data & social',[['schema','Schema.org / JSON-LD'],['social-meta','Open Graph / Twitter cards'],['favicon','Favicon']]],
+      ['Structured data & social',[['schema','Schema.org / JSON-LD'],['schema-required','Schema required properties'],['social-meta','Open Graph / Twitter cards'],['favicon','Favicon']]],
       ['Content & readability',[['seo-content','Content depth and readability'],['mobile-web','Mobile-friendliness'],['analytics','Analytics tag'],['privacy-links','Privacy / legal links']]]
     ];
     var SEO_OFF=[];               // check ids left OUT of the SEO score (they still run + still report)
@@ -2144,7 +2174,7 @@ function listRuns(limit) {
     let kind = 'audit', json = 'report.json';
     if (fs.existsSync(path.join(dir, 'visual-match.html'))) { kind = 'visual'; json = 'visual-match.json'; }
     else if (id.includes('-cert-')) { kind = 'cert'; json = 'report.json'; }
-    // Tool 4. An SEO run is a full report.json from the same renderer; only its SCOPE differs, so it
+    // Tool 2. An SEO run is a full report.json from the same renderer; only its SCOPE differs, so it
     // needs its own report type in the list rather than being filed as a Site Audit.
     else if (id.includes('-seo-')) { kind = 'seo'; json = 'report.json'; }
     let when = ''; try { when = new Date(fs.statSync(dir).mtimeMs).toISOString().replace('T', ' ').slice(0, 16); } catch (_) {}
@@ -2198,7 +2228,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/api/annotate-pdf') return await apiAnnotatePdf(req, res, u);
     if (req.method === 'GET' && p === '/api/annotate-pdf-file') return apiAnnotatePdfFile(res, u);
     if (req.method === 'POST' && p === '/api/run') return await apiRun(req, res);
-    // Tool 4 — SEO, standalone. Same handler, complementary scope (see apiRun's mode param).
+    // Tool 2 — SEO, standalone. Same handler, complementary scope (see apiRun's mode param).
     if (req.method === 'POST' && p === '/api/seo') return await apiRun(req, res, 'seo');
     if (req.method === 'POST' && p === '/api/visual') return await apiVisual(req, res);
     if (req.method === 'POST' && p === '/api/visual-rerate') return await apiVisualRerate(req, res);
@@ -2209,7 +2239,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 // 1 — Site Audit (unchanged engine path)
-// mode: 'audit' (tool 1, the nine technical suites) | 'seo' (tool 4, the seo suite alone).
+// mode: 'audit' (tool 1, the nine technical suites) | 'seo' (tool 2, the seo suite alone).
 //
 // ONE handler, two scopes, because the split runs along a seam audit.js already has. `skipSuites` does
 // not merely hide a suite: normalizeSkip/isSkipped mean it is NEVER EXECUTED, is absent from `suites`,
@@ -2290,9 +2320,16 @@ async function apiRun(req, res, mode = 'audit') {
     // 10 is not all-off. SCOPE_CATALOG is built from audit.js's own SUITES, so this cannot drift from
     // what runAudit() actually assembles.
     const ALL_SUITE_KEYS = SCOPE_CATALOG.suites.map((s) => s.key);
+    // EACH TAB OWNS WHAT ITS NAME SAYS. Suite 14 (Discovery & AI — llms.txt, the robots.txt AI-crawler
+    // policy, well-known descriptors, feeds, schema coverage) is an INDEXING surface, so it belongs to
+    // Content & SEO and only there. Site Audit skips it for the same reason it skips 'seo': the
+    // technical tab carrying a "should you publish llms.txt" row is the same double-surfacing that
+    // moving Copy Review out of Site Audit was fixing. Advisory (WEIGHTS.discovery = 0), so skipping it
+    // in Site Audit cannot move that tool's score — the same two-mechanism guarantee as 'copy'.
+    const SEO_TAB_SUITES = ['seo', 'discovery'];
     const skipSuites = mode === 'seo'
-      ? ALL_SUITE_KEYS.filter((k) => k !== 'seo')
-      : [...new Set(operatorSkips.concat('seo'))];
+      ? ALL_SUITE_KEYS.filter((k) => !SEO_TAB_SUITES.includes(k))
+      : [...new Set(operatorSkips.concat(SEO_TAB_SUITES))];
     const raw = await runAudit(url, { maxPages, render: opts.render !== false, renderSample: Math.min(maxPages, 25), viewports, screensDir: path.join(outDir, 'screenshots'), log: () => {}, progress, collectPages: true, skipSuites, collectionRoot: COLLECTION_ROOT,
       singlePage: mode === 'seo' && seoScope === 'page',
       notApplicableChecks: mode === 'seo' && seoScope === 'page' ? SINGLE_PAGE_NA : [] });
@@ -2579,6 +2616,6 @@ const ensureEngines = () => {
 ensureEngines();
 
 server.listen(PORT, '127.0.0.1', () => {
-  process.stderr.write(`\nSGEN Site QA → http://127.0.0.1:${PORT}\n(5 tools: Site Audit · Visual Comparison · Post-Deployment Check · Content & SEO · Reports. Ctrl+C to stop.)\n`);
+  process.stderr.write(`\nSGEN Site QA → http://127.0.0.1:${PORT}\n(5 tools: Site Audit · Content & SEO · Visual Comparison · Post-Deployment Check · Reports. Ctrl+C to stop.)\n`);
   if (arg('open', false)) { try { spawn(process.platform === 'win32' ? 'cmd' : 'sh', process.platform === 'win32' ? ['/c', 'start', '', `http://127.0.0.1:${PORT}`] : ['-c', `xdg-open http://127.0.0.1:${PORT}`], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {} }
 });
