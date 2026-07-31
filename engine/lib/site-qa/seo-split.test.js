@@ -95,7 +95,23 @@ console.log('SEO split — Site Audit is technical, SEO is its own tool — REAL
       }); s.listen(0, '127.0.0.1', () => r(s));
     });
     const target = 'http://127.0.0.1:' + site.address().port + '/';
-    const port = 7800 + (process.pid % 90);
+    // ── ASK THE OS FOR A FREE PORT; DO NOT DERIVE ONE FROM THE PID ─────────────────────────────────
+    // This was `7800 + (process.pid % 90)`. Ninety slots, chosen by a number that is not a port and
+    // knows nothing about what is listening — so the moment anything else holds that port, bootServe
+    // connects to a STRANGER and every assertion comes back null. Measured: seven leaked node servers
+    // squatting 7879-7886 from earlier runs turned this suite into 1/21 inside run-all while it passed
+    // 58/58 standalone, purely on which PID node happened to get. A red suite that depends on the PID
+    // is worse than a broken one: it trains everyone to re-run until it goes green.
+    //
+    // The fixture server two lines above already does the right thing — listen(0) and read back the
+    // assigned port. Same trick here: bind ephemeral, note the port, release it, hand it to the child.
+    // A tiny race remains between close and spawn, which is unavoidable when the child must be told a
+    // port on its command line, and is vastly narrower than a 90-slot guess.
+    const port = await new Promise((r, j) => {
+      const probe = require('net').createServer();
+      probe.once('error', j);
+      probe.listen(0, '127.0.0.1', () => { const p = probe.address().port; probe.close(() => r(p)); });
+    });
     serve = await bootServe(port);
 
     // ── 1 · SITE AUDIT — nine suites, SEO genuinely absent ────────────────────────────────────────
