@@ -66,6 +66,8 @@
   .tool .t{font-weight:700;font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:9px}
   .tool .t .no{width:22px;height:22px;border-radius:6px;background:var(--brand-solid);color:#fff;font-size:12px;font-family:var(--mono);display:grid;place-items:center;flex:none}
   .tool p{font-size:14px;color:var(--ink-soft);margin:0}
+  /* five cards in a two-column grid leaves the last one orphaned at half width */
+  .tool.wide{grid-column:1/-1}
   /* colour key */
   .key{display:flex;flex-wrap:wrap;gap:11px 20px;background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;padding:15px 18px;margin:14px 0}
   .key .k{display:inline-flex;align-items:center;gap:9px;font-size:14.5px;color:var(--ink-soft)}
@@ -98,13 +100,14 @@
     <ol>
       <li><a href="#install"><span class="n">1</span> Installing the app</a></li>
       <li><a href="#screen"><span class="n">2</span> The main screen</a></li>
-      <li><a href="#tools"><span class="n">3</span> The four tools</a></li>
+      <li><a href="#tools"><span class="n">3</span> The five tools</a></li>
       <li><a href="#run"><span class="n">4</span> Running your first check</a></li>
-      <li><a href="#report"><span class="n">5</span> Reading your results</a></li>
-      <li><a href="#reports"><span class="n">6</span> Finding past reports</a></li>
-      <li><a href="#updates"><span class="n">7</span> Keeping it up to date</a></li>
-      <li><a href="#help"><span class="n">8</span> If something looks off</a></li>
-      <li><a href="#faq"><span class="n">9</span> Quick answers</a></li>
+      <li><a href="#seo"><span class="n">5</span> Content &amp; SEO — can Google find it?</a></li>
+      <li><a href="#report"><span class="n">6</span> Reading your results</a></li>
+      <li><a href="#reports"><span class="n">7</span> Finding past reports</a></li>
+      <li><a href="#updates"><span class="n">8</span> Keeping it up to date</a></li>
+      <li><a href="#help"><span class="n">9</span> If something looks off</a></li>
+      <li><a href="#faq"><span class="n">10</span> Quick answers</a></li>
     </ol>
   </nav>
 
@@ -124,28 +127,31 @@
     <p class="lead">Everything lives in one window. Here's what you're looking at.</p>
     <ul>
       <li><strong>The top bar</strong> stays put as you scroll. On the right you'll find <strong>Logs</strong> (version history + support), <strong>Manual</strong> (this guide), and <strong>? Help</strong> (the walkthrough, any time).</li>
-      <li><strong>The four tabs</strong> below it are the four tools. Click a tab to switch.</li>
+      <li><strong>The five tabs</strong> below it are the five tools. Click a tab to switch.</li>
       <li><strong>The big area</strong> is where you type a website address and see the results.</li>
+      <li><strong>Each tool has its own Settings</strong> — the gear sits in that tool's own header, and what you change there applies to that tool only. Site Audit's page limit and Content &amp; SEO's page limit are separate settings.</li>
     </ul>
     <div class="tip"><strong>First time?</strong> A short guided tour pops up automatically and points at each part of the screen. You can reopen it any time from <strong>? Help</strong>.</div>
   </section>
 
   <section id="tools">
-    <h2 class="s"><span class="n">3</span> The four tools</h2>
-    <p class="lead">Pick the one that matches what you want to know.</p>
+    <h2 class="s"><span class="n">3</span> The five tools</h2>
+    <p class="lead">Pick the one that matches what you want to know. The first two look at <strong>one</strong> website; the next two compare <strong>two</strong>.</p>
     <div class="tools">
       <div class="tool"><div class="t"><span class="no">1</span> Site Audit</div><p>Checks one website for problems — broken links, forms, mobile layout, accessibility, speed, security, and more. Start here.</p></div>
-      <div class="tool"><div class="t"><span class="no">2</span> Visual Comparison</div><p>Puts two websites (an old one and a new one) side by side and highlights what looks different, at every screen size.</p></div>
-      <div class="tool"><div class="t"><span class="no">3</span> Post-Deployment Check</div><p>After moving a site to a new build, confirms every page, image, menu and form actually made it across.</p></div>
-      <div class="tool"><div class="t"><span class="no">4</span> Reports</div><p>Every check you've run, kept and grouped by website. Reopen one, or save it as a PDF to share.</p></div>
+      <div class="tool"><div class="t"><span class="no">2</span> Content &amp; SEO</div><p>Checks the words and the search side: titles, descriptions, sitemap, and whether Google and Bing can actually reach each page. See section 5.</p></div>
+      <div class="tool"><div class="t"><span class="no">3</span> Visual Comparison</div><p>Puts two websites (an old one and a new one) side by side and highlights what looks different, at every screen size.</p></div>
+      <div class="tool"><div class="t"><span class="no">4</span> Post-Deployment Check</div><p>After moving a site to a new build, confirms every page, image, menu and form actually made it across.</p></div>
+      <div class="tool wide"><div class="t"><span class="no">5</span> Reports</div><p>Every check you've run, kept and grouped by website. Reopen one, or save it as a PDF to share.</p></div>
     </div>
+    <div class="tip"><strong>Why are they split?</strong> Site Audit scores the technical side and Content &amp; SEO scores the search side, separately. That way a great-looking site with poor SEO can't hide behind a good technical score, and vice versa.</div>
   </section>
 
   <section id="run">
     <h2 class="s"><span class="n">4</span> Running your first check</h2>
     <p class="lead">Let's do a Site Audit — the most common one.</p>
     <ol class="steps">
-      <li>Make sure you're on the <strong>Site Audit</strong> tab.</li>
+      <li>Make sure you're on the <strong>Site Audit</strong> tab (the first one).</li>
       <li>Type a website address in <strong>Site URL</strong> — for example <span class="mono">sgen.com</span>. You don't need to type "https://".</li>
       <li>Leave the settings as they are (they're already sensible), then click the red <strong>Run audit</strong> button.</li>
       <li>Wait a few seconds while it works. When it's done, the full report appears right below.</li>
@@ -154,8 +160,50 @@
     <p>The other tools work the same way: fill in the box(es) at the top, then click the red button. If a check is taking too long you can <strong>Cancel</strong> it, and <strong>Retry</strong> if it fails.</p>
   </section>
 
+  <section id="seo">
+    <h2 class="s"><span class="n">5</span> Content &amp; SEO — can Google find it?</h2>
+    <p class="lead">This tab answers the question everyone actually asks: <strong>will my pages show up in search?</strong> It checks every page it can reach, and it checks Google and Bing <em>separately</em>.</p>
+
+    <h3>Two scopes</h3>
+    <ul>
+      <li><strong>This page</strong> — checks only the exact address you typed. Nothing else is fetched.</li>
+      <li><strong>Whole site</strong> — follows your sitemap, falling back to links if there isn't one.</li>
+    </ul>
+
+    <h3>What each page gets told</h3>
+    <p>Every page lands in one of these. The report lists them in a table, worst first:</p>
+    <ul>
+      <li><strong>Indexable</strong> — good. Search engines can reach it and nothing is telling them to skip it.</li>
+      <li><strong>Blocked by robots.txt</strong> — your <span class="mono">robots.txt</span> file forbids it.</li>
+      <li><strong>noindex</strong> — the page itself asks search engines not to list it.</li>
+      <li><strong>Canonical points elsewhere</strong> — the page says "index this <em>other</em> address instead", so this one won't appear on its own.</li>
+      <li><strong>Redirects</strong> — the address forwards somewhere else.</li>
+      <li><strong>Error</strong> — the page is broken or missing.</li>
+      <li><strong>Not checked</strong> — the app didn't fetch it this run. It is <em>not</em> assumed to be fine.</li>
+    </ul>
+
+    <div class="note"><b>Google and Bing can differ.</b> A <span class="mono">robots.txt</span> file can name one search engine specifically and leave the other alone — so a site can be perfectly findable on Bing and invisible on Google. The app shows a separate verdict for each rather than one blended answer that's true of neither.</div>
+
+    <h3>The sitemap check</h3>
+    <p>A sitemap is your list of "please index these". The app now checks that the list agrees with the rest of your site, which is where most real problems hide:</p>
+    <ul>
+      <li>Pages listed in the sitemap that <strong>robots.txt blocks</strong> — the two files contradict each other.</li>
+      <li>Pages listed that carry <strong>noindex</strong> — a sitemap is a request to index; noindex is a refusal.</li>
+      <li>Pages listed whose <strong>canonical points somewhere else</strong> — very common, and it wastes every crawl of that address.</li>
+      <li>Pages listed that <strong>redirect</strong>, are <strong>dead</strong>, or sit on <strong>another domain</strong>.</li>
+      <li>Sitemap files that are <strong>too big</strong> (over 50,000 addresses or 50&nbsp;MB — search engines reject the whole file, not just the excess) or whose dates aren't in the format the standard requires.</li>
+    </ul>
+    <div class="tip"><strong>The one worth knowing about.</strong> If a page is blocked in <span class="mono">robots.txt</span> <em>and</em> carries <span class="mono">noindex</span>, the search engine is never allowed to fetch the page — so it never sees the noindex, and the address can stay in search results indefinitely. Both settings look correct on their own. Together they do the opposite of what you wanted. The app flags this specifically.</div>
+
+    <h3>Discovery &amp; AI</h3>
+    <p>The report also lists what your site publishes for machines to read — <span class="mono">llms.txt</span>, which AI crawlers your <span class="mono">robots.txt</span> mentions and whether each is allowed, <span class="mono">security.txt</span>, API descriptions, app-association files, and news feeds.</p>
+    <p><strong>None of this affects your score.</strong> These are choices, not mistakes. Blocking an AI training crawler is a perfectly reasonable decision, and those crawlers don't control search results anyway — so the app tells you what you've declared and leaves the judgement to you.</p>
+
+    <div class="note"><b>Important: "can be indexed" is not "is indexed".</b> This app tells you whether a page is <em>eligible</em> — nothing is standing in the way. It cannot tell you whether Google has actually added it yet, because that information only exists inside Google and Bing, behind an account that proves you own the site. The report says so plainly rather than guessing. To check whether a page is genuinely listed, use Google Search Console or Bing Webmaster Tools, or search for the exact address.</div>
+  </section>
+
   <section id="report">
-    <h2 class="s"><span class="n">5</span> Reading your results</h2>
+    <h2 class="s"><span class="n">6</span> Reading your results</h2>
     <p class="lead">The report is built to answer one question first: <strong>is this site OK or not?</strong></p>
     <h3>Start at the top — the bottom line</h3>
     <p>The big circle shows the share of checks that passed. Next to it, an <strong>Overall result</strong> tells you plainly whether the site is ready or needs attention, and how many checks are failing. <strong>This is the pass/fail answer.</strong></p>
@@ -175,7 +223,7 @@
   </section>
 
   <section id="reports">
-    <h2 class="s"><span class="n">6</span> Finding past reports</h2>
+    <h2 class="s"><span class="n">7</span> Finding past reports</h2>
     <p class="lead">Every check is saved automatically. The <strong>Reports</strong> tab keeps them tidy.</p>
     <ul>
       <li>Reports are <strong>grouped by website</strong>, newest first.</li>
@@ -186,7 +234,7 @@
   </section>
 
   <section id="updates">
-    <h2 class="s"><span class="n">7</span> Keeping it up to date</h2>
+    <h2 class="s"><span class="n">8</span> Keeping it up to date</h2>
     <p class="lead">Updates are tiny and take about a second. You're always in control.</p>
     <ul>
       <li>The app quietly checks for updates on its own. When one is ready, the <strong>Check for updates</strong> button turns <strong style="color:var(--brand)">red</strong> and a small message pops up.</li>
@@ -197,7 +245,7 @@
   </section>
 
   <section id="help">
-    <h2 class="s"><span class="n">8</span> If something looks off</h2>
+    <h2 class="s"><span class="n">9</span> If something looks off</h2>
     <p class="lead">There's a one-click way to send us exactly what's happening.</p>
     <ol class="steps">
       <li>Click <strong>Logs</strong> in the top-right.</li>
@@ -208,13 +256,15 @@
   </section>
 
   <section id="faq">
-    <h2 class="s"><span class="n">9</span> Quick answers</h2>
+    <h2 class="s"><span class="n">10</span> Quick answers</h2>
     <details><summary>Does the installer include everything, or does it download more?</summary><div class="a">Everything is inside the installer — the app, its browser engine, and all its libraries. Once it's installed you can run checks straight away, even offline. The only time it uses the internet is to reach the website you're checking, and to see if a newer version of the app is available.</div></details>
     <details><summary>Does this send my data anywhere?</summary><div class="a">No. All checks run on your own computer. The only thing the app contacts the internet for is (a) the website you ask it to check, and (b) checking whether a new version of the app is available.</div></details>
     <details><summary>Why is a passing score shown in red?</summary><div class="a">Red is SGEN's brand colour, and here it means "good / passing". Greyer, lighter colours mean warnings or failures. There's a colour key on every report.</div></details>
     <details><summary>The address box says the site can't be reached.</summary><div class="a">Double-check the address is spelled correctly and the site is online. You don't need to type "https://" — just the domain, like <span class="mono">example.com</span>.</div></details>
     <details><summary>A check is taking a long time.</summary><div class="a">Larger sites take longer, especially with "Browser render" on. You can click <strong>Cancel</strong> at any time, or lower <strong>Max pages</strong> to 1 for a quick single-page check.</div></details>
     <details><summary>Do I need to install updates manually?</summary><div class="a">No. The app tells you when one is ready (the button turns red). You just click it, then Restart. No installer, no admin rights.</div></details>
+    <details><summary>Does this tell me if my site is on Google?</summary><div class="a">It tells you whether each page <strong>can</strong> be — that nothing is blocking it, hiding it, or pointing search engines somewhere else. It cannot tell you whether Google has actually listed a page yet, because only Google knows that, and it only shares it with the verified owner of the site. Use Google Search Console or Bing Webmaster Tools for that. The <strong>Content &amp; SEO</strong> report says which of the two it is measuring, every time.</div></details>
+    <details><summary>What is llms.txt, and do I need one?</summary><div class="a">It is a plain-text file some sites publish so AI assistants can read a tidy map of the site instead of guessing. It is a convention, not an official standard, so the app simply reports whether you have one and never marks you down for skipping it.</div></details>
     <details><summary>Where are my reports saved?</summary><div class="a">On your computer, inside the app's own data folder. Use the <strong>Reports</strong> tab to find them, or save any of them as a PDF to keep or share.</div></details>
   </section>
 

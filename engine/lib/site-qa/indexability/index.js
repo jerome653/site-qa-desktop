@@ -269,7 +269,14 @@ async function scanIndexability({ origin, host, crawlPages = [], probeCap = DEFA
     : { files: [], present: [], invalid: [], feeds: [], byKey: {}, notRun: 'single-page-scope' };
   // Schema needs NO extra request — it reads the HTML this run already fetched — so it runs in both
   // scopes. A one-page run still gets its structured data validated.
-  const schema = scanSchema(crawlPages.map(p => ({ url: p.url, html: p.body })));
+  //
+  // HTML 200s ONLY, which is the same population every other static check in the engine runs over.
+  // MEASURED on a real 119-page run: the crawl held 92 HTML pages and 27 redirects/errors, and scanning
+  // all 119 reported schema on 93 — so at least one NON-200 record carried JSON-LD. SEO-049 is SCORED,
+  // which means a redirect page's leftover markup could deduct points from a site whose real pages are
+  // clean. Same false-positive class as the redirect-is-absent gate above, one layer along.
+  const schemaPages = crawlPages.filter(p => p && p.status === 200 && isHtmlLike(p.contentType, p.body));
+  const schema = scanSchema(schemaPages.map(p => ({ url: p.url, html: p.body })));
 
   return {
     // What this pass was allowed to look at. Read by the caller to decide which check families may be

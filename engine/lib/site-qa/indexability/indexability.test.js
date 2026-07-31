@@ -242,6 +242,38 @@ const { metaRobotsFrom, xRobotsFrom, canonicalFrom, sameUrl, verdictFor } = requ
   ok(disc.files.some(f => /redirected away/.test(f.note || '')), 'the row states WHY it is absent (redirected away), not just that it is');
 })();
 
+// ── SCHEMA READS HTML 200s ONLY (caught on a real 119-page run) ──────────────────────────────────
+// That crawl held 92 HTML pages and 27 redirects/errors, and schema reported 93 — so a NON-200 record
+// carried JSON-LD. SEO-049 is SCORED, so a redirect page's leftover markup could deduct points from a
+// site whose real pages are clean. Every other static check runs over HTML 200s; this now does too.
+(async () => {
+  const { scanIndexability } = require('./index');
+  const PORT = 7975;
+  const ORIGIN = `http://127.0.0.1:${PORT}`;
+  const srv = http.createServer((q, s) => { s.writeHead(404); s.end(); });
+  await new Promise(r => srv.listen(PORT, '127.0.0.1', r));
+  // A clean 200 page, and a 301 whose body still carries a Product with no name — exactly the shape
+  // that would fire SEO-049 against a page no search engine will ever index as itself.
+  const BAD = '<script type="application/ld+json">{"@type":"Product","description":"x"}</script>';
+  const pages = [
+    { url: ORIGIN + '/', status: 200, contentType: 'text/html', body: '<html><head><title>t</title></head><body>ok</body></html>' },
+    { url: ORIGIN + '/old', status: 301, contentType: 'text/html', location: ORIGIN + '/', body: '<html>' + BAD + '</html>' },
+    { url: ORIGIN + '/gone', status: 404, contentType: 'text/html', body: '<html>' + BAD + '</html>' },
+  ];
+  let res;
+  try { res = await scanIndexability({ origin: ORIGIN, host: `127.0.0.1:${PORT}`, crawlPages: pages, siteLevel: false }); }
+  finally {
+    if (typeof srv.closeAllConnections === 'function') srv.closeAllConnections();
+    await new Promise(r => srv.close(r));
+  }
+  eq(res.schema.pagesWithSchema, 0, 'JSON-LD on a 301 and a 404 is NOT counted — schema reads HTML 200s only');
+  eqA(res.schema.missingRequired, [], 'SEO-049 cannot fire on a redirect or error page\'s leftover markup');
+  // The verdict table still lists all three: a redirect URL is a real fact about the site and must not
+  // vanish just because its markup is excluded from schema validation.
+  eq(res.urls.length, 3, 'every crawled URL still appears in the verdict table, including the non-200s');
+  eq(res.urls.find(u => u.url === ORIGIN + '/old').verdict.google, 'redirect', 'the 301 is still reported as a redirect');
+})();
+
 // ── end to end: a fixture that is individually clean and collectively broken ─────────────────────
 (async () => {
   const { runAudit } = require('../audit');
