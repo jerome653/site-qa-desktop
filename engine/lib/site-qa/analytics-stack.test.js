@@ -37,7 +37,11 @@ if (typeof cs.detectAnalytics === 'function') {
 // ── 2) end to end: a LIVE run names the stack on the passing row ──────────────────────────────────
 (async () => {
   const { runAudit } = require('./audit');
-  const PORT = 7941;
+  // Ephemeral, not fixed. A fixed port collides the moment anything else on the machine holds it —
+  // this one binds BEFORE it connects, so a collision is a loud EADDRINUSE rather than the silent
+  // talk-to-a-stranger failure found in seo-split/ui-script, but a suite that cannot run beside a
+  // second session is still a suite that blocks work. Assigned once listen() resolves.
+  let PORT = 0;
   const srv = http.createServer((q, s) => {
     s.writeHead(200, { 'content-type': 'text/html' });
     s.end('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Analytics fixture page</title>'
@@ -46,7 +50,7 @@ if (typeof cs.detectAnalytics === 'function') {
       + '<script src="https://www.googletagmanager.com/gtm.js?id=GTM-ABCD"></script></head>'
       + '<body><h1>Analytics</h1><p>' + 'Words to keep the page from being thin. '.repeat(30) + '</p></body></html>');
   });
-  await new Promise(r => srv.listen(PORT, '127.0.0.1', r));
+  await new Promise(r => srv.listen(0, '127.0.0.1', () => { PORT = srv.address().port; r(); }));
   let res;
   try {
     res = await runAudit(`http://127.0.0.1:${PORT}/`, { maxPages: 3, render: false, log: () => {} });

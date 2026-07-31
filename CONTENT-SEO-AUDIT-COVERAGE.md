@@ -238,9 +238,14 @@ advisory row, so it asserts "reads as a mapping document" and never "the YAML is
    configured, and a run that reaches them is no longer reproducible offline. That is a
    tribunal-scored decision, not a code change — **your call, nothing built.** The scraping route is
    not on the table: non-deterministic, captchas within a few dozen URLs, against both engines' terms.
-6. **`.gz` sitemaps are recorded, not parsed.** A gzipped sitemap is reported present-and-unread
-   rather than decompressed — honest today, and `zlib` is a Node builtin, so closing it costs no
-   dependency.
+6. ~~**`.gz` sitemaps are recorded, not parsed.**~~ **Closed in 6.2.1.** Gzipped sitemaps are now
+   decompressed with the `zlib` builtin (no new dependency) and parsed like any other. Gzip is
+   detected by MAGIC BYTES rather than the URL suffix, so both legal shapes work — a raw `.gz`
+   file and a `Content-Encoding: gzip` response — as does a `.gz` extension on an uncompressed
+   file. Decompression is capped at 64 MB: a few hundred bytes of gzip can encode gigabytes, and
+   an unbounded gunzip in a tool that fetches attacker-controlled URLs is a denial-of-service the
+   audited site can aim at the operator. A stream that is corrupt and one that is merely too big
+   are reported separately, because they need different fixes.
 7. **Sitemap URL probing is capped at 500** beyond what the crawl already fetched, and those probes
    are HEAD-only (no body, so meta robots and canonical are unknown for them). Both limits are
    declared on the result — a partial sweep never reads as a complete one.

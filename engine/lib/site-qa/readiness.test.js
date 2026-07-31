@@ -23,16 +23,17 @@ const ok = (c, m) => { total++; if (!c) { console.error('  FAIL:', m); fails++; 
 
 // The real 3.0.3 live-audit artifact. Path is DERIVED (not hardcoded to a machine) so this suite
 // stays cloneable; SGEN_QA_REAL_REPORT overrides it for CI or another operator's run.
-const APPDATA = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-const REAL = process.env.SGEN_QA_REAL_REPORT || path.join(
-  APPDATA, 'SGEN Site QA', 'engines', 'sgen', 'W5-Live-Surface-Audit',
-  'site-qa', '_ui-runs', 'sgen.com-1784139227918', 'report.json');
+// Resolved, not hardcoded: the product rename (SGEN Site QA -> Site Audit) moves userData, and a
+// hardcoded name would turn these assertions into a silent skip. See testing/real-runs.js.
+const realRuns = require('./testing/real-runs');
+const REAL = process.env.SGEN_QA_REAL_REPORT || realRuns.realRun('sgen.com-1784139227918');
+console.log('  ' + realRuns.describe(['sgen.com-1784139227918']));
 
 // ── 1) THE REGRESSION, against the real sgen.com run ────────────────────────────────────────────
 // Real headline: verdict "NEEDS ATTENTION", ready:false, score 49, tally {pass:33,warn:30,fail:4}.
 // Before the fix compute() returned verdict:"LAUNCH-READY" / launchReady:true on exactly this data,
 // and report.js painted it as a green pill beside "NEEDS ATTENTION".
-if (fs.existsSync(REAL)) {
+if (REAL && fs.existsSync(REAL)) {
   const real = JSON.parse(fs.readFileSync(REAL, 'utf8'));
   const r = compute(real.suites);
 

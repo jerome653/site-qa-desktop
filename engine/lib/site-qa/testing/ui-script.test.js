@@ -23,8 +23,28 @@ const http = require('http');
 const path = require('path');
 const cp = require('child_process');
 
+const net = require('net');
+
 const SERVE = path.join(__dirname, '..', '..', '..', 'sgen-qa-serve.js');
-const PORT = 20000 + Math.floor(process.hrtime()[1] % 15000);   // no Math.random: keep runs reproducible-ish
+// ── ASK THE OS FOR A FREE PORT ───────────────────────────────────────────────────────────────────
+// This was `20000 + (process.hrtime()[1] % 15000)`, annotated "no Math.random: keep runs
+// reproducible-ish" — but hrtime is not reproducible either, so it bought nondeterminism without the
+// property it was reaching for. The real hazard is not the randomness though, it is the DIRECTION of
+// use: this suite SPAWNS a server on the chosen port and then CONNECTS to it, so when anything else
+// already holds that port the spawned server fails to bind, waitUp() succeeds against the STRANGER,
+// and every assertion below reports on somebody else's process.
+//
+// That is the same defect found in seo-split.test.js, where seven leaked servers turned a real suite
+// into 1/21 while it passed standalone. Found here by sweeping for the class rather than waiting for
+// it to bite twice. Bind ephemeral, read the assigned port back, release it, hand it to the child.
+let PORT = 0;
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => { const p = probe.address().port; probe.close(() => resolve(p)); });
+  });
+}
 let pass = 0, fail = 0;
 const t = (cond, msg) => { if (cond) { pass++; } else { fail++; console.log('  ❌ ' + msg); } };
 
@@ -38,9 +58,14 @@ function get(p) {
   });
 }
 
-async function waitUp(ms) {
+// `child` is required, not optional: a free port makes a collision unlikely, and this makes talking to
+// a stranger IMPOSSIBLE. If our server died — failed to bind, crashed on boot — then whatever is
+// answering on that port is not ours, and a suite that cheerfully proceeds to assert against it is
+// reporting on someone else's process. Belt and braces, because the failure it prevents is silent.
+async function waitUp(ms, child) {
   const t0 = Date.now();
   for (;;) {
+    if (child && child.exitCode !== null) return false;   // ours is gone; anything answering is not ours
     try { await get('/'); return true; } catch (_) {}
     if (Date.now() - t0 > ms) return false;
     await new Promise(r => setTimeout(r, 250));
@@ -48,13 +73,14 @@ async function waitUp(ms) {
 }
 
 (async () => {
+  PORT = await freePort();
   const child = cp.spawn(process.execPath, [SERVE], {
     env: Object.assign({}, process.env, { SGEN_QA_PORT: String(PORT) }),
     stdio: ['ignore', 'ignore', 'ignore'],
   });
   let out = 1;
   try {
-    if (!await waitUp(30000)) { console.log('  ❌ server did not come up on ' + PORT); process.exit(1); }
+    if (!await waitUp(30000, child)) { console.log('  ❌ server did not come up on ' + PORT); process.exit(1); }
 
     const page = await get('/');
     t(page.code === 200, 'GET / -> ' + page.code);

@@ -32,7 +32,11 @@ function ok(cond, name, extra) {
 // The two REAL sgen.com runs through the shipped 3.0.3 engine. Optional on disk: this file must stay
 // runnable in CI / on a fresh clone, so their absence SKIPS those assertions loudly rather than
 // inventing stand-in data that would agree with whatever the code currently does.
-const RUNS = path.join(process.env.APPDATA || '', 'SGEN Site QA', 'engines', 'sgen', 'W5-Live-Surface-Audit', 'site-qa', '_ui-runs');
+// Resolved, not hardcoded — the product rename moves userData and a hardcoded name would turn these
+// assertions into a silent skip. See site-qa/testing/real-runs.js.
+const realRuns = require('../site-qa/testing/real-runs');
+const RUNS = realRuns.runsDir() || '';
+console.log('  ' + realRuns.describe(['sgen.com-1784139227918', 'sgen.com-1784157273881']));
 const REAL = [
   { name: '3-page', file: path.join(RUNS, 'sgen.com-1784139227918', 'report.json'), a11y: 66, honest: 59 },
   { name: '1-page', file: path.join(RUNS, 'sgen.com-1784157273881', 'report.json'), a11y: 76, honest: 72 },

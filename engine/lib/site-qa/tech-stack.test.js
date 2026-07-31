@@ -68,7 +68,11 @@ if (ts && typeof ts.detectStack === 'function') {
 // ── end to end: a real audit carries it ───────────────────────────────────────────────────────────
 (async () => {
   const { runAudit } = require('./audit');
-  const PORT = 7951;
+  // Ephemeral, not fixed. A fixed port collides the moment anything else on the machine holds it —
+  // this one binds BEFORE it connects, so a collision is a loud EADDRINUSE rather than the silent
+  // talk-to-a-stranger failure found in seo-split/ui-script, but a suite that cannot run beside a
+  // second session is still a suite that blocks work. Assigned once listen() resolves.
+  let PORT = 0;
   const srv = http.createServer((q, s) => {
     s.writeHead(200, { 'content-type': 'text/html', 'server': 'nginx/1.24.0', 'cf-ray': '8a1b2c3d' });
     s.end('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Stack fixture page</title>'
@@ -76,7 +80,7 @@ if (ts && typeof ts.detectStack === 'function') {
       + '<meta name="generator" content="WordPress 6.5"></head>'
       + '<body><h1>Stack</h1><p>' + 'Words to keep the page from being thin. '.repeat(30) + '</p></body></html>');
   });
-  await new Promise(r => srv.listen(PORT, '127.0.0.1', r));
+  await new Promise(r => srv.listen(0, '127.0.0.1', () => { PORT = srv.address().port; r(); }));
   let res;
   try {
     res = await runAudit(`http://127.0.0.1:${PORT}/`, { maxPages: 3, render: false, log: () => {} });

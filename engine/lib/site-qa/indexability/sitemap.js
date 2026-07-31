@@ -16,10 +16,17 @@
 // Exceeding either means the file is rejected wholesale by Google and Bing — every URL in it, not the
 // overflow. That is why it is a scored defect rather than a note.
 
-const { getText, pool } = require('../../migration-qa/http');
+const { get, getText, pool } = require('../../migration-qa/http');
+const zlib = require('zlib');
 
 const MAX_URLS_PER_FILE = 50000;
 const MAX_BYTES_PER_FILE = 50 * 1024 * 1024;
+// Hard ceiling on what a gzipped sitemap may expand to. A few hundred bytes of gzip can encode
+// gigabytes of zeros, so an unbounded gunzip in an auditor that fetches attacker-controlled URLs is a
+// denial-of-service the target site can aim at the operator's own machine. Sized just above the
+// protocol's own 50 MB limit: anything larger is already rejected by Google and Bing, so refusing to
+// decompress it costs nothing real and the file is reported over-limit either way.
+const MAX_GUNZIP_BYTES = 64 * 1024 * 1024;
 const COMMON_SITEMAPS = ['/sitemap.xml', '/sitemap_index.xml', '/sitemap-index.xml', '/wp-sitemap.xml', '/sitemap.xml.gz'];
 
 // W3C Datetime, the profile of ISO 8601 the sitemap protocol actually specifies. Anything else
@@ -74,6 +81,53 @@ function candidateSitemaps(origin, robotsSitemaps = []) {
   return [...out].map(([url, source]) => ({ url, source }));
 }
 
+// ── FETCH A SITEMAP, INCLUDING A GZIPPED ONE ─────────────────────────────────────────────────────
+// getText() decodes the response as UTF-8, which DESTROYS gzip bytes — so a .gz sitemap could never be
+// recovered from its result, and this module used to record it as present-and-unread. zlib is a Node
+// builtin, so parsing it costs no dependency; the only requirement is reading the body as BYTES first.
+//
+// Two shapes reach us and both are legal:
+//   • the server sends `Content-Encoding: gzip` — fetch decompresses it for us and the buffer is
+//     already XML, so the magic-byte test simply does not match and we decode as text;
+//   • the server sends a raw .gz FILE (typically `Content-Type: application/gzip`, no encoding header)
+//     — fetch hands over the compressed bytes untouched and we gunzip them here.
+// Sniffing the gzip MAGIC (1f 8b) rather than trusting the URL suffix or the content type covers both,
+// plus the common misconfiguration of a .gz extension on an uncompressed file and vice versa.
+async function fetchSitemap(url) {
+  let res;
+  try { res = await get(url); }
+  catch (e) { return { status: 0, body: '', contentType: '', error: String(e && e.message || e), bytes: 0, compressed: false }; }
+  const contentType = res.headers.get('content-type') || '';
+  const status = res.status;
+  const location = res.headers.get('location') || null;
+  let raw;
+  try { raw = Buffer.from(await res.arrayBuffer()); }
+  catch (e) { return { status, contentType, location, body: '', error: 'body unreadable: ' + String(e && e.message || e), bytes: 0, compressed: false }; }
+
+  const isGzip = raw.length > 2 && raw[0] === 0x1f && raw[1] === 0x8b;
+  if (!isGzip) return { status, contentType, location, body: raw.toString('utf8'), bytes: raw.length, compressed: false };
+
+  try {
+    const out = zlib.gunzipSync(raw, { maxOutputLength: MAX_GUNZIP_BYTES });
+    // `bytes` is the UNCOMPRESSED size on purpose: the protocol's 50 MB limit is about what the parser
+    // must hold, not what crossed the wire, and reporting the wire size would let a 2 MB gzip carrying
+    // 80 MB of XML pass a limit it plainly breaks.
+    return { status, contentType, location, body: out.toString('utf8'), bytes: out.length, compressed: true };
+  } catch (e) {
+    // Match the CODE, not the message. Node reports the maxOutputLength guard as a RangeError with
+    // code ERR_BUFFER_TOO_LARGE and the message "Cannot create a Buffer larger than N bytes" — which
+    // mentions neither maxOutputLength nor any word a message-sniffing regex would guess. Caught by
+    // this suite's own bomb case: the guard fired correctly but the file was then reported as a
+    // CORRUPT STREAM, sending the reader to fix a file that is not broken, only too large.
+    const tooBig = (e && e.code === 'ERR_BUFFER_TOO_LARGE') || /maxOutputLength/i.test(String(e && e.message || e));
+    return {
+      status, contentType, location, body: '', bytes: 0, compressed: true,
+      gzipError: tooBig ? 'decompresses beyond the 50 MB protocol limit' : 'gzip stream is corrupt: ' + String(e && e.message || e),
+      gzipTooBig: tooBig,
+    };
+  }
+}
+
 function absolutize(u, origin) { try { return new URL(u, origin).href; } catch (e) { return null; } }
 function hostOf(u) { try { return new URL(u).host; } catch (e) { return null; } }
 
@@ -88,13 +142,16 @@ async function collectSitemaps(origin, host, { robotsSitemaps = [], concurrency 
   async function fetchOne(url, source, depth) {
     if (seen.has(url)) return null;
     seen.add(url);
-    const r = await getText(url);
-    const bytes = Buffer.byteLength(String(r.body || ''), 'utf8');
+    const r = await fetchSitemap(url);
+    // `r.bytes` is already the UNCOMPRESSED length (see fetchSitemap) — the size the 50 MB protocol
+    // limit is actually about.
+    const bytes = r.bytes || 0;
     const rec = {
       url, source, depth,
       status: r.status || null,
       error: r.error || null,
       bytes,
+      compressed: !!r.compressed,
       kind: null,
       urlCount: 0,
       // Every defect class this file exhibits, as flags rather than one collapsed verdict — a file can
@@ -105,10 +162,16 @@ async function collectSitemaps(origin, host, { robotsSitemaps = [], concurrency 
     if (r.error || !r.status) { rec.problems.push('unreachable'); files.push(rec); return rec; }
     if (r.status >= 400) { rec.problems.push(source === 'robots.txt' ? 'declared-but-missing' : 'missing'); files.push(rec); return rec; }
     if (r.status >= 300) { rec.problems.push('redirect'); }
-    // A .gz sitemap is legal and common. This engine reads text, so it is recorded as PRESENT and
-    // UNPARSED rather than reported as malformed — claiming a valid compressed sitemap is broken would
-    // be a false blocker, and "we did not read it" is the honest row.
-    if (/\.gz$/i.test(url) && !looksXml(r.body, r.contentType)) { rec.problems.push('compressed-not-parsed'); files.push(rec); return rec; }
+    // A gzipped sitemap is now DECOMPRESSED AND PARSED (fetchSitemap does it), so the only thing left
+    // to report here is a gzip that could not be read — which is a real defect, not the old "we did not
+    // look". Distinguished because they need different fixes: a corrupt stream is a broken file, while
+    // one that expands past the protocol limit is a file that is simply too big and would be rejected
+    // by both engines whatever its compression.
+    if (r.gzipError) {
+      rec.problems.push(r.gzipTooBig ? 'over-size-limit' : 'gzip-corrupt');
+      rec.gzipError = r.gzipError;
+      files.push(rec); return rec;
+    }
     if (!looksXml(r.body, r.contentType)) { rec.problems.push('not-xml'); files.push(rec); return rec; }
 
     const doc = parseSitemapDoc(r.body);
@@ -186,6 +249,6 @@ async function collectSitemaps(origin, host, { robotsSitemaps = [], concurrency 
 }
 
 module.exports = {
-  collectSitemaps, parseSitemapDoc, validLastmod, candidateSitemaps,
-  MAX_URLS_PER_FILE, MAX_BYTES_PER_FILE, COMMON_SITEMAPS,
+  collectSitemaps, parseSitemapDoc, validLastmod, candidateSitemaps, fetchSitemap,
+  MAX_URLS_PER_FILE, MAX_BYTES_PER_FILE, MAX_GUNZIP_BYTES, COMMON_SITEMAPS,
 };

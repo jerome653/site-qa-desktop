@@ -197,6 +197,68 @@ const { metaRobotsFrom, xRobotsFrom, canonicalFrom, sameUrl, verdictFor } = requ
   ok(dentist.missingRequired.some(i => /address/.test(i.value)), 'a LocalBusiness subtype inherits its required properties');
 }
 
+// ── GZIPPED SITEMAPS ARE PARSED, NOT SHRUGGED AT ─────────────────────────────────────────────────
+// This used to record a .gz sitemap as present-and-unread, because getText() decodes UTF-8 and that
+// destroys gzip bytes. zlib is a Node builtin, so the only real requirement was reading the body as
+// BYTES. Both legal shapes are exercised, plus the two ways it can go wrong.
+(async () => {
+  const zlib = require('zlib');
+  const { collectSitemaps, fetchSitemap, MAX_GUNZIP_BYTES } = require('./sitemap');
+  const PORT = 7976;
+  const ORIGIN = `http://127.0.0.1:${PORT}`;
+  const XML = (loc) => `<?xml version="1.0"?><urlset><url><loc>${ORIGIN}${loc}</loc><lastmod>2026-01-02</lastmod></url></urlset>`;
+  const gz = zlib.gzipSync(Buffer.from(XML('/from-gz'), 'utf8'));
+  // A decompression bomb: a few hundred bytes that expand past the guard.
+  const bomb = zlib.gzipSync(Buffer.alloc(MAX_GUNZIP_BYTES + 1024, 0x20));
+
+  const srv = http.createServer((q, s) => {
+    const u = q.url.split('?')[0];
+    if (u === '/robots.txt') { s.writeHead(200, { 'content-type': 'text/plain' }); return s.end(`Sitemap: ${ORIGIN}/sitemap.xml.gz`); }
+    // raw .gz FILE — no Content-Encoding, so fetch hands over compressed bytes untouched
+    if (u === '/sitemap.xml.gz') { s.writeHead(200, { 'content-type': 'application/gzip' }); return s.end(gz); }
+    // the OTHER legal shape: Content-Encoding: gzip, which fetch decompresses for us
+    if (u === '/encoded.xml') { s.writeHead(200, { 'content-type': 'application/xml', 'content-encoding': 'gzip' }); return s.end(zlib.gzipSync(Buffer.from(XML('/from-encoded'), 'utf8'))); }
+    if (u === '/corrupt.xml.gz') { s.writeHead(200, { 'content-type': 'application/gzip' }); return s.end(Buffer.concat([Buffer.from([0x1f, 0x8b]), Buffer.from('not really gzip')])); }
+    if (u === '/bomb.xml.gz') { s.writeHead(200, { 'content-type': 'application/gzip' }); return s.end(bomb); }
+    s.writeHead(404); s.end();
+  });
+  await new Promise(r => srv.listen(PORT, '127.0.0.1', r));
+  let set, enc, corrupt, boom;
+  try {
+    set = await collectSitemaps(ORIGIN, `127.0.0.1:${PORT}`, { robotsSitemaps: [ORIGIN + '/sitemap.xml.gz'] });
+    enc = await fetchSitemap(ORIGIN + '/encoded.xml');
+    corrupt = await fetchSitemap(ORIGIN + '/corrupt.xml.gz');
+    boom = await fetchSitemap(ORIGIN + '/bomb.xml.gz');
+  } finally {
+    if (typeof srv.closeAllConnections === 'function') srv.closeAllConnections();
+    await new Promise(r => srv.close(r));
+  }
+
+  const gzFile = set.files.find(f => /sitemap\.xml\.gz$/.test(f.url));
+  ok(!!gzFile, 'the gzipped sitemap is in the file set');
+  if (gzFile) {
+    eqA(gzFile.problems, [], 'a VALID gzipped sitemap raises no problem — it used to report compressed-not-parsed');
+    eq(gzFile.kind, 'urlset', 'the decompressed document is parsed as a urlset');
+    eq(gzFile.urlCount, 1, 'its URLs are counted');
+    eq(gzFile.compressed, true, 'the record states that it arrived compressed');
+  }
+  ok(set.onHostUrls.includes(ORIGIN + '/from-gz'), 'a URL that exists ONLY inside the .gz reaches the on-host list');
+  // NEGATIVE CONTROL for the size accounting: bytes must be the UNCOMPRESSED length, not the wire
+  // length, or a small gzip carrying a huge document would slip under the 50 MB limit.
+  if (gzFile) ok(gzFile.bytes > gz.length, `bytes is the uncompressed size (${gzFile && gzFile.bytes} > wire ${gz.length})`);
+
+  eq(enc.compressed, false, 'a Content-Encoding: gzip response is decompressed by fetch, so no manual gunzip happens');
+  ok(/from-encoded/.test(enc.body), '…and its XML still arrives intact');
+
+  ok(!!corrupt.gzipError, 'a corrupt gzip stream is REPORTED, not silently treated as empty');
+  eq(corrupt.gzipTooBig, false, 'corrupt is distinguished from too-big — they need different fixes');
+  ok(/corrupt/i.test(corrupt.gzipError), 'the row says the stream is corrupt');
+
+  ok(!!boom.gzipError, 'a decompression bomb is refused');
+  eq(boom.gzipTooBig, true, 'a bomb is classified as over-limit, so it reports as a size defect');
+  ok(/50 MB|protocol limit/i.test(boom.gzipError), 'the reason names the protocol limit rather than an internal error');
+})();
+
 // ── FALSE POSITIVES CAUGHT ON REAL DATA (sgen.com, 2026-07-31) ───────────────────────────────────
 // Both had the same root cause and neither unit test above would have found it: on that host EVERY
 // unknown path answers `301 → /404?from=…` with an empty body. "Absent" arrived as a redirect, and

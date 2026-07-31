@@ -73,9 +73,13 @@ ok(cat(baseThree, 'console').score === 0 && cat(baseThree, 'performance').score 
 
 // LIVE FIDELITY: if the real runs are on this machine, the capture must still reproduce them. This is
 // the anti-fixture guard — the moment the capture stops agreeing with reality, this suite says so.
+// Resolved, not hardcoded — the product rename (SGEN Site QA -> Site Audit) moves userData, and a
+// hardcoded name would silently drop this anti-fixture guard while the suite still printed green.
+const realRuns = require('./testing/real-runs');
+console.log('  ' + realRuns.describe(['sgen.com-1784139227918', 'sgen.com-1784157273881']));
 const LIVE = [
-  ['three', 72, process.env.APPDATA && process.env.APPDATA + '/SGEN Site QA/engines/sgen/W5-Live-Surface-Audit/site-qa/_ui-runs/sgen.com-1784139227918/report.json'],
-  ['one', 80, process.env.APPDATA && process.env.APPDATA + '/SGEN Site QA/engines/sgen/W5-Live-Surface-Audit/site-qa/_ui-runs/sgen.com-1784157273881/report.json'],
+  ['three', 72, realRuns.realRun('sgen.com-1784139227918')],
+  ['one', 80, realRuns.realRun('sgen.com-1784157273881')],
 ];
 let liveChecked = 0;
 for (const [k, want, p] of LIVE) {
