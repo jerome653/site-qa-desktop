@@ -168,15 +168,24 @@ const SWEEP = `(function(){
   function sel(el){ if(!el||el.nodeType!==1) return '(?)'; var p=[],d=0; while(el&&el.nodeType===1&&d<4){ var t=el.tagName.toLowerCase(); if(el.id){p.unshift(t+'#'+el.id);break;} var c=(el.className&&typeof el.className==='string')?el.className.trim().split(/\\s+/)[0]:''; if(c)t+='.'+c; p.unshift(t); el=el.parentElement; d++; } return p.join('>'); }
   // on-page location: nearest enclosing landmark + nearest preceding heading text
   function secOf(el){ if(!el||el.nodeType!==1) return 'whole page'; var n=el,land=''; var L={header:1,nav:1,main:1,footer:1,section:1,article:1,aside:1}; while(n&&n.nodeType===1){ var tg=n.tagName.toLowerCase(); if(L[tg]){land=tg;break;} n=n.parentElement; } var h=''; try{ var all=document.querySelectorAll('h1,h2,h3,h4'); for(var i=0;i<all.length;i++){ var pos=all[i].compareDocumentPosition(el); if(pos&Node.DOCUMENT_POSITION_FOLLOWING) h=(all[i].textContent||'').trim().slice(0,60); } }catch(e){} return h?('\\u201c'+h+'\\u201d'+(land?' ('+land+')':'')):(land||'\\u2014'); }
+  // Does an ancestor clip or scroll this element horizontally? If so its width is contained and
+  // cannot reach the page edge, whatever the number says.
+  function clippedX(el){ var n=el&&el.parentElement; while(n&&n.nodeType===1&&n!==document.documentElement){ var ox=getComputedStyle(n).overflowX; if(ox==='hidden'||ox==='auto'||ox==='scroll'||ox==='clip') return true; n=n.parentElement; } return false; }
   // horizontal overflow
   var docW = document.documentElement.scrollWidth;
   if (docW > W + 2){
     out.push({check:'horizontal-overflow',severity:'high',title:'Page scrolls horizontally',detail:'doc width '+docW+'px > viewport '+W+'px',selector:'html',section:'whole page',value:docW+'px'});
     var off=[]; Array.prototype.forEach.call(document.body.getElementsByTagName('*'),function(el){ if(!vis(el))return; var r=el.getBoundingClientRect(); if(r.right>W+1&&r.width<=W*1.5&&r.width>4) off.push([el,Math.round(r.right-W)]); });
-    off.sort(function(a,b){return b[1]-a[1];}); off.slice(0,CAP).forEach(function(x){ out.push({check:'overflow-element',severity:'high',title:'Element bleeds past right edge',detail:'',selector:sel(x[0]),section:secOf(x[0]),value:'+'+x[1]+'px'}); });
+    off.sort(function(a,b){return b[1]-a[1];}); off.slice(0,CAP).forEach(function(x){ if(clippedX(x[0]))return; out.push({check:'overflow-element',severity:'high',title:'Element bleeds past right edge',detail:'',selector:sel(x[0]),section:secOf(x[0]),value:'+'+x[1]+'px'}); });
   }
-  // element wider than viewport
-  var wc=0; Array.prototype.forEach.call(document.body.getElementsByTagName('*'),function(el){ if(wc>=CAP||!vis(el))return; var r=el.getBoundingClientRect(); if(r.width>W+1){ out.push({check:'element-wider-than-viewport',severity:'high',title:'Element wider than viewport',detail:'',selector:sel(el),section:secOf(el),value:Math.round(r.width)+'px'}); wc++; } });
+  // element wider than viewport — but ONLY if something can actually see it. A marquee track inside
+  // overflow-x:hidden and a comparison table inside overflow-x:auto are both wider than the viewport
+  // by design and neither can widen the page: measured on a real client build, this rule fired 48
+  // high-severity findings on a page whose documentElement.scrollWidth equalled innerWidth at every
+  // width tested. Width alone was never the defect — width that ESCAPES is. Any ancestor that clips
+  // or scrolls horizontally contains it, and if that ancestor is itself too wide it is caught on its
+  // own row.
+  var wc=0; Array.prototype.forEach.call(document.body.getElementsByTagName('*'),function(el){ if(wc>=CAP||!vis(el))return; var r=el.getBoundingClientRect(); if(r.width>W+1&&!clippedX(el)){ out.push({check:'element-wider-than-viewport',severity:'high',title:'Element wider than viewport',detail:'',selector:sel(el),section:secOf(el),value:Math.round(r.width)+'px'}); wc++; } });
   // tap targets + input font — ask the PLATFORM, not the width.
   // Was: if (W <= 834) — an arbitrary width standing in for "is this a touch device?" (834 is the iPad
   // Pro 11's CSS width, which the old matrix never even rendered). Touch is really emulated now
@@ -193,23 +202,96 @@ const SWEEP = `(function(){
   // the host, it makes the gate depend on whether the QA machine has a touchscreen. ontouchstart and
   // pointer:coarse each discriminate perfectly (false/false/true); both are used, belt and braces.
   if ('ontouchstart' in window || matchMedia('(pointer: coarse)').matches){
-    var tc=0; Array.prototype.slice.call(document.querySelectorAll('a,button,input,select,textarea,[role=button]')).filter(vis).forEach(function(el){ var r=el.getBoundingClientRect(); if((r.width<44||r.height<44)&&tc<CAP){ out.push({check:'tap-target-small',severity:'medium',title:'Tap target < 44px',detail:'hard to tap on touch',selector:sel(el),section:secOf(el),value:Math.round(r.width)+'x'+Math.round(r.height)}); tc++; } });
-    var ic=0; Array.prototype.slice.call(document.querySelectorAll('input,select,textarea')).filter(vis).forEach(function(el){ var f=parseFloat(getComputedStyle(el).fontSize); if(f<16&&ic<CAP){ out.push({check:'input-font-small',severity:'low',title:'Input font < 16px',detail:'iOS zooms on focus',selector:sel(el),section:secOf(el),value:f+'px'}); ic++; } });
+    // WCAG 2.5.8 exempts a target "in a sentence or block of text": an inline link is sized by the
+    // line-height of the copy around it, and padding it to 44px would break the paragraph it lives
+    // in. Measured on a real build, this exception is most of the rule's output — 64 findings, every
+    // one a link inside a paragraph or a footer line, none of them actionable without damaging the
+    // text. An inline-level element sitting among sibling text is exactly that case.
+    function inlineInText(el){
+      if(getComputedStyle(el).display!=='inline') return false;
+      var p=el.parentElement; if(!p) return false;
+      return Array.prototype.some.call(p.childNodes,function(n){ return n.nodeType===3 && n.textContent.trim(); });
+    }
+    var tc=0; Array.prototype.slice.call(document.querySelectorAll('a,button,input,select,textarea,[role=button]')).filter(vis).forEach(function(el){ if(inlineInText(el))return; var r=el.getBoundingClientRect(); if((r.width<44||r.height<44)&&tc<CAP){ out.push({check:'tap-target-small',severity:'medium',title:'Tap target < 44px',detail:'hard to tap on touch',selector:sel(el),section:secOf(el),value:Math.round(r.width)+'x'+Math.round(r.height)}); tc++; } });
+    // iOS zooms the viewport when a control that accepts TYPED TEXT under 16px takes focus. A range,
+    // checkbox, radio, file or button input has no text and no keyboard, so its font-size cannot
+    // trigger that zoom — measured on a real build, two decorative sliders produced 16 findings
+    // across the matrix while every field a visitor types into was already correct. select and
+    // textarea stay in scope: iOS zooms on both.
+    var NOTYPE={range:1,checkbox:1,radio:1,file:1,button:1,submit:1,reset:1,image:1,color:1,hidden:1};
+    var ic=0; Array.prototype.slice.call(document.querySelectorAll('input,select,textarea')).filter(vis).forEach(function(el){ if(el.tagName==='INPUT'&&NOTYPE[(el.getAttribute('type')||'text').toLowerCase()])return; var f=parseFloat(getComputedStyle(el).fontSize); if(f<16&&ic<CAP){ out.push({check:'input-font-small',severity:'low',title:'Input font < 16px',detail:'iOS zooms on focus',selector:sel(el),section:secOf(el),value:f+'px'}); ic++; } });
   }
   // AA color contrast (sampled visible text) — viewport-independent, run once (desktop caller only)
   if (window.__runContrast){
     function lum(c){ c=c.map(function(v){v/=255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);}); return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2]; }
-    function parse(s){ var m=s&&s.match(/rgba?\\(([^)]+)\\)/); if(!m)return null; var p=m[1].split(',').map(function(x){return parseFloat(x);}); if(p.length>=4&&p[3]===0) return null; return [p[0],p[1],p[2]]; }
-    function bg(el){ var n=el; while(n&&n.nodeType===1){ var c=parse(getComputedStyle(n).backgroundColor); if(c) return c; n=n.parentElement; } return [255,255,255]; }
+    // Alpha is KEPT: a translucent colour is a layer to paint, not a ground to measure against.
+    function parse(s){ var m=s&&s.match(/rgba?\\(([^)]+)\\)/); if(!m)return null; var p=m[1].split(',').map(function(x){return parseFloat(x);}); var a=p.length>=4?p[3]:1; if(a===0) return null; return {rgb:[p[0],p[1],p[2]], a:a}; }
+    // src painted over dst — the browser's own arithmetic, straight alpha.
+    function over(src,dst){ return [0,1,2].map(function(i){ return src.rgb[i]*src.a + dst[i]*(1-src.a); }); }
+    // layers[0] sits nearest the text, so paint from the bottom of the stack upward.
+    function flatten(layers,base){ var o=base.slice(); for(var i=layers.length-1;i>=0;i--) o=over(layers[i],o); return o; }
+    // Colour stops inside a background-image. Chromium normalises every stop to rgb()/rgba() in the
+    // computed value, so one pattern covers gradients of any type or angle.
+    function stopsOf(s){ var o=[], re=/rgba?\\([^)]+\\)/g, m; while((m=re.exec(s))){ var c=parse(m[0]); if(c) o.push(c); } return o; }
+    // What is this text actually drawn on? Returns EVERY candidate ground (a gradient has several),
+    // or null when the ground cannot be read at all.
+    //
+    // Two ways the old version got this wrong, both measured on the same real client build and both
+    // producing the loudest number the sweep can produce — 1.00:1, "invisible" — on text a human
+    // reads without difficulty:
+    //
+    //   · it read background-color and ignored background-image, so white label text on a red
+    //     gradient button was scored against the white page four levels up;
+    //   · it stopped at the first colour with ANY alpha, so a 3%-white glass tint over a near-black
+    //     card was treated as solid white. Ten labels on that card reported exactly 1.00:1.
+    //
+    // Translucent layers are now composited in order until an opaque one is reached, which is what
+    // the browser does. A raster or SVG background still cannot be sampled from script, so those
+    // elements return null and are skipped — an honest "not measured" beats a confident wrong one.
+    function grounds(el){
+      // Collect the paint stack from the text outward, then flatten it bottom-up. Within one
+      // element background-image paints OVER background-color, so the image is pushed first and
+      // resolved second. Walking stops at the first fully opaque layer — nothing below it shows.
+      var n=el, stack=[];
+      while(n&&n.nodeType===1){
+        var st=getComputedStyle(n), bi=st.backgroundImage, done=false;
+        if(bi&&bi!=='none'){
+          if(/url\\(/i.test(bi)) return null;            // unsamplable — do not guess
+          var gs=stopsOf(bi); if(gs.length) stack.push({g:gs});
+        }
+        var c=parse(st.backgroundColor);
+        if(c){ stack.push({c:c}); if(c.a>=0.999) done=true; }
+        if(done) break;
+        n=n.parentElement;
+      }
+      var bases=[[255,255,255]];
+      for(var i=stack.length-1;i>=0;i--){
+        var layer=stack[i], next=[];
+        for(var j=0;j<bases.length;j++){
+          if(layer.c) next.push(over(layer.c, bases[j]));
+          else for(var k=0;k<layer.g.length;k++) next.push(over(layer.g[k], bases[j]));
+        }
+        bases = next.length>16 ? next.slice(0,16) : next;   // a stop set per layer stays bounded
+      }
+      return bases;
+    }
     var cc=0, seen={};
     Array.prototype.slice.call(document.querySelectorAll('p,li,span,a,h1,h2,h3,h4,td,label,button')).forEach(function(el){
       if(cc>=CAP||!vis(el))return;
       if(!Array.prototype.some.call(el.childNodes,function(n){return n.nodeType===3&&n.textContent.trim();}))return;
-      var st=getComputedStyle(el), fg=parse(st.color); if(!fg)return; var b=bg(el);
-      var L1=lum(fg)+0.05, L2=lum(b)+0.05, ratio=L1>L2?L1/L2:L2/L1;
+      var st=getComputedStyle(el), fg=parse(st.color); if(!fg)return;
+      var cands=grounds(el); if(!cands)return;
+      // Over a gradient the ratio varies across the run of text; the worst stop is the one that has
+      // to clear AA, and it is the number worth reporting. Translucent text is painted onto each
+      // candidate ground first — WCAG measures what is on the screen, not the declared colour.
+      var ratio=Infinity;
+      for(var i=0;i<cands.length;i++){
+        var L1=lum(over(fg,cands[i]))+0.05, L2=lum(cands[i])+0.05, rr=L1>L2?L1/L2:L2/L1;
+        if(rr<ratio) ratio=rr;
+      }
       var fs=parseFloat(st.fontSize), bold=(+st.fontWeight)>=700, large=(fs>=24||(fs>=18.66&&bold));
       var min=large?3:4.5;
-      if(ratio<min){ var k=sel(el); if(seen[k])return; seen[k]=1; out.push({check:'low-contrast',severity:'medium',title:'Text below AA contrast',detail:'ratio '+ratio.toFixed(2)+':1 (min '+min+':1)',selector:k,section:secOf(el),value:ratio.toFixed(2)}); cc++; }
+      if(ratio<min){ var k=sel(el); if(seen[k])return; seen[k]=1; out.push({check:'low-contrast',severity:'medium',title:'Text below AA contrast',detail:'ratio '+ratio.toFixed(2)+':1 (min '+min+':1)'+(cands.length>1?' at the weakest gradient stop':''),selector:k,section:secOf(el),value:ratio.toFixed(2)}); cc++; }
     });
   }
   return out;
@@ -679,4 +761,4 @@ async function renderPass(pageUrls, { screensDir, sampleN = 12, viewports = null
 
 // sweepViewport + CWV_INIT are exported for render-honesty.test.js: the "did it actually run?"
 // contract is the thing under test, so it has to be reachable without driving a whole audit.
-module.exports = { renderPass, VIEWPORTS, DEVICES, BREAKPOINTS, UA, contextOptionsFor, groupKeyOf, FONT_RULE, sweepViewport, CWV_INIT, AXE_AVAILABLE: !!AXE_SRC };
+module.exports = { renderPass, SWEEP, VIEWPORTS, DEVICES, BREAKPOINTS, UA, contextOptionsFor, groupKeyOf, FONT_RULE, sweepViewport, CWV_INIT, AXE_AVAILABLE: !!AXE_SRC };

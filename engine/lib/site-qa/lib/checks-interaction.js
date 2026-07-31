@@ -47,7 +47,17 @@ function mk(ruleId, check, section, detail, url, value, tag, at) {
 
 // Parse interactive elements with a stack (reliable nesting + form membership; regex-per-tag for attrs).
 function interactionCheck(ctx) {
-  const html = ctx.html || '';
+  // Script bodies, style bodies and comments are not document markup. This scan keeps a stack of
+  // open interactive elements across the raw HTML, so a single '<button …>' written inside a JS
+  // string or a code comment never closes, and every real control after it reports as nested inside
+  // a control that does not exist. Measured on a real build: one such tag in a template comment sat
+  // 38 KB above a modal close button and cost the Accessibility suite 4 points that no page edit
+  // could recover. The same scan drives the LINK-006..009 rules, where a template-string
+  // <a href="#"> is likewise not a dead link on the page.
+  const html = String(ctx.html || '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '<script></script>')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '<style></style>')
+    .replace(/<!--[\s\S]*?-->/g, '');
   if (!ctx.isHtml || !html) return [];
   const out = [];
   const push = (f) => { if (out.length < CAP) out.push(f); };

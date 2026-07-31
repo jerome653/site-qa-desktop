@@ -35,9 +35,17 @@ function stabilityPageChecks(ctx) {
   // FORM-002 field semantics — email/tel/url inputs with the wrong type; password without autocomplete
   const inputs = [...html.matchAll(/<input\b[^>]*>/gi)].map(m => m[0]);
   const semProblems = [];
+  // Types that cannot take typed text, so "this should be type=tel/email/url" is not an instruction
+  // anyone can follow — for these the type IS the field's function and changing it breaks the form.
+  // A hidden field named phone_country (the ISO code a phone widget writes back) and a radio pair
+  // named website_has ("do you have a website?") both matched the name patterns below and were told
+  // to become text-entry fields. Password stays in scope: it is a text-entry field, and its finding
+  // is about autocomplete, not type.
+  const NON_TEXT = new Set(['hidden', 'radio', 'checkbox', 'range', 'file', 'submit', 'button', 'reset', 'image', 'color']);
   for (const inp of inputs) {
     const type = (inp.match(/type\s*=\s*["']([^"']+)["']/i) || [, ''])[1].toLowerCase();
     const name = (inp.match(/(?:name|id|autocomplete)\s*=\s*["']([^"']+)["']/i) || [, ''])[1].toLowerCase();
+    if (NON_TEXT.has(type)) continue;
     if (/e-?mail/.test(name) && type !== 'email') semProblems.push({ id: 'input[email]', section: 'field semantics', value: `type="${type || 'text'}" should be email` });
     else if (/(^|_|-)(tel|phone)/.test(name) && type !== 'tel') semProblems.push({ id: 'input[tel]', section: 'field semantics', value: `type="${type || 'text'}" should be tel` });
     else if (/url|website/.test(name) && type !== 'url') semProblems.push({ id: 'input[url]', section: 'field semantics', value: `type="${type || 'text'}" should be url` });
