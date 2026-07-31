@@ -82,6 +82,25 @@ const PASS_LABEL = {
   // granular checks already report this suite honestly, so this row is deleted rather than downgraded
   // to "not checked": the headers ARE checked, just not by a roll-up. Do not re-add a label here
   // unless the check that emits it actually runs.
+  // ── SEVEN CHECKS THAT RAN CLEAN AND SAID NOTHING ────────────────────────────────────────────────
+  // A row is only emitted for a clean check when it has a label here. These seven had none, so a check
+  // that ran over 92 pages and found nothing produced NO ROW AT ALL — and the Content & SEO card, which
+  // maps rows to cards, correctly found nothing and printed "NOT RUN". Measured on a real report:
+  // coverage said seo-index and seo-hreflang were `verified: true, attempted: 92, errored: 0` and their
+  // rules were DECLARED EVALUATED (so the score banked them), while the screen told the operator they
+  // had not run. The declaration and the screen disagreed, and the screen was wrong.
+  //
+  // This is the same defect version.js 2.5.0 records fixing for the other eight SEO checks; these are
+  // the ones left behind because they never had a label to begin with.
+  //
+  // THE BAR THIS FILE SETS FOR ADDING ONE (see the security-headers note below — a label there printed
+  // a green tick for a check that could never emit it): a label is only legitimate if the check
+  // PROVABLY RUNS. Verified before adding, across the stored corpus: all seven are `verified: true`
+  // with attempted > 0 and errored 0 in 35–37 of 61 runs — every run whose suite was not skipped.
+  'seo-hreflang': 'hreflang annotations are valid', 'seo-index': 'Indexability signals agree',
+  'seo-content': 'Content depth and readability are adequate',
+  'stb-dup-id': 'No duplicate element ids', 'stb-dom': 'DOM size within budget',
+  'stb-form': 'Form fields carry valid semantics', 'stb-uri': 'mailto: / tel: links are valid',
   '404-config': 'Unknown URLs return a proper 404',
   'render-blocking': 'No render-blocking resources in <head>', 'mobile-web': 'Mobile web-app metadata present', 'privacy-links': 'Privacy / cookie signals present', 'anchor-target': 'In-page anchor links resolve',
   'interactive-link': 'All links have working targets', 'interactive-control': 'Interactive controls are wired', 'interactive-nesting': 'No nested or disabled-but-active controls',
