@@ -575,6 +575,11 @@ function appPage() {
   .opts label{display:flex;align-items:center;gap:6px}
   .note{font-size:11.5px;color:var(--ink-faint);margin:12px 0 0;line-height:1.6}.note b{color:var(--ink-soft);font-weight:640}
   .status{font-family:var(--mono);font-size:13px;color:var(--ink-soft);min-height:22px;margin-top:14px}
+  /* A number that explains itself on hover. Dotted underline is the long-standing convention for
+     'there is more here', and help cursor confirms it — without it the title attribute is invisible
+     and the explanation may as well not exist. */
+  .numx{border-bottom:1px dotted var(--ink-faint);cursor:help}
+  .numx:hover{color:var(--ink);border-bottom-color:var(--brand)}
   .status .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line-strong);border-top-color:var(--brand);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-1px;margin-right:8px}
   @keyframes sp{to{transform:rotate(360deg)}}
   .pbar{height:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:99px;overflow:hidden;display:none;margin-top:12px}.pbar.on{display:block}
@@ -1186,7 +1191,7 @@ function appPage() {
       if(saveAs)$('a-status').textContent='Saving this scan as reference “'+saveAs+'”…';
       stream('/api/run',{url:url,maxPages:+$('a-max').value||1,render:$('a-render').checked,viewports:vps,save:saveAs,excludeRules:SCOPE_EXCLUDED},'a',function(m){
         if(!m.ok){$('a-status').textContent='Scan failed: '+(m.error||'unknown');return;}
-        var q=(m.quality!=null?' · quality '+m.quality:'');
+        var q=(m.quality!=null?' · '+numx('quality '+m.quality+'/100',WHY_QUALITY):'');
         // A de-scoped run must never read as a whole one, here either — not just in the report.
         var sc=(m.scopedOut?' · <b style="color:var(--brand)">PARTIAL: quality scored on '+((m.scorableTotal||0)-m.scopedOut)+'/'+m.scorableTotal+' checks</b>':'');
         // A section that did not run is named in the status line, not folded into the check count. The
@@ -1198,7 +1203,7 @@ function appPage() {
         // before forwarding the report. The engine refuses to score a site it did not see; so does this.
         if(m.score==null){var rm=(m.reach&&m.reach.message)?' — '+m.reach.message:'';
           $('a-status').innerHTML='Done — <b style="color:var(--fail)">'+(m.verdict||'COULD NOT AUDIT')+'</b> · not scored'+rm+' · saved to history';}
-        else $('a-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · pass '+m.tally.pass+' / warn '+m.tally.warn+' / fail '+m.tally.fail+' / manual '+m.tally.manual+' · saved to history'+sc;
+        else $('a-status').innerHTML='Done — '+m.verdict+' · '+numx(m.score+'% of checks passed',WHY_SCORE)+q+' · pass '+m.tally.pass+' / warn '+m.tally.warn+' / fail '+m.tally.fail+' / manual '+m.tally.manual+' · saved to history'+sc;
         var cmp='';if(m.comparison)cmp=' · <a href="/compare/'+m.id+'" target="_blank">open comparison ↗</a>';$('a-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full report</a>'+cmp;
         showReport('a','/report/'+m.id,'report');});}
 
@@ -1240,13 +1245,27 @@ function appPage() {
     // How many checks this run will actually score. Mirrors seoExcluded's reading of the same state.
     function seoOnCount(){var single=seoScope()==='page';
       return seoCatAll().filter(function(c){return SEO_OFF.indexOf(c[0])<0&&!(single&&c[2]);}).length;}
+    // ── THE TWO NUMBERS EXPLAIN THEMSELVES ────────────────────────────────────────────────────────
+    // A run reported "score 50 · quality 84 · PASSED WITH WARNINGS". Three signals, no statement of
+    // what any of them measures, and two of them apparently contradicting. The constitution requires
+    // finding -> rule -> evidence -> deduction -> score to be VISIBLE (CHARTER, Explainability), and a
+    // reader who cannot tell which number to act on discounts both.
+    // Presentation only: the scoring model is FROZEN (CERTIFICATION §1a) and nothing here recomputes it.
+    var WHY_SCORE='Share of GRADED checks that passed — pass divided by (pass + warn + fail). Manual '
+      +'checks and checks that never ran are excluded entirely, never counted as passes. Every check '
+      +'weighs the same here, so a page with many small warnings scores low even when nothing is broken.';
+    var WHY_QUALITY='SGEN Quality Score, 0-100: registry-weighted over the rules that PROVABLY RAN. '
+      +'Each suite carries a weight and each rule its own deduction, so one critical failure costs far '
+      +'more than ten low-severity ones. That weighting is why it can sit well above the checks-passed '
+      +'percentage — and a rule that did not run leaves BOTH sides of the fraction rather than scoring 100.';
+    function numx(txt,why){return '<span class="numx" title="'+sEsc(why)+'">'+txt+'</span>';}
     function runSeo(){var url=$('s-url').value.trim();if(!url){$('s-status').textContent='Enter a site URL.';return;}
       var scope=seoScope(),ex=seoExcluded();
       if(!seoOnCount()){$('s-status').innerHTML='Every check is switched off in <b>Settings</b> — an audit with nothing ticked would score nothing. Open the gear and include at least one.';return;}
       $('s-lead').innerHTML='';
       stream('/api/seo',{url:url,scope:scope,maxPages:+$('s-max').value||150,render:false,excludeRules:ex},'s',function(m){
         if(!m.ok){$('s-status').textContent='Content & SEO audit failed: '+(m.error||'unknown');return;}
-        var q=(m.quality!=null?' · Content &amp; SEO quality '+m.quality:'');
+        var q=(m.quality!=null?' · '+numx('Content &amp; SEO quality '+m.quality+'/100',WHY_QUALITY):'');
         var sc=(m.scope==='site'?'whole site — '+m.pagesAudited+' page'+(m.pagesAudited===1?'':'s')+' audited':'this page only');
         // A ceiling that BIT is stated, never swallowed: a silent cap makes a partial audit look whole.
         var cap=m.capped?' · <b style="color:var(--warn)">STOPPED AT '+m.ceiling+' PAGES — '+m.notReached+' more were listed and not audited</b>':'';
@@ -1256,7 +1275,7 @@ function appPage() {
         // readable has no score to report, and must not print one.
         if(m.score==null){var rm2=(m.reach&&m.reach.message)?' — '+m.reach.message:'';
           $('s-status').innerHTML='Done — <b style="color:var(--fail)">'+(m.verdict||'COULD NOT AUDIT')+'</b> · not scored'+rm2+' · saved to history';}
-        else $('s-status').innerHTML='Done — '+m.verdict+' · score '+m.score+'%'+q+' · <b>scope: '+sc+'</b>'+cap+na+xc+' · saved to history';
+        else $('s-status').innerHTML='Done — '+m.verdict+' · '+numx(m.score+'% of checks passed',WHY_SCORE)+q+' · <b>scope: '+sc+'</b>'+cap+na+xc+' · saved to history';
         $('s-link').innerHTML='<a href="/report/'+m.id+'" target="_blank">↗ Open full Content &amp; SEO report</a>';
         seoLead(m);
         showReport('s','/report/'+m.id,'report');});}

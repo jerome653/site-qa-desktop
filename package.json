@@ -1,7 +1,7 @@
 {
   "name": "sgen-site-qa-desktop",
   "productName": "Site Audit",
-  "version": "6.2.0",
+  "version": "6.2.1",
   "description": "Site Audit — developer-first website quality auditing, as a desktop app.",
   "main": "main.js",
   "author": "SGEN",

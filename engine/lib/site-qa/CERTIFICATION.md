@@ -3,18 +3,18 @@
 > A living airworthiness/ISO-style record of the **current production state of the product** (not a session log).
 > Rule: **nothing is `PASS` without an evidence-ledger entry.** `Production Ready = every Production Gate PASS`.
 > Regenerate the Evidence Ledger by running the gates; update this file only when state changes.
-> Last state change: 2026-07-29 (release provenance restored; release gate added; suite 52 -> 58).
+> Last state change: 2026-07-31 (indexability + Discovery suite; product renamed to Site Audit; suite 58 -> 66).
 
 ---
 
 ## 1 · Product Identity
 | Field | Value |
 |---|---|
-| Product | SGEN Site Auditor |
-| Engine version | 2.4.0 |
-| Registry version | 1.13.0 (142 rules · 13 suites = 10 scored + 3 advisory/weight-0) |
-| Report version | 1.4.0 |
-| Package version | 4.5.0 (engine/package.json — agrees with release-metadata.json packageVersion) |
+| Product | Site Audit (was: SGEN Site Auditor / SGEN Site QA — renamed 6.2.0) |
+| Engine version | 4.1.0 |
+| Registry version | 1.15.0 (161 rules · 14 suites = 10 scored + 4 advisory/weight-0) |
+| Report version | 1.9.1 |
+| Package version | 6.2.1 (engine/package.json — agrees with release-metadata.json packageVersion; enforced by the release gate) |
 | Schema version | 1.0 (rule · finding · report-summary, frozen) |
 | **Certification status** | **PRODUCTION (GA)** — all 10 gates PASS; no High/Critical debt; live-validated end-to-end (E9, real scans) |
 | **Maturity milestone** | **GA** — production certified; live-validated 2026-07-08 (real scan of example.com + visual-match example.com vs example.org; 3 integration bugs found live + fixed) |
@@ -59,13 +59,13 @@ Objective release gates. **Production = ALL PASS.** No interpretation.
 | Gate | State | Definition of PASS |
 |---|---|---|
 | Architecture | ✅ PASS | registry sole authority + native rule IDs + no bridges (TD-001 CLOSED, matchTitle 0 refs) — awaiting WP-002 Freeze seal |
-| Registry | ✅ PASS | 142 rules, invariants enforced (weights total 100), 100% registry tests |
+| Registry | ✅ PASS | 161 rules, invariants enforced (weights total 100), 100% registry tests |
 | Audit Engine | ✅ PASS | every rule deterministic, registry-driven scoring, parity holds |
 | History | ✅ PASS | Scan Store (WP-003, E11) + Finding Store (WP-004, E12) + Timeline Engine (WP-005, E13) + Regression Engine (WP-006, E14): append-only stores · lifecycle · lineage · diff · timeline · policy gate · integrity · recovery — all reproducible |
 | Reporting | ✅ PASS | HTML+score+drill-down+screenshots (frozen `report.js`) + exec-summary + scan-diff renderers (`reporting/`, E17). PDF = browser print of the self-contained HTML (no separate engine) |
 | Performance | ✅ PASS | measured @ 10k scans / 10k findings (E7): scan save 4.4 ms · verify 0.5 ms/scan · rebuild 2.7 ms/scan · timeline 0.6 ms/scan · gate 16 ms |
 | Security | ✅ PASS | deterministic offline self-audit (E8): 6 threat classes — dynamic-exec · network-in-core · secrets · path-traversal · proto-pollution · integrity — 0 findings across 35 core files |
-| Testing | ✅ PASS | one-command run (`testing/run-all.js`) — **58 suites** green; built-in V8 line coverage **97.9% ≥ 95%** (E6). Includes the repository-integrity and release-provenance gates, and the security self-audit, which was previously written but never registered |
+| Testing | ✅ PASS | one-command run (`testing/run-all.js`) — **66 suites** green; built-in V8 line coverage **97.9% ≥ 95%** (E6). Includes the repository-integrity and release-provenance gates, and the security self-audit, which was previously written but never registered |
 | Documentation | ✅ PASS | ARCHITECTURE · CHARTER · ROADMAP · CERTIFICATION · CHANGELOG · ADR-0001/0002 + DEVELOPER · OPERATIONS · TROUBLESHOOTING · UPGRADE guides + capabilities/checks/integration docs |
 | Operations | ✅ PASS | config loader + tamper-evident backup/verify/restore with restored-store integrity (`ops/`, E16) |
 | **PRODUCTION** | **✅ GA** | all 10 gates PASS · no High/Critical debt · Freeze held · **E9 live-validated** (real scan of example.com + visual-match example.com vs example.org, 2026-07-08). Ongoing: production-scale load tuning + wider real-site validation (operational, not a gate) |

@@ -67,6 +67,28 @@ console.log('Version Authority — D6 — test suite\n');
 (function generated() {
   const v = VA.verifyReleaseMetadata();
   ok(v.ok, `generated: release-metadata.json agrees with the authority${v.ok ? '' : ' — drift ' + JSON.stringify(v.mismatches)}`);
+
+  // ── CERTIFICATION.md IS DERIVED TOO ────────────────────────────────────────────────────────────
+  // It answers "can this ship", and it drifted for TWO MAJOR VERSIONS with nothing to catch it: the
+  // Product Identity table read engine 2.4.0 / registry 1.13.0 / 142 rules / package 4.5.0 while the
+  // product was 4.1.0 / 1.15.0 / 161 / 6.2.0. A signed record describing a product nobody ships is
+  // worse than no record. Same guard release-metadata.json has had since D6, one document along.
+  const cert = VA.verifyCertification();
+  ok(cert.ok, `certification: CERTIFICATION.md identity agrees with the authority${cert.ok ? '' : ' — drift ' + JSON.stringify(cert.mismatches)}`);
+
+  // NEGATIVE CONTROL. A verifier that has only ever answered "clean" is not evidence — this one is
+  // shown reporting DIRTY on a copy staled exactly the way the real file was, so a future refactor
+  // that quietly neuters it fails here rather than passing silently forever.
+  {
+    const os_ = require('os'), path_ = require('path'), fs_ = require('fs');
+    const tmp = path_.join(os_.tmpdir(), 'cert-negctl-' + process.pid + '.md');
+    fs_.writeFileSync(tmp, fs_.readFileSync(VA.CERTIFICATION_PATH, 'utf8')
+      .replace(/\| Engine version \| [\d.]+ \|/, '| Engine version | 2.4.0 |'));
+    const dirty = VA.verifyCertification(tmp);
+    fs_.unlinkSync(tmp);
+    ok(!dirty.ok && dirty.mismatches.some(m => m.key === 'engineVersion'),
+      'certification: the verifier REPORTS DIRTY on a deliberately stale copy (negative control)');
+  }
   const file = VA.readReleaseMetadata();
   eq(file.contractVersion, version.CONTRACT_VERSION, 'generated: contractVersion — was "1.0.0" against an authority of "1.0"; the derived artifact now follows');
   eq(file.engineVersion, version.ENGINE_VERSION, 'generated: engineVersion derived');

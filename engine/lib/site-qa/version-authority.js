@@ -75,6 +75,70 @@ function writeReleaseMetadata(file = RELEASE_METADATA_PATH) {
   return next;
 }
 
+// ── CERTIFICATION.md IS A DERIVED ARTIFACT TOO ───────────────────────────────────────────────────
+// It is the record that answers "can this ship", and it drifted for TWO MAJOR VERSIONS without a
+// single test noticing: its Product Identity table claimed engine 2.4.0 / registry 1.13.0 / 142 rules
+// / package 4.5.0 while the product was 4.1.0 / 1.15.0 / 161 / 6.2.0. A certification record that
+// describes a product which no longer exists is worse than no record — it asserts gates against
+// something nobody is shipping, and it does so with the authority of a signed document.
+//
+// release-metadata.json has been guarded this way since D6; this closes the same hole one document
+// along. Same discipline: report FACTS, never rewrite the file. Regenerating a certification record
+// automatically would defeat its purpose — a human states that the gates pass; this only checks the
+// identity block still describes the thing they were stated about.
+//
+// Reads the PRODUCT IDENTITY table specifically, by anchoring on the `| Field | Value |` row. The
+// Architecture Freeze certificate further down carries its own engine/registry/report versions, and
+// those are HISTORY — the state sealed at freeze time — so a naive scan for "Engine version" would
+// match the wrong line and demand that a frozen record be falsified.
+const CERTIFICATION_PATH = path.join(__dirname, 'CERTIFICATION.md');
+
+function readCertificationIdentity(file = CERTIFICATION_PATH) {
+  const text = fs.readFileSync(file, 'utf8');
+  const start = text.indexOf('## 1 · Product Identity');
+  if (start < 0) return null;
+  const end = text.indexOf('\n## ', start + 4);
+  const block = text.slice(start, end < 0 ? text.length : end);
+  const field = (label) => {
+    const m = new RegExp('^\\|\\s*' + label + '\\s*\\|([^|]*)\\|', 'm').exec(block);
+    return m ? m[1].trim() : null;
+  };
+  return {
+    engineVersion: field('Engine version'),
+    reportVersion: field('Report version'),
+    // These two carry prose after the number ("1.15.0 (161 rules · …)", "6.2.0 (engine/package.json …)"),
+    // so the leading version is extracted and the rest is checked separately below.
+    registryVersion: field('Registry version'),
+    packageVersion: field('Package version'),
+  };
+}
+
+// Returns FACTS: which identity fields disagree with the authority. Empty = the record still describes
+// the product it certifies.
+function verifyCertification(file = CERTIFICATION_PATH) {
+  const actual = readCertificationIdentity(file);
+  if (!actual) return { ok: false, mismatches: [{ key: 'Product Identity', expected: 'a "## 1 · Product Identity" section', actual: 'not found' }] };
+  const lead = (s) => (s == null ? null : (String(s).match(/^[\d.]+/) || [null])[0]);
+  const releaseMeta = readReleaseMetadata();
+  const want = {
+    engineVersion: version.ENGINE_VERSION,
+    reportVersion: version.REPORT_VERSION,
+    registryVersion: REGISTRY_VERSION,
+    packageVersion: releaseMeta.packageVersion,
+  };
+  const mismatches = [];
+  for (const [k, v] of Object.entries(want)) {
+    const got = lead(actual[k]);
+    if (got !== v) mismatches.push({ key: k, expected: v, actual: got == null ? null : got });
+  }
+  // The rule COUNT is quoted inside the registry cell; a stale count is the same class of lie.
+  const countInDoc = actual.registryVersion && /\((\d+)\s*rules/.exec(actual.registryVersion);
+  if (countInDoc && Number(countInDoc[1]) !== RULES.length) {
+    mismatches.push({ key: 'ruleCount (quoted in Registry version)', expected: RULES.length, actual: Number(countInDoc[1]) });
+  }
+  return { ok: mismatches.length === 0, mismatches, expected: want, actual };
+}
+
 // ── DRIFT DETECTION ──────────────────────────────────────────────────────────────────────────────
 // Scans the source tree for any file OTHER than version.js that DECLARES one of the authority's
 // streams. Deliberately matches declarations (`X = '…'`, `X: '…'`), not usages — importing a stream is
@@ -107,4 +171,5 @@ module.exports = {
   STREAMS, versionStreams, derivedReleaseMetadata,
   readReleaseMetadata, verifyReleaseMetadata, generateReleaseMetadata, writeReleaseMetadata,
   findDuplicateDeclarations, RELEASE_METADATA_PATH,
+  readCertificationIdentity, verifyCertification, CERTIFICATION_PATH,
 };
