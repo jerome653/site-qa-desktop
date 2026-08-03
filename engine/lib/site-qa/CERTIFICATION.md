@@ -14,7 +14,7 @@
 | Engine version | 4.1.0 |
 | Registry version | 1.15.0 (161 rules · 14 suites = 10 scored + 4 advisory/weight-0) |
 | Report version | 1.9.1 |
-| Package version | 6.2.1 (engine/package.json — agrees with release-metadata.json packageVersion; enforced by the release gate) |
+| Package version | 6.3.0 (engine/package.json — agrees with release-metadata.json packageVersion; enforced by the release gate) |
 | Schema version | 1.0 (rule · finding · report-summary, frozen) |
 | **Certification status** | **PRODUCTION (GA)** — all 10 gates PASS; no High/Critical debt; live-validated end-to-end (E9, real scans) |
 | **Maturity milestone** | **GA** — production certified; live-validated 2026-07-08 (real scan of example.com + visual-match example.com vs example.org; 3 integration bugs found live + fixed) |
