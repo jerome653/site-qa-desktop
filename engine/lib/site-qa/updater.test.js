@@ -71,7 +71,16 @@ has(poll, /version\.txt/, 'the poll reads version.txt — the cheap file, not th
 has(poll, /state: 'available'/, "the poll emits 'available', which is what reaches both the OS and the renderer");
 ok(!/engine\.zip/.test(poll), 'the poll does NOT download — a ~360KB fetch on a timer spends bandwidth on a decision the user has not made');
 ok(!/download\(/.test(poll), 'the poll calls no download()');
-has(poll, /app\.isPackaged/, 'the poll is inert in a dev build, like every other update path');
+// The guard moved from a bare `!app.isPackaged` to IS_DEV when the DEV channel landed: a PACKAGED
+// build launched with SITEAUDIT_DEV=1 is also a dev instance, and the DEV bar promises "engine
+// updates disabled". Assert the intent, then pin IS_DEV's own definition — otherwise this could be
+// satisfied by an IS_DEV that quietly stopped covering an unpackaged build, which is the exact
+// regression the original literal was guarding against.
+has(poll, /IS_DEV/, 'the poll is inert in a dev build, like every other update path');
+const isDevDecl = /const\s+IS_DEV\s*=\s*([^;]+);/.exec(MAIN);
+ok(!!isDevDecl, 'IS_DEV is declared in the main process');
+ok(!!isDevDecl && /!\s*app\.isPackaged/.test(isDevDecl[1]), 'IS_DEV still covers an unpackaged build');
+ok(!!isDevDecl && /SITEAUDIT_DEV/.test(isDevDecl[1]), 'IS_DEV also covers an explicitly-flagged dev run');
 has(poll, /pendingEngine|applyingUpdate|checking/, 'the poll stands down once an update is already in flight');
 has(MAIN, /setInterval\(pollAvailability/, 'the poll is scheduled on an interval');
 has(MAIN, /setTimeout\(pollAvailability/, 'the first poll is delayed — startServer and first paint come first');

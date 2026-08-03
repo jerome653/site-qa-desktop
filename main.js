@@ -29,6 +29,28 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 const Module = require('module');
 
+// ── DEV CHANNEL — a second, fully isolated instance ──────────────────────────────────────────────
+// Development runs against the SAME source tree as the shipped app, which is exactly how a half-
+// finished engine ends up in the app you demo from. So an unpackaged run (npm start) — or any run
+// with SITEAUDIT_DEV=1 — becomes a SEPARATE INSTANCE:
+//   · its own userData root  → its own settings, reports, engine cache, update history
+//   · its own app name       → Windows treats it as a different app (taskbar, single-instance lock)
+//   · engine hot-update OFF  → a dev instance can never overwrite the source you are editing
+//   · a red DEV bar in the UI → so the two are never confused on screen
+// This MUST run before anything reads app.getPath('userData') — the migration below does, and
+// ENGINES_DIR is computed a few lines further down. Setting it here also keeps the one-time
+// "SGEN Site QA" -> "Site Audit" migration pointed at the LIVE root only; a dev run must never
+// move the operator's real data.
+const IS_DEV = !app.isPackaged || process.env.SITEAUDIT_DEV === '1';
+if (IS_DEV) {
+  const devName = 'Site Audit DEV';
+  app.setName(devName);
+  app.setPath('userData', path.join(app.getPath('appData'), devName));
+  process.env.SITEAUDIT_CHANNEL = 'dev';   // the engine reads this to paint the DEV bar
+} else {
+  process.env.SITEAUDIT_CHANNEL = 'live';
+}
+
 // ── ONE-TIME userData MIGRATION — "SGEN Site QA" -> "Site Audit" ─────────────────────────────────
 // Electron derives userData from package.json "productName", so RENAMING THE PRODUCT SILENTLY MOVES
 // THE APP'S ENTIRE DATA ROOT. Everything the operator has lives under it:
@@ -48,6 +70,9 @@ const Module = require('module');
 // — silent data that "vanished" is far worse than a started app with a line in the log.
 (function migrateUserDataOnRename() {
   try {
+    // A DEV instance owns a different root and must never adopt the operator's live history —
+    // migrating into it would move the real data somewhere the shipped app will never look again.
+    if (IS_DEV) return;
     const oldDir = path.join(app.getPath('appData'), 'SGEN Site QA');
     const newDir = app.getPath('userData');
     if (oldDir === newDir) return;            // product name unchanged — nothing to do
@@ -265,7 +290,10 @@ const send = s => { osNotify(s); try { if (win && !win.isDestroyed()) win.webCon
 // autoCheck() early-returns in that mode, so the first announcement from here stands that poll down.
 const AVAIL_POLL_MS = 10 * 60 * 1000;
 async function pollAvailability() {
-  if (!app.isPackaged || checking || pendingEngine || applyingUpdate) return;
+  // IS_DEV, not !isPackaged: a packaged build launched with SITEAUDIT_DEV=1 is still a dev
+  // instance, and the DEV bar promises "engine updates disabled". A promise the code does not keep
+  // is worse than no promise — it would silently swap the engine under work in progress.
+  if (IS_DEV || checking || pendingEngine || applyingUpdate) return;
   try {
     const remote = (await fetchText(FEED_BASE + '/version.txt')).trim();
     const cur = activeEngineDir().version;
@@ -349,7 +377,7 @@ function engineBusy() {
 function wireIpc() {
   ipcMain.handle('app:version', () => activeEngineDir().version);
   ipcMain.handle('update:check', async () => {
-    if (!app.isPackaged) return { state: 'dev', message: 'Updates apply only in the installed build.' };
+    if (IS_DEV) return { state: 'dev', message: 'Updates are disabled on the DEV instance — it runs the engine from source.' };
     return await checkEngineUpdate();
   });
   // legacy channels kept so the existing UI keeps working

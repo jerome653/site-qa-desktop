@@ -33,6 +33,16 @@ const { saveBaseline, loadResult, diff, listBaselines, recordScan, loadLatestRec
 const { renderCompare, renderComparePanel } = require('./lib/site-qa/report-compare');
 const { discoverPages } = require('./lib/migration-qa/crawl');
 const visualMatch = require('./lib/site-qa/visual-match');
+// Setup panel: what THIS machine needs to run a FULL audit. Chromium ships in the installer but
+// Firefox/WebKit are fetched on first launch — without them cross-browser.js:30 returns
+// available:false, audit.js reads it as "engine not installed", and the run STILL prints a score.
+// The gap has to be stated on screen before the report is handed to anyone.
+const setupReadiness = require('./lib/site-qa/setup-readiness');
+// dev|live. Set by the shell (main.js) which also gives a dev run its own userData root. Defaults
+// to 'live' so a bare `node sgen-qa-serve.js` — the documented fast-iteration path — is not
+// mislabelled; the shell is the thing that actually isolates an instance, so it is the thing that
+// gets to declare one.
+const CHANNEL = process.env.SITEAUDIT_CHANNEL === 'dev' ? 'dev' : 'live';
 const { foldVisual } = require('./lib/site-qa/visual-match/fold');   // VIS-001/002/003 -> scorable suite (pipeline/timeline)
 const { grade: gradeVisual, PROFILE_NAMES: VIS_PROFILES } = require('./lib/site-qa/visual-match/grade'); // v5 severity-graded fidelity + tiers
 // Per-tool weight map for Visual Comparison's Quality Score. Its VIS suite is weight-0 in the global
@@ -719,6 +729,39 @@ function appPage() {
   .logmut{color:var(--ink-faint);font-size:11.5px}
   .logrel ul{margin:0;padding-left:18px}
   .logrel li{font-size:12.5px;color:var(--ink-soft);line-height:1.65;margin:2px 0}
+  /* ---- Setup / readiness panel -------------------------------------------------------------
+     The verdict banner is the only element here that carries colour weight, because it is the one
+     line an operator will read before deciding to trust a report. Amber is a real state, not a
+     softened green: "an audit will run but these checks will not happen". */
+  .su-verdict{border-radius:10px;padding:13px 15px;margin:2px 0 4px;border:1px solid}
+  .su-verdict b{display:block;font-size:14px;letter-spacing:-.01em;margin-bottom:3px}
+  .su-verdict span{font-size:12px;line-height:1.6;display:block}
+  .su-ok{background:color-mix(in srgb,var(--ok) 9%,transparent);border-color:color-mix(in srgb,var(--ok) 38%,transparent);color:var(--ink)}
+  .su-part{background:color-mix(in srgb,var(--warn) 12%,transparent);border-color:color-mix(in srgb,var(--warn) 45%,transparent);color:var(--ink)}
+  .su-no{background:var(--fail-bg);border-color:var(--fail-line);color:var(--ink)}
+  .su-row{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+  .su-row:last-child{border-bottom:0}
+  .su-pill{flex:none;margin-top:1px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-radius:5px;padding:2px 7px;color:#fff;min-width:66px;text-align:center}
+  .su-p-ready{background:var(--ok)} .su-p-degraded{background:var(--warn)} .su-p-blocked{background:var(--fail)}
+  .su-p-info{background:var(--ink-faint)}
+  .su-main{min-width:0;flex:1}
+  .su-label{font-size:13px;font-weight:650;color:var(--ink)}
+  .su-impact{font-size:12px;color:var(--ink-soft);line-height:1.6;margin-top:3px}
+  .su-fix{font-size:11.5px;color:var(--ink-faint);line-height:1.55;margin-top:4px}
+  .su-fix code{font-family:var(--mono);font-size:11px;background:var(--line);border-radius:4px;padding:1px 5px}
+  .su-meta{font-family:var(--mono);font-size:11px;color:var(--ink-faint);line-height:1.7;margin-top:4px;word-break:break-all}
+  /* ---- DEV channel bar --------------------------------------------------------------------
+     Full-width and above everything, because the failure it prevents is demoing from — or shipping
+     — the instance you were mid-edit on. A small corner badge is exactly what a person stops seeing
+     after a day; a bar that displaces the whole UI is not. */
+  .devbar{display:flex;align-items:center;gap:10px;padding:6px 20px;background:repeating-linear-gradient(135deg,#7a1020,#7a1020 12px,#8d1526 12px,#8d1526 24px);color:#fff;font-size:11.5px;letter-spacing:.01em}
+  .devbar b{font-weight:800;font-size:11px;letter-spacing:.12em;background:#fff;color:#7a1020;border-radius:4px;padding:2px 7px;flex:none}
+  .devbar span{opacity:.92;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* A dot on the Setup button so a degraded machine is visible WITHOUT opening the panel — the
+     failure this whole feature exists for is one nobody goes looking for. */
+  .setup-dot{display:none;width:7px;height:7px;border-radius:50%;margin-left:6px;vertical-align:1px}
+  .setup-dot.on-part{display:inline-block;background:var(--warn)}
+  .setup-dot.on-no{display:inline-block;background:var(--fail)}
   .help-btn:hover{color:var(--ink);border-color:var(--brand)}
   /* ---- per-tool settings: gear + popup -------------------------------------------------------
      The gear lives in each tool's PANEL HEADER, not in the tab bar: .tabbar items are <button>s and
@@ -815,10 +858,14 @@ function appPage() {
   .rghead .rgc{background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:0 7px;font-size:10px;color:var(--ink-soft)}
   </style></head><body>
   <header class="topbar">
+    ${CHANNEL === 'dev' ? `<div class="devbar" title="Development instance — separate data, engine updates disabled">
+      <b>DEV</b><span>development instance &middot; separate data &middot; engine updates disabled &middot; nothing here is what you ship</span>
+    </div>` : ''}
     <div class="top">
       <div class="brand"><span class="mk"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M5 12.5l4.2 4.2L19 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="bt">Site Audit<span class="bv" id="brand-ver"></span></span></div>
       <div class="hdr-actions">
         <div class="upd" id="upd" style="display:none"><button class="upd-btn" id="upd-btn" onclick="updClick()">Check for updates</button><span class="upd-st" id="upd-st"></span></div>
+        <button class="help-btn" id="setup-btn" onclick="openSetup()" title="What this machine needs to run a FULL audit">Setup<span class="setup-dot" id="setup-dot"></span></button>
         <button class="help-btn" id="logs-btn" onclick="openLog()" title="Version log &amp; what changed">Logs</button>
         <button class="help-btn" id="manual-btn" onclick="openManual()" title="Open the user manual">Manual</button>
         <button class="help-btn" id="help-btn" onclick="openWalk()" title="Reopen the walkthrough">? Help</button>
@@ -1036,6 +1083,15 @@ function appPage() {
     <div class="logcard">
       <div class="loghead"><b>Version log &amp; updates</b><div class="loghead-r"><button class="logdiag" onclick="genDiag()">Generate diagnostics</button><button class="logx" onclick="closeLog()" aria-label="Close">&#10005;</button></div></div>
       <div class="logbody" id="logbody"></div>
+    </div>
+  </div>
+
+  <!-- setup / readiness — reuses the log modal's shell deliberately: same card, same scroll, no
+       second set of styles to drift. Opened from the Setup button, and probed fresh every time. -->
+  <div id="setupmodal" class="logmodal" onclick="if(event.target===this)closeSetup()">
+    <div class="logcard">
+      <div class="loghead"><b>Setup &mdash; what a full audit needs</b><div class="loghead-r"><button class="logdiag" onclick="openSetup()">Re-check</button><button class="logx" onclick="closeSetup()" aria-label="Close">&#10005;</button></div></div>
+      <div class="logbody" id="setupbody"></div>
     </div>
   </div>
 
@@ -1474,6 +1530,45 @@ function appPage() {
       }).catch(function(){ b.innerHTML='<div class="logmut">Could not load version notes.</div>'; });
     }
     function closeLog(){ $('logmodal').classList.remove('on'); }
+    // ---- Setup / readiness ------------------------------------------------------------------
+    // Renders /api/setup. The verdict banner leads because it is the one line that decides whether
+    // a report produced right now can be trusted as complete.
+    function suRow(r){
+      var cls='su-p-'+r.status;
+      var h='<div class="su-row"><span class="su-pill '+cls+'">'+logEsc(r.status)+'</span><div class="su-main">';
+      h+='<div class="su-label">'+logEsc(r.label)+'</div>';
+      if(r.impact) h+='<div class="su-impact">'+logEsc(r.impact)+'</div>';
+      if(r.fix) h+='<div class="su-fix">'+logEsc(r.fix)+'</div>';
+      if(r.note) h+='<div class="su-fix">Reported: '+logEsc(r.note)+'</div>';
+      return h+'</div></div>';
+    }
+    function openSetup(){
+      var m=$('setupmodal'); m.classList.add('on');
+      var b=$('setupbody'); b.innerHTML='<div class="logmut">Checking this machine…</div>';
+      fetch('/api/setup').then(function(r){return r.json();}).then(function(d){
+        setupDot(d.verdict);
+        var h='<div class="su-verdict su-'+logEsc(d.tone)+'"><b>'+logEsc(d.headline)+'</b><span>'+logEsc(d.scope)+'</span></div>';
+        h+='<div class="logsec">What a full audit needs</div>';
+        (d.rows||[]).forEach(function(r){ h+=suRow(r); });
+        if((d.advisory||[]).length){ h+='<div class="logsec">Advisory — does not affect auditing</div>';
+          (d.advisory||[]).forEach(function(r){ h+=suRow(r); }); }
+        h+='<div class="logsec">This machine</div><div class="su-meta">engine '+logEsc(d.engine&&d.engine.current||'?')+
+           ' · feed '+logEsc((d.engine&&d.engine.feed)||'unreachable')+'<br>browsers: '+logEsc(d.browsersPath||'?')+'</div>';
+        b.innerHTML=h;
+      }).catch(function(){ b.innerHTML='<div class="logmut">Could not read setup state. The engine may still be starting.</div>'; });
+    }
+    function closeSetup(){ $('setupmodal').classList.remove('on'); }
+    // Flag a degraded machine on the button itself. Silent incompleteness is the entire risk here:
+    // nobody opens a Setup panel to discover a problem they do not know they have.
+    function setupDot(v){
+      var d=$('setup-dot'); if(!d) return;
+      d.className='setup-dot'+(v==='partial'?' on-part':(v==='blocked'?' on-no':''));
+      var b=$('setup-btn');
+      if(b) b.title = v==='full' ? 'Setup — this machine can run a full audit'
+                    : v==='partial' ? 'Setup — some checks are unavailable; reports will be incomplete'
+                    : v==='blocked' ? 'Setup — an audit cannot run on this machine' : 'What this machine needs to run a FULL audit';
+    }
+    try{ fetch('/api/setup').then(function(r){return r.json();}).then(function(d){ setupDot(d.verdict); }).catch(function(){}); }catch(e){}
     function openManual(){ try{ window.open('/manual','_blank'); }catch(e){} }
     // Diagnostics — pull a detailed Markdown report from the engine; user downloads/copies it to send for review.
     function genDiag(){
@@ -1486,7 +1581,7 @@ function appPage() {
     }
     function dlDiag(){ if(!window.__diag)return; try{var blob=new Blob([window.__diag.md],{type:'text/markdown'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=window.__diag.name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1500);}catch(e){} }
     function copyDiag(btn){ if(!window.__diag)return; try{navigator.clipboard.writeText(window.__diag.md).then(function(){if(btn){var t=btn.textContent;btn.textContent='Copied \\u2713';setTimeout(function(){btn.textContent=t;},1500);}});}catch(e){} }
-    document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeLog(); });
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeLog(); closeSetup(); } });
     // "tour seen" persists via the Electron shell (window.sgenApp) when present - the app runs on a fresh
     // random port each launch so page localStorage never carries over; browser build falls back to localStorage.
     function markTourSeen(){ try{localStorage.setItem(WK_KEY,'1');}catch(e){} if(window.sgenApp&&sgenApp.setFlag){try{sgenApp.setFlag(WK_KEY,'1');}catch(e){}} }
@@ -2219,6 +2314,16 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/api/settings') return send(res, 200, 'application/json', JSON.stringify({ ok: true, tools: readSettings().tools, file: SETTINGS_FILE }));
     if (req.method === 'POST' && p === '/api/settings') return apiSettings(req, res, await readBody(req));
     if (req.method === 'GET' && p === '/api/feed-version') return send(res, 200, 'application/json', JSON.stringify({ version: FEED_VERSION, current: SELF_VER }));
+    // Probed live on every open, never cached: the whole point is that Firefox/WebKit arrive AFTER
+    // the first launch, so a value cached at boot would answer for a machine that no longer exists.
+    if (req.method === 'GET' && p === '/api/setup') {
+      const state = setupReadiness.probe({ feedReachable: !!FEED_VERSION });
+      const out = setupReadiness.compute(state);
+      out.engine = { current: SELF_VER || 'base (bundled with the app)', feed: FEED_VERSION || null };
+      out.browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH || '(default)';
+      out.channel = CHANNEL;
+      return send(res, 200, 'application/json', JSON.stringify(out));
+    }
     if (req.method === 'GET' && p === '/manual') return send(res, 200, 'text/html; charset=utf-8', MANUAL_HTML || '<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:44px;color:#333">The user manual is not available in this build.</body>');
     if (req.method === 'GET' && p === '/api/diagnostics') { const md = buildDiagnostics(); const fn = 'sgen-site-qa-diagnostics-' + (SELF_VER || 'base') + '-' + new Date().toISOString().slice(0, 10) + '.md'; return send(res, 200, 'application/json', JSON.stringify({ markdown: md, filename: fn })); }
 

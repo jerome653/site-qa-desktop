@@ -9,7 +9,9 @@
   "private": true,
   "scripts": {
     "start": "electron .",
+    "dev": "electron .",
     "smoke": "node smoke.js",
+    "test": "node engine/lib/site-qa/testing/run-all.js",
     "dist": "electron-builder --win nsis --x64",
     "publish": "electron-builder --win nsis --x64 --publish always"
   },

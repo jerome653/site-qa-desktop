@@ -35,6 +35,9 @@ const SUITES = [
   'blocking-overlay.test.js',
   'contract.test.js',
   'readiness.test.js',
+  // Setup panel — pins that a machine missing Firefox/WebKit can never render as READY. Same class
+  // of lie as readiness.js's LAUNCH-READY pill, but silent: the audit still prints a score.
+  'setup-readiness.test.js',
   'font-checks.test.js',
   // v5 reference-fidelity scorer + its background-image sensor. Pure functions, no browser: grade()
   // turns structural facts into tier-graded findings + a score; structDelta()'s bg axis is the only
