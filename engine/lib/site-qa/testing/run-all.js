@@ -169,6 +169,12 @@ const SUITES = [
   // the defect class lives in the INTERSECTION (a sitemap URL robots.txt forbids, carrying a noindex
   // the crawler may never read). Also pins the boundary: indexABLE ships, indexED is declared unmeasured.
   'indexability/indexability.test.js',
+  // DNS & Cutover. Every other suite in this list begins AFTER the name resolved, so none of them
+  // can see the layer where a migration's most expensive failures happen: a nameserver swap that
+  // drops MX and SPF takes email down while the pages still score 100. Fully offline — the
+  // classifier is driven with hand-built snapshots, because a suite that resolved live domains
+  // would go red on someone else's outage and stop testing the judgement it exists to test.
+  '../dns/dns.test.js',
 ];
 
 const env = Object.assign({}, process.env, {

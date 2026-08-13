@@ -55,6 +55,12 @@ const { render: renderVisual } = require('./lib/site-qa/report-visual');
 const annotate = require('./lib/site-qa/annotate');
 const { render: renderAnnotate } = require('./lib/site-qa/report-annotate');
 const { certifyMigration } = require('./lib/site-qa/inventory/certify-pipeline');
+// Tool 5 — DNS & Cutover. Its own tool, NOT a suite inside Site Audit: a suite is one stateless pass
+// over one URL, and capture→verify is two-phase and stateful (it needs prior state on disk to say
+// anything about what a migration DELETED). Same reason Post-Deployment Check is its own tab.
+const dnsTool = require('./lib/dns');
+const dnsRecover = require('./lib/dns/recover');
+const dnsReport = require('./lib/dns/report');
 const { IdRegistry } = require('./lib/site-qa/inventory/id-registry');
 let loadCases; try { ({ loadCases } = require('./lib/site-qa/inventory/portfolio')); } catch (e) { loadCases = () => []; }
 
@@ -608,7 +614,7 @@ function appPage() {
   .ritem{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);font-size:13px}
   .ritem .tag{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.04em}
   .tag.audit{background:#2A3A55;color:#BcD}.tag.visual{background:#3A2A55;color:#DcF}.tag.cert{background:#553A2A;color:#FDc}
-.tag.seo{background:#2A4A55;color:#cEF}
+.tag.seo{background:#2A4A55;color:#cEF}.tag.dns{background:#2A5540;color:#cFE}
 .scopepick{display:flex;gap:10px;margin:14px 0 4px;flex-wrap:wrap}
 .scopeopt{flex:1 1 220px;display:flex;flex-direction:column;gap:2px;padding:11px 13px;border:1px solid var(--line-strong);border-radius:8px;cursor:pointer;background:var(--surface)}
 .scopeopt.on{border-color:var(--brand-solid);box-shadow:inset 0 0 0 1px var(--brand-solid)}
@@ -882,7 +888,11 @@ function appPage() {
       <button data-t="seo" onclick="tab('seo')"><b>2 · Content &amp; SEO</b><span class="nd">copy · titles · meta · canonical · schema · indexability</span></button>
       <button data-t="visual" onclick="tab('visual')"><b>3 · Visual Comparison</b><span class="nd">old vs new, side by side</span></button>
       <button data-t="cert" onclick="tab('cert')"><b>4 · Post-Deployment Check</b><span class="nd">did everything make it across?</span></button>
-      <button data-t="reports" onclick="tab('reports');loadReports()"><b>5 · Reports</b><span class="nd">past runs · HTML · PDF</span></button>
+      <!-- Tool 5 sits AFTER the comparison tools and before history because it is the only tool that
+           looks BELOW the site — at the zone the other four take for granted. Every check in tools
+           1-4 begins after the name has already resolved. -->
+      <button data-t="dns" onclick="tab('dns')"><b>5 · DNS &amp; Cutover</b><span class="nd">records · propagation · cert · is it live?</span></button>
+      <button data-t="reports" onclick="tab('reports');loadReports()"><b>6 · Reports</b><span class="nd">past runs · HTML · PDF</span></button>
     </nav>
   </header>
   <div class="wrap">
@@ -1036,6 +1046,35 @@ function appPage() {
       <div class="pbar" id="s-pbar"><div class="pfill" id="s-pfill"></div></div><div class="status" id="s-status"></div><div id="s-lead"></div><div class="cmplink" id="s-link"></div><div id="s-frame"></div>
       <div class="placeholder" id="s-ph"><b>Content &amp; SEO results appear here</b>Run a Content &amp; SEO audit to see indexability and canonical status first, then titles and descriptions with their actual values, then structured data, then the copy review.</div>
     </section>
+    <!-- Tool 5 · DNS & Cutover. Element ids keep the -btn/-cancel/-retry/-pbar/-pfill/-status/-link/
+         -frame/-ph vocabulary because stream(), setProg(), showCtl() and showReport() dereference
+         them by prefix with no null guard — a missing one is a runtime TypeError, not a blank panel. -->
+    <section class="panel" id="p-dns">
+      <div class="tthead"><h2 class="tt">DNS &amp; Cutover</h2></div>
+      <p class="sub">Every other tool starts after the domain has already resolved. This one looks underneath: what the zone publishes, whether every resolver agrees yet, whether the address actually serves the site, and — with a baseline — what the migration quietly deleted. Moving a website never requires touching MX or SPF, so if those changed, something went wrong.</p>
+      <div class="toolgrid">
+        <div class="col-left"><div class="card">
+          <label class="fld">Domain<input id="d-domain" type="text" placeholder="e.g. sgen.com" spellcheck="false"></label>
+          <div class="scopepick" id="d-action" role="radiogroup" aria-label="What to do">
+            <label class="scopeopt on"><input type="radio" name="d-action" value="capture" checked><b>Record a baseline</b><span>Run this BEFORE the cutover. Saves the zone and what the current server serves — the only way a later check can tell a deleted record from one that never existed.</span></label>
+            <label class="scopeopt"><input type="radio" name="d-action" value="verify"><b>Verify after cutover</b><span>Diff against the saved baseline and prove the new server is actually answering with a valid certificate.</span></label>
+            <label class="scopeopt"><input type="radio" name="d-action" value="recover"><b>Recover the old zone</b><span>No baseline was taken? The replaced nameservers usually still serve the old zone. Read it from them and rebuild the baseline after the fact.</span></label>
+          </div>
+          <label class="fld" id="d-ns-wrap" style="display:none">Old nameservers<textarea id="d-ns" rows="3" placeholder="ns1.oldhost.com&#10;ns2.oldhost.com" spellcheck="false"></textarea><span class="hint">The nameservers the domain used BEFORE the move. Needed to recover the old zone.</span></label>
+          <label class="fld" id="d-target-wrap" style="display:none">Expected target <span class="hint">optional</span><input id="d-target" type="text" placeholder="IP or hostname the domain should now point at" spellcheck="false"></label>
+          <!-- WHY THIS EXISTS: "the address is unchanged since the baseline" is a launch BLOCKER when
+               you are verifying a cutover — it means the repoint never happened. It is meaningless
+               noise when you are re-checking a domain that is not being migrated. Without this
+               control every routine re-check reported BLOCKED, which is the fastest way to train
+               someone to ignore the report. Checked by default: verifying a cutover is what this
+               action is for. -->
+          <div id="d-cut-wrap" style="display:none;margin-top:10px"><label><input id="d-cut" type="checkbox" checked> the DNS has already been repointed <span class="hint">— untick if you are just re-checking a domain that is not moving</span></label></div>
+          <div class="cfg-action"><button class="run" id="d-btn" onclick="runDns()">Record baseline</button><button class="run ghost" id="d-cancel" onclick="cancelScan('d')" style="display:none">Cancel</button><button class="run retry" id="d-retry" onclick="retryScan('d')" style="display:none">Retry</button></div>
+        </div></div>
+      </div>
+      <div class="pbar" id="d-pbar"><div class="pfill" id="d-pfill"></div></div><div class="status" id="d-status"></div><div class="cmplink" id="d-link"></div><div id="d-frame"></div>
+      <div class="placeholder" id="d-ph"><b>DNS results appear here</b>Record a baseline before you move a site. After the move, verify — the report names every record that changed, flags the ones a website migration should never touch, and proves the new server is serving with a certificate that covers the name.</div>
+    </section>
     <section class="panel" id="p-reports">
       <div class="tthead"><h2 class="tt">Reports</h2><button class="gear" id="gear-reports" onclick="openSettings('reports')" title="Reports settings" aria-label="Reports settings"><span class="gi">&#9881;</span>Settings<span class="gdot"></span></button></div><p class="sub">Review previous runs. Select one to preview its report; open the HTML or save it as a PDF to share.</p>
       <div class="rgrid">
@@ -1049,6 +1088,7 @@ function appPage() {
             <button data-f="audit" onclick="rfilter('audit')">Audit</button>
             <button data-f="visual" onclick="rfilter('visual')">Visual</button>
             <button data-f="cert" onclick="rfilter('cert')">Cert</button>
+            <button data-f="dns" onclick="rfilter('dns')">DNS</button>
             <button data-f="case" onclick="rfilter('case')">Cases</button>
           </div>
           <div class="rlist" id="r-list"><div class="hint">Loading…</div></div>
@@ -1410,6 +1450,33 @@ function appPage() {
         $('c-status').innerHTML='<b>'+m.verdict+'</b> — passed '+m.tally.passed+' · warnings '+m.tally.warning+' · failed '+m.tally.failed+' · manual '+m.tally.manual+' · approved '+m.tally.approved+subw;
         showReport('c','/certify/'+m.id,'certification report');});}
 
+    // 5 DNS & Cutover. The action radio drives which fields matter and what the button says — the
+    // three actions are three different jobs, and one generic "Run" would leave the operator guessing
+    // which of them they were about to do.
+    var D_LABEL={capture:'Record baseline',verify:'Verify after cutover',recover:'Recover the old zone'};
+    function dnsAction(){var el=document.querySelector('input[name="d-action"]:checked');return el?el.value:'capture';}
+    function dnsSync(){var a=dnsAction();
+      document.querySelectorAll('#d-action .scopeopt').forEach(function(o){o.classList.toggle('on',o.querySelector('input').checked);});
+      $('d-ns-wrap').style.display=(a==='recover'||a==='verify')?'':'none';
+      $('d-target-wrap').style.display=(a==='verify')?'':'none';
+      $('d-cut-wrap').style.display=(a==='verify')?'':'none';
+      $('d-btn').textContent=D_LABEL[a];}
+    document.addEventListener('change',function(e){if(e.target&&e.target.name==='d-action')dnsSync();});
+    function runDns(){var dom=$('d-domain').value.trim();
+      if(!dom){$('d-status').textContent='Enter a domain.';return;}
+      var a=dnsAction(),ns=$('d-ns').value.trim();
+      if(a==='recover'&&!ns){$('d-status').textContent='Recovering the old zone needs the old nameservers.';return;}
+      stream('/api/dns',{action:a,domain:dom,oldNameservers:ns,expectedTarget:$('d-target').value.trim(),expectCutover:$('d-cut').checked},'d',function(m){
+        if(!m.ok){$('d-status').textContent='DNS check failed: '+(m.error||'unknown');return;}
+        var bits='<b>'+m.verdict+'</b> — '+m.headline+' · '+m.findings+' finding(s)';
+        if(m.blockers)bits+=' · <b style="color:var(--brand)">'+m.blockers+' block the cutover</b>';
+        if(m.subdomains)bits+=' · '+m.subdomains+' subdomain(s) probed, '+m.dropped+' no longer resolve';
+        // A verification with no baseline is NOT a clean bill of health, and the one line the operator
+        // reads before forwarding the report has to say so — the report itself says it too.
+        if(m.action!=='capture'&&!m.baseline)bits+=' · <b style="color:var(--fail)">NO BASELINE — deleted records cannot be detected</b>';
+        $('d-status').innerHTML=bits;
+        showReport('d','/dns/'+m.id,'DNS report');});}
+
     // 4 Reports — history list (left) + preview (right), filterable
     var R_DATA={runs:[],cases:[]},R_FILTER='all';
     function loadReports(){fetch('/api/reports?limit='+encodeURIComponent(UNBOUND.reports.limit)).then(function(r){return r.json()}).then(function(d){R_DATA=d;renderReports();}).catch(function(e){$('r-list').innerHTML='<div class="hint">reports error: '+e+'</div>';});}
@@ -1435,8 +1502,8 @@ function appPage() {
         var items=groups[host];
         html+='<div class="rgroup"><div class="rghead">'+host+' <span class="rgc">'+items.length+'</span></div>';
         items.forEach(function(x){
-          var route=x.kind==='visual'?'/visual/'+x.id:(x.kind==='cert'?'/certify/'+x.id:'/report/'+x.id);
-          html+='<div class="ritem" data-route="'+route+'" data-json="'+route+'/'+x.json+'" onclick="selectReport(this)"><span class="tag '+(x.kind==='visual'?'visual':x.kind==='cert'?'cert':x.kind==='seo'?'seo':'audit')+'">'+(x.kind==='visual'?'Visual':x.kind==='cert'?'Post-Deploy':x.kind==='seo'?'Content &amp; SEO':'Audit')+'</span><span class="nm">'+x.when+'</span></div>';
+          var route=x.kind==='visual'?'/visual/'+x.id:(x.kind==='cert'?'/certify/'+x.id:(x.kind==='dns'?'/dns/'+x.id:'/report/'+x.id));
+          html+='<div class="ritem" data-route="'+route+'" data-json="'+route+'/'+x.json+'" onclick="selectReport(this)"><span class="tag '+(x.kind==='visual'?'visual':x.kind==='cert'?'cert':x.kind==='seo'?'seo':x.kind==='dns'?'dns':'audit')+'">'+(x.kind==='visual'?'Visual':x.kind==='cert'?'Post-Deploy':x.kind==='seo'?'Content &amp; SEO':x.kind==='dns'?'DNS':'Audit')+'</span><span class="nm">'+x.when+'</span></div>';
         });
         html+='</div>';
       });
@@ -1462,14 +1529,14 @@ function appPage() {
     // per browser; reopen via ? Help). Each step: {tab, target selector, title, body}.
     var WK_KEY='sgenqa_onboarded_v2';
     var TOUR=[
-      {tab:'audit',target:null,lbl:'Welcome',title:'Site Audit',body:"Five offline tools to check any website's quality — audit, compare, verify a migration, check content & SEO, and review reports. Nothing leaves this machine. Let me show you around."},
+      {tab:'audit',target:null,lbl:'Welcome',title:'Site Audit',body:"Six offline tools to check any website's quality — audit, compare, verify a migration, check DNS and the cutover, check content & SEO, and review reports. Nothing leaves this machine. Let me show you around."},
       // TOUR ORDER FOLLOWS TAB ORDER. It walks the user across the bar left to right, so a step out of
       // sequence sends them backwards through tabs they have already been shown. Both orders changed
       // together when Content and SEO moved to position 2 — the numbers in the lbl field are the same
       // numbers printed on the buttons, and a tour that says "Tool 4" over a button reading "2" is
       // worse than no tour at all.
       // NO BACKTICKS IN HERE — this comment sits inside a template literal and one would close it.
-      {tab:'audit',target:'.tabbar',lbl:'Navigation',title:'Five tools, one app',body:'Switch tools here — the header and these tabs stay locked in place as you scroll. On a narrow screen the bar scrolls sideways and keeps the selected tab in view. The first two check ONE site: Site Audit for technical quality · Content & SEO for copy, SEO and indexability. The next two need a SECOND URL: Visual Comparison diffs old vs new · Post-Deployment Check verifies a migration. Reports holds past runs.'},
+      {tab:'audit',target:'.tabbar',lbl:'Navigation',title:'Six tools, one app',body:'Switch tools here — the header and these tabs stay locked in place as you scroll. On a narrow screen the bar scrolls sideways and keeps the selected tab in view. The first two check ONE site: Site Audit for technical quality · Content & SEO for copy, SEO and indexability. The next two need a SECOND URL: Visual Comparison diffs old vs new · Post-Deployment Check verifies a migration. DNS &amp; Cutover is the only one that looks BELOW the site — at the zone every other tool takes for granted. Reports holds past runs.'},
       {tab:'audit',target:'#a-url',lbl:'Tool 1 · Site Audit',title:'Enter any site URL',body:'Point it at a live site and run it — that is the whole dashboard. How it scans (max pages, browser render, viewports, which checks score) lives behind Settings, and the URLs you type are saved automatically, so you never re-enter them next launch.'},
       {tab:'audit',target:'#a-btn',lbl:'Tool 1 · Site Audit',title:'Read the result at a glance',body:'The report opens with one clear OVERALL pass/fail up top; the other numbers are 0–100 quality reads, not separate verdicts. The summary cards are clickable — jump straight to the failing checks — and a colour key explains that red means passing.'},
       {tab:'seo',target:'[data-t=seo]',lbl:'Tool 2 · Content & SEO',title:'Content and SEO on their own',body:'Titles, meta descriptions, canonicals, sitemap, schema and indexability — plus the content surface: thin copy, readability, and the Copy Review flags (assistant boilerplate, unfilled placeholders, AI-tell phrasing). Scored on their own, so this score is not diluted by unrelated technical checks and a technical score is not propped up by good SEO.'},
@@ -2291,8 +2358,11 @@ function listRuns(limit) {
     // Tool 2. An SEO run is a full report.json from the same renderer; only its SCOPE differs, so it
     // needs its own report type in the list rather than being filed as a Site Audit.
     else if (id.includes('-seo-')) { kind = 'seo'; json = 'report.json'; }
+    // Tool 5. Same id-marker convention as -cert- and -seo-, so classification stays derivable from
+    // the directory name with no second index to keep in sync.
+    else if (id.includes('-dns-')) { kind = 'dns'; json = 'report.json'; }
     let when = ''; try { when = new Date(fs.statSync(dir).mtimeMs).toISOString().replace('T', ' ').slice(0, 16); } catch (_) {}
-    const host = id.replace(/-(vis|cert|seo)-\d+$/, '').replace(/-\d{10,}$/, '');
+    const host = id.replace(/-(vis|cert|seo|dns)-\d+$/, '').replace(/-\d{10,}$/, '');
     return { id, kind, host, when, json, mtime: (() => { try { return fs.statSync(dir).mtimeMs; } catch (_) { return 0; } })() };
   }).sort((a, b) => b.mtime - a.mtime).slice(0, cap);
 }
@@ -2337,7 +2407,10 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, 'text/html; charset=utf-8', doc.html);
     }
 
-    for (const [prefix, file] of [['report', 'report.html'], ['compare', 'comparison.html'], ['visual', 'visual-match.html'], ['certify', 'report.html']]) {
+    // 'dns' resolves to report.html like 'certify' does. It gets its OWN prefix rather than reusing
+    // '/report/' because showReport() keys the Annotate lane off that exact string — a DNS run has no
+    // screenshots, so annotate would build a model from a report.json of the wrong shape.
+    for (const [prefix, file] of [['report', 'report.html'], ['compare', 'comparison.html'], ['visual', 'visual-match.html'], ['certify', 'report.html'], ['dns', 'report.html']]) {
       if (req.method === 'GET' && p.startsWith('/' + prefix + '/')) {
         const { id, asset } = splitRoute(p, '/' + prefix);
         return asset ? serveAsset(res, id, asset) : serveReport(res, id, file, prefix);
@@ -2357,6 +2430,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/visual') return await apiVisual(req, res);
     if (req.method === 'POST' && p === '/api/visual-rerate') return await apiVisualRerate(req, res);
     if (req.method === 'POST' && p === '/api/certify') return await apiCertify(req, res);
+    if (req.method === 'POST' && p === '/api/dns') return await apiDns(req, res);
     if (req.method === 'POST' && p === '/api/inspect') return await apiInspect(req, res);
     return send(res, 404, 'text/plain', 'not found');
   } catch (e) { try { if (!res.headersSent) send(res, 500, 'text/plain', 'server error: ' + (e && e.message || e)); else res.end(); } catch (_) {} }
@@ -2664,6 +2738,90 @@ async function apiVisualRerate(req, res) {
 }
 
 // 3 — Post-Deployment Check (frozen migration-certification pipeline; mirrors sgen-qa-certify.js orchestration)
+// ---- Tool 5 · DNS & Cutover -------------------------------------------------------------------
+// Three actions, because a migration has three moments and they need different evidence:
+//   capture  — BEFORE. Record the zone + what the current origin serves. The only way a later run
+//              can know a record was DELETED rather than never present.
+//   verify   — AFTER. Diff against the baseline, prove the new origin actually serves.
+//   recover  — AFTER, with no baseline. The replaced nameservers usually still hold the old zone;
+//              read it from them directly and reconstruct the baseline retroactively.
+//
+// BASELINES ARE NOT RUN ARTIFACTS. They live in DATA/dns-baselines, not in the run directory: a run
+// is a report someone reads once, while a baseline has to survive being found weeks later by a
+// different action. Filing it under the run would mean the verify step could only find it by
+// guessing which earlier run happened to be the capture.
+async function apiDns(req, res) {
+  let o; try { o = JSON.parse(await readBody(req) || '{}'); } catch (e) { return send(res, 400, 'application/json', JSON.stringify({ ok: false, error: 'bad json' })); }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) o = {};
+  const action = ['capture', 'verify', 'recover'].includes(o.action) ? o.action : 'verify';
+  const raw = String(o.domain || '').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+  if (!raw) return send(res, 400, 'application/json', JSON.stringify({ ok: false, error: 'pass a domain' }));
+  const oldNs = String(o.oldNameservers || '').split(/[\s,]+/).filter(Boolean);
+  if (action === 'recover' && !oldNs.length) return send(res, 400, 'application/json', JSON.stringify({ ok: false, error: 'recovery needs the old nameservers' }));
+
+  const dir = path.join(DATA, 'dns-baselines');
+  const id = safe(raw) + '-dns-' + Date.now(), outDir = path.join(RUNS, id);
+  fs.mkdirSync(outDir, { recursive: true });
+  res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-cache', 'x-accel-buffering': 'no' });
+  trackScan(res);
+  const emit = (m) => { try { res.write(JSON.stringify(m) + '\n'); } catch (e) {} };
+  let aborted = false; const onClose = () => { aborted = true; }; req.on('close', onClose); res.on('close', onClose);
+  const step = (pct, phase, stage) => { if (aborted) throw new Error('client-cancelled'); emit({ t: 'p', pct, phase, ...(stage ? { stage } : {}) }); };
+
+  try {
+    let result, headline;
+    if (action === 'capture') {
+      step(15, 'reading the zone from four public resolvers', 'zone');
+      result = await dnsTool.capture(raw, { dir });
+      headline = `baseline saved · ${path.basename(result.file || '')}`;
+    } else if (action === 'recover') {
+      step(15, 'asking the old nameservers for the zone they still hold', 'zone');
+      const rec = await dnsRecover.recover(raw, oldNs, {});
+      if (!rec.ok) { emit({ t: 'done', ok: false, error: rec.error }); return res.end(); }
+      step(45, 'sweeping the old zone for subdomains', 'serving');
+      const subdomains = await dnsRecover.compareSubdomains(rec.snapshot, {});
+      const file = require('./lib/dns/snapshot').save(rec.snapshot, dir);
+      step(70, 'verifying the live zone against what was recovered', 'diff');
+      // The recovered zone is saved as a baseline FIRST, then a normal verify runs against it — so
+      // recovery and capture converge on exactly one comparison path. A second diff implementation
+      // here is a second place for the two to disagree.
+      result = await dnsTool.verify(raw, { dir });
+      result.subdomains = subdomains;
+      result.findings = result.findings.concat(dnsTool.recoveryFindings(rec.snapshot, subdomains));
+      headline = `recovered ${rec.snapshot.subdomains.length} hostname(s) from the old zone`;
+    } else {
+      step(15, 'reading the zone as it stands now', 'zone');
+      // expectCutover defaults TRUE (verifying a repoint is what this action is for), but must be
+      // honoured when explicitly false — otherwise DNS-008 fires on every routine re-check.
+      result = await dnsTool.verify(raw, { dir, expectedTarget: o.expectedTarget || null, oldNameservers: oldNs, expectCutover: o.expectCutover !== false });
+      headline = result.baseline ? `compared against ${result.baseline.source} baseline` : 'no baseline found';
+    }
+
+    step(88, 'writing report');
+    const snap = result.current || result.snapshot;
+    const findings = result.findings || [];
+    fs.writeFileSync(path.join(outDir, 'report.html'), dnsReport.render(result, { engine: SELF_VER }));
+    fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify({ action, host: snap.host, ...result }, null, 2));
+
+    const blockers = findings.filter((f) => f.readiness === 1).length;
+    emit({
+      t: 'done', ok: true, id, action, host: snap.host, headline,
+      // No score. Every rule in this suite is manual by construction (rules.js), so a percentage here
+      // would be a number with nothing behind it — see the note at the top of dns/report.js.
+      verdict: action === 'capture' ? 'BASELINE CAPTURED' : (VERDICT_TEXT[result.verdict.state] || 'NEEDS ATTENTION'),
+      blockers, findings: findings.length,
+      baseline: result.baseline || null,
+      subdomains: (result.subdomains || []).length,
+      dropped: (result.subdomains || []).filter((s) => s.state === 'dropped').length,
+    });
+    res.end();
+  } catch (e) {
+    if (!aborted) emit({ t: 'done', ok: false, error: String((e && e.message) || e) });
+    res.end();
+  }
+}
+const VERDICT_TEXT = { blocked: 'BLOCKED', attention: 'NEEDS ATTENTION', verified: 'VERIFIED', 'no-baseline': 'NO BASELINE' };
+
 async function apiCertify(req, res) {
   let o; try { o = JSON.parse(await readBody(req) || '{}'); } catch (e) { return send(res, 400, 'application/json', JSON.stringify({ ok: false, error: 'bad json' })); }
   if (!o || typeof o !== 'object' || Array.isArray(o)) o = {}; // guard null/array/scalar JSON
