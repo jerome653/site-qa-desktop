@@ -109,6 +109,13 @@ const RULES = [
   R('DNS-029', 'address-not-testable-here', 'Some addresses could not be probed from this machine', 'serving', 'low',
     'Usually an IPv6 address on a host with no IPv6 route. These were excluded from the serving verdict rather than counted as failures — a limit of the auditing machine is not a defect of the site — but it does mean those addresses are unverified.', { readiness: null, method: 'manual' }),
 
+  R('DNS-031', 'subdomain-mx-dropped', 'A surviving hostname lost its mail route', 'cutover', 'critical',
+    'The hostname still resolves, so an address check calls it healthy — but the MX records the old zone published for it are gone, and mail addressed to it bounces. This is the failure a website migration causes most often and notices last.', { readiness: 1, method: 'engine' }),
+
+  // ---------------- the cutover, measured rather than judged ----------------
+  R('DNS-030', 'propagation-in-progress', 'The new address is live on some resolvers and not others', 'cutover', 'low',
+    'Not a fault — this IS a cutover working. Public resolvers cache independently, so a repoint reaches them at different times, and the split says how much of the internet has already moved. Everyone still on the old address keeps landing on the old server until their cache expires, which is why the old server stays up until then.', { readiness: 3 }),
+
   R('DNS-025', 'dkim-not-verifiable', 'DKIM could not be checked', 'cutover', 'low',
     'DKIM keys live at a selector name chosen by the mail provider and cannot be discovered from DNS. Verify by hand that the selector records survived the move.', { readiness: null, method: 'manual' }),
 ];

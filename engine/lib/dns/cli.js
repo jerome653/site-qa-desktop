@@ -151,7 +151,15 @@ function printLive(live) {
       console.log('');
       printLive(res.current.live);
       printFindings(res.findings);
+      if (res.propagation) {
+        const p = res.propagation;
+        const behind = Object.entries(p.byResolver).filter(([, s]) => s === 'old').map(([n]) => n);
+        console.log(`\n  PROPAGATION: ${p.percent}% — ${p.onNew}/${p.definitive} resolvers on the new ${p.type}${behind.length ? ` · behind: ${behind.join(', ')}` : ''}`);
+      }
       console.log(`\n  VERDICT: ${res.verdict.state.toUpperCase()} — ${res.verdict.note}`);
+      // The exit code is for a pipeline; a person needs the sentence. Printed last because it is the
+      // line the operator acts on, and the terminal scrolls the rest away.
+      if (res.verdict.next) console.log(`  NEXT:    ${res.verdict.next}`);
       return process.exit(res.verdict.state === 'blocked' ? 1 : 0);
     }
 

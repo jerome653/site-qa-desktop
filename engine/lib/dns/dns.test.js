@@ -364,6 +364,163 @@ const subs = { subdomains: [
   ok(st.same === 'intact', 'same address on both = intact');
   ok(st.murky === 'unknown', 'a hostname we could not resolve is unknown — never reported as lost');
 
+  // --- regressions found by a LIVE recover run, not by the offline suite above ------------------
+  // Both shipped in 6.4.1 and both were invisible to 423 green assertions, because every fixture
+  // here hands compareSubdomains an A record and every fixture skips queryZone entirely.
+
+  // (1) A name the sweep recovered on TXT ALONE — _dmarc, _domainkey. Asking only A/CNAME for it
+  // returns nothing, and empty-vs-empty scored DROPPED: a launch-BLOCKING DNS-026 against a DMARC
+  // record that never moved. It fired on every domain that publishes DMARC.
+  const fakeTxt = (map) => async (name, o) => ({
+    host: name,
+    records: {
+      A: { agreed: true, status: 'nodata', values: [] },
+      CNAME: { agreed: true, status: 'nodata', values: [] },
+      TXT: { agreed: true, status: map[name] ? 'ok' : 'nodata', values: map[name] || [] },
+    },
+    types: (o && o.types) || [],
+  });
+  const dmarc = { subdomains: [{ name: '_dmarc.example.com', records: { TXT: ['v=DMARC1; p=reject'] } }] };
+  const [kept] = await recover.compareSubdomains(dmarc, { resolveFn: fakeTxt({ '_dmarc.example.com': ['v=DMARC1; p=reject'] }) });
+  ok(kept.state === 'intact', 'a TXT-only name still publishing the same value is intact, not dropped');
+  ok(kept.was[0] === 'v=DMARC1; p=reject' && kept.now[0] === 'v=DMARC1; p=reject',
+    'the TXT-only row carries the values it compared, so DNS-026 can never print empty parentheses');
+  const [changedTxt] = await recover.compareSubdomains(dmarc, { resolveFn: fakeTxt({ '_dmarc.example.com': ['v=DMARC1; p=none'] }) });
+  ok(changedTxt.state === 'moved', 'a TXT-only name whose value changed is moved');
+  const [lostTxt] = await recover.compareSubdomains(dmarc, { resolveFn: fakeTxt({}) });
+  ok(lostTxt.state === 'dropped', 'a TXT-only name that stopped answering IS dropped — the real signal survives');
+
+  // (2) resolveSoa returns a bare object; wrapping it in an array yielded "undefined undefined
+  // undefined" as the BEFORE half of the recovered-zone SOA diff on screen. resolve.js already
+  // unwrapped it on the public-resolver path — recover.js's own path did not.
+  const zone = await recover.queryZone('example.com', ['5.5.5.5'], ['SOA', 'NS'], {
+    resolverFactory: () => ({
+      resolveSoa: async () => ({ nsname: 'ns1.old.example.', hostmaster: 'hostmaster.old.example.', serial: 42 }),
+      resolveNs: async () => ['ns1.old.example.'],
+    }),
+  });
+  ok(zone.SOA.values[0] === 'ns1.old.example hostmaster.old.example 42',
+    'the recovered zone reads SOA as one object, not an array — never "undefined undefined undefined"');
+  ok(!/undefined/.test(zone.SOA.values.join('')), 'no SOA field renders as undefined');
+
+  // -------------------------------------------------------------------------------------------
+  S('§11 propagation, one read path, and an instruction instead of a verdict');
+  // -------------------------------------------------------------------------------------------
+
+  // --- ONE resolver read path. Two hand-rolled resolver→normalise call sites is how the SOA-shape
+  // defect got fixed in resolve.js and shipped anyway in recover.js. readRecord is now the only
+  // place that turns a node:dns reply into a record, so the shape can only be got wrong once.
+  const stub = {
+    resolveSoa: async () => ({ nsname: 'ns1.X.com.', hostmaster: 'a.X.com.', serial: 9 }),
+    resolve4: async () => [{ address: '1.1.1.1', ttl: 300 }, { address: '0.0.0.0', ttl: 60 }],
+    resolveMx: async () => [{ priority: 10, exchange: 'Mail.X.com.' }],
+    resolveNs: async () => { const e = new Error('no'); e.code = 'ENODATA'; throw e; },
+  };
+  const soa = await resolve.readRecord(stub, 'x.com', 'SOA');
+  ok(soa.values[0] === 'ns1.x.com a.x.com 9', 'readRecord unwraps the SOA object — the one shape that is not an array');
+  const a4 = await resolve.readRecord(stub, 'x.com', 'A');
+  ok(a4.values.join() === '0.0.0.0,1.1.1.1' && a4.ttl === 60, 'readRecord sorts addresses and keeps the LOWEST ttl');
+  ok((await resolve.readRecord(stub, 'x.com', 'MX')).values[0] === '10 mail.x.com', 'readRecord normalises MX through the same path');
+  ok((await resolve.readRecord(stub, 'x.com', 'NS')).status === 'nodata', 'ENODATA is "the type does not exist", never an error');
+  // and recover's zone read is now that same function, not a copy of it
+  const z = await recover.queryZone('x.com', ['5.5.5.5'], ['SOA'], { resolverFactory: () => stub });
+  ok(z.SOA.values[0] === soa.values[0], 'the old-nameserver read and the public read produce byte-identical records');
+
+  // --- PROPAGATION. Four resolvers disagreeing during a cutover is not a fault, it is the
+  // measurement: it says how much of the internet has already moved. Reporting it as
+  // "resolvers do not agree" told the operator their zone was broken at the exact moment it was
+  // working correctly.
+  const withResolvers = (values, by, extra = {}) => rec('ok', values, { byResolver: by, sample: Object.keys(by).length, ...extra });
+  const OLD = ['1.1.1.1'], NEW = ['9.9.9.9'];
+  const half = snapOf({ records: { A: withResolvers(NEW, {
+    google: { status: 'ok', values: NEW, ttl: 300 }, cloudflare: { status: 'ok', values: NEW, ttl: 300 },
+    quad9: { status: 'ok', values: OLD, ttl: 900 }, opendns: { status: 'ok', values: OLD, ttl: 900 },
+  }, { agreed: false, variants: [{ status: 'ok', values: NEW, resolvers: ['google', 'cloudflare'] }, { status: 'ok', values: OLD, resolvers: ['quad9', 'opendns'] }] }) } });
+  const base = snapOf({ records: { A: rec('ok', OLD) } });
+  const p = dns.propagationOf(half, base);
+  ok(p && p.percent === 50 && p.onNew === 2 && p.onOld === 2, 'propagation is a percentage of resolvers already serving the new address');
+  ok(p.byResolver.google === 'new' && p.byResolver.quad9 === 'old', 'it names WHICH resolvers are still behind — that is who your stragglers are');
+  ok(p.complete === false && p.ttl === 900, 'the straggler TTL is the one that decides when they catch up, not the fast camp\'s');
+  const donePr = dns.propagationOf(snapOf({ records: { A: withResolvers(NEW, {
+    google: { status: 'ok', values: NEW }, cloudflare: { status: 'ok', values: NEW },
+    quad9: { status: 'ok', values: NEW }, opendns: { status: 'ok', values: NEW },
+  }) } }), base);
+  ok(donePr.percent === 100 && donePr.complete === true, 'every resolver on the new address = propagation complete');
+  const unread = dns.propagationOf(snapOf({ records: { A: withResolvers(NEW, {
+    google: { status: 'ok', values: NEW }, cloudflare: { status: 'ok', values: NEW },
+    quad9: { status: 'error', values: [], error: 'ETIMEOUT' }, opendns: { status: 'error', values: [], error: 'ETIMEOUT' },
+  }) } }), base);
+  ok(unread.percent === 100 && unread.unknown === 2, 'a resolver that did not answer is EXCLUDED from the percentage and counted openly — never voted as agreement');
+  ok(dns.propagationOf(half, null) === null, 'no baseline, no propagation claim');
+
+  ok(has(dns.propagationFindings(p), 'DNS-030'), 'mid-flight propagation is reported');
+  ok(dns.propagationFindings(donePr).length === 0, 'a finished cutover raises nothing — silence is the correct report');
+  ok(dns.propagationFindings(dns.propagationOf(snapOf({ records: { A: withResolvers(OLD, {
+    google: { status: 'ok', values: OLD }, cloudflare: { status: 'ok', values: OLD },
+  }) } }), base)).length === 0, 'nothing moved yet is DNS-008\'s claim, not a propagation claim — never both');
+  ok(dns.propagationFindings(p)[0].readiness !== 1, 'propagation in progress must NEVER block a cutover — it IS the cutover working');
+
+  // --- and the split it explains is no longer ALSO reported as a fault
+  const splitAlone = dns.commonFindings(half);
+  ok(has(splitAlone, 'DNS-003'), 'an unexplained split is still a fault');
+  const splitExplained = dns.commonFindings(half, { splitExplained: ['A'] });
+  ok(!has(splitExplained, 'DNS-003'), 'the same split, explained by a cutover in progress, is not reported twice');
+  const stillUnread = dns.commonFindings(snapOf({ records: { A: rec('ok', OLD, { agreed: 'insufficient', failed: ['google', 'quad9'] }) } }), { splitExplained: ['A'] });
+  ok(has(stillUnread, 'DNS-003'), 'a record we could not READ is a different claim, and stays reported whatever the cutover is doing');
+
+  // --- AN INSTRUCTION, NOT A STATE. "BLOCKED — 1 launch-blocking finding" tells an operator
+  // mid-cutover nothing about what to do with their hands.
+  const blocked = dns.verdictOf(half, [dns.F('DNS-004', 'MX gone', 'example.com', '')], true);
+  ok(/^Restore the MX/.test(blocked.next), 'the verdict names the ONE next action, taken from the worst finding');
+  const midflight = dns.verdictOf(half, [], true, { propagation: p });
+  ok(/recheck/i.test(midflight.next) && /15m/.test(midflight.next),
+    'clean but mid-flight = do nothing, come back when the slowest cache expires (and it says when)');
+  ok(/2 of 4/.test(midflight.next), 'it states how far along the cutover is, in resolvers');
+  ok(/Capture a baseline/i.test(dns.verdictOf(half, [], false).next), 'no baseline = the next action is to make one');
+  const notStarted = dns.propagationOf(snapOf({ records: { A: withResolvers(OLD, {
+    google: { status: 'ok', values: OLD }, cloudflare: { status: 'ok', values: OLD },
+  }) } }), base);
+  ok(/[Nn]othing has (been repointed|moved)/.test(dns.verdictOf(half, [], true, { propagation: notStarted }).next),
+    'every resolver still on the baseline address must not be congratulated as a finished cutover');
+  ok(dns.verdictOf(half, [], true, { propagation: donePr }).next.length > 0, 'a finished cutover still says what to do next');
+
+  ok(resolve.humanDuration(8382) === '2h 20m' && resolve.humanDuration(300) === '5m' && resolve.humanDuration(45) === '45s',
+    'seconds are rendered the way a person reads a clock');
+  const ttlF = dns.preCutoverFindings(snapOf({ records: { A: rec('ok', OLD, { ttl: 8382 }) } })).find((x) => x.ruleId === 'DNS-012');
+  ok(ttlF && /2h 20m/.test(ttlF.detail) && /[Ll]ower it/.test(ttlF.detail),
+    'the TTL finding gives the duration in human units AND the instruction, not just a number');
+
+  // --- MAIL hosts in the sweep. The module exists because a migration takes email down; the sweep
+  // asked for A/CNAME only, so a mail host that lost its MX came back "intact".
+  ok(recover.MAIL_LABELS.every((l) => recover.COMMON.includes(l)), 'every mail label is a probed label');
+  ok(['mail', 'smtp', 'mx'].every((l) => recover.MAIL_LABELS.includes(l)), 'the hosts that carry inbound mail are covered');
+  const fakeMx = (map) => async (name) => ({ host: name, records: {
+    A: { agreed: true, status: 'nodata', values: [] }, CNAME: { agreed: true, status: 'nodata', values: [] },
+    MX: { agreed: true, status: map[name] ? 'ok' : 'nodata', values: map[name] || [] },
+  } });
+  const mailZone = { subdomains: [{ name: 'mail.example.com', records: { MX: ['10 old.mail.example.com'] } }] };
+  ok((await recover.compareSubdomains(mailZone, { resolveFn: fakeMx({ 'mail.example.com': ['10 old.mail.example.com'] }) }))[0].state === 'intact',
+    'a mail host still publishing the same MX is intact');
+  ok((await recover.compareSubdomains(mailZone, { resolveFn: fakeMx({}) }))[0].state === 'dropped',
+    'a mail host whose MX vanished in the migration is REPORTED — this is the failure the tool was built for');
+
+  // THE REAL SHAPE OF THAT FAILURE: mail.example.com keeps its A record (the new host answers on
+  // :443 quite happily) and silently loses the MX. Comparing addresses alone calls that "intact" and
+  // the report is green while mail bounces. The address and the mail route are separate claims.
+  const fakeBoth = (mx) => async (name, o) => ({ host: name, records: {
+    A: { agreed: true, status: 'ok', values: ['9.9.9.9'] }, CNAME: { agreed: true, status: 'nodata', values: [] },
+    MX: { agreed: true, status: mx ? 'ok' : 'nodata', values: mx || [] },
+  }, types: (o && o.types) || [] });
+  const mailHost = { subdomains: [{ name: 'mail.example.com', records: { A: ['1.1.1.1'], MX: ['10 old.mail.example.com'] } }] };
+  const bothMoved = (await recover.compareSubdomains(mailHost, { resolveFn: fakeBoth(['10 new.mail.example.com']) }))[0];
+  ok(bothMoved.state === 'moved' && bothMoved.mx && bothMoved.mx.state === 'moved', 'a mail host that moved BOTH its address and its MX is reported on both');
+  const lost = (await recover.compareSubdomains(mailHost, { resolveFn: fakeBoth(null) }))[0];
+  ok(lost.state === 'moved' && lost.mx.state === 'dropped', 'an address that survived does NOT excuse an MX that did not');
+  ok(has(dns.recoveryFindings({ host: 'example.com', recoveredFrom: {}, subdomains: [] }, [lost]), 'DNS-031'),
+    'losing the mail route on a surviving host raises its own finding — inbound mail to it bounces');
+  ok(dns.recoveryFindings({ host: 'example.com', recoveredFrom: {}, subdomains: [] }, [lost]).find((x) => x.ruleId === 'DNS-031').readiness === 1,
+    'and it blocks the cutover, because bounced mail is not recoverable after the fact');
+
   const addr = await recover.nsAddresses(['5.5.5.5', ' ']);
   ok(addr.length === 1 && addr[0].ip === '5.5.5.5', 'a nameserver given as a literal address needs no lookup');
   ok(recover.COMMON.includes('webmail') && recover.COMMON.includes('autodiscover') && recover.COMMON.includes('cpanel'),

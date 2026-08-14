@@ -44,6 +44,56 @@ function fixture() { return new Promise(r => { const s = http.createServer((q, s
     const done = (run.body || '').trim().split('\n').map(l => { try { return JSON.parse(l); } catch (_) { return {}; } }).find(m => m.t === 'done');
     ok(done && done.ok, 'ran a real audit through the bundled engine (verdict: ' + (done && done.verdict) + ')');
     fx.close();
+
+    // --- Tool 5 · DNS & Cutover -----------------------------------------------------------------
+    // Tool 5 shipped in 6.4.1 with two defects that 423 offline assertions could not see and that ONE
+    // live run exposed in seconds: a TXT-only name (_dmarc) scored DROPPED and raised a
+    // launch-BLOCKING finding against a record that had never moved, and the recovered zone's SOA
+    // rendered as "undefined undefined undefined" on the operator's screen. Smoke never touched this
+    // tool at all. What follows are the invariants that hold NO MATTER what the internet answers —
+    // asserting a live VALUE would be a test that fails when someone else edits their zone.
+    const POISON = /undefined|\[object Object\]|\bNaN\b|\(\s*\)/;
+    const DNS_HOST = 'example.com';                                   // stable, publishes DMARC + SOA
+    const OLD_NS = 'a.iana-servers.net,b.iana-servers.net';           // its own NS — exercises queryZone
+    const dnsRun = async (payload) => {
+      const r = await post(PORT, '/api/dns', JSON.stringify(payload));
+      return (r.body || '').trim().split('\n').map(l => { try { return JSON.parse(l); } catch (_) { return {}; } }).find(m => m.t === 'done');
+    };
+    const strings = (f) => [f.title, f.detail, f.impact, f.location, f.value].filter((s) => typeof s === 'string');
+    const cap = await dnsRun({ action: 'capture', domain: DNS_HOST });
+    if (!cap || !cap.ok) {
+      // LOUD skip, never a silent pass: a machine with no route to the public resolvers cannot
+      // certify this tool, and a smoke that quietly reports 100% in that state is worse than no check.
+      console.log('  ⚠ SKIPPED — DNS & Cutover needs public resolvers (' + ((cap && cap.error) || 'no answer') + '). Tool 5 IS NOT CERTIFIED by this run.');
+    } else {
+      ok(cap.verdict === 'BASELINE CAPTURED', 'DNS capture recorded a baseline through the bundled engine');
+      for (const [label, payload] of [
+        ['verify', { action: 'verify', domain: DNS_HOST, expectCutover: false }],
+        ['recover', { action: 'recover', domain: DNS_HOST, oldNameservers: OLD_NS }],
+      ]) {
+        const d = await dnsRun(payload);
+        ok(d && d.ok, 'DNS ' + label + ' completed (verdict: ' + (d && d.verdict) + ')');
+        if (!d || !d.ok) continue;
+        const rep = await get(PORT, '/dns/' + d.id + '/report.json');
+        let j = null; try { j = JSON.parse(rep.body); } catch (_) {}
+        ok(!!j, 'DNS ' + label + ' wrote a readable report.json');
+        if (!j) continue;
+        const dirty = (j.findings || []).filter((f) => strings(f).some((s) => POISON.test(s)));
+        ok(dirty.length === 0, 'DNS ' + label + ': no finding shows a placeholder to the operator'
+          + (dirty.length ? ' — ' + dirty[0].ruleId + ': ' + String(strings(dirty[0])[1] || '').slice(0, 90) : ''));
+        // "dropped" is the launch-blocking claim in this tool. Making it with no record of WHAT was
+        // dropped is the exact shape of the 6.4.1 false positive, whatever the reason for it.
+        const hollow = (j.subdomains || []).filter((s) => s.state === 'dropped' && !(s.was || []).length);
+        ok(hollow.length === 0, 'DNS ' + label + ': nothing is reported lost without evidence of what was lost'
+          + (hollow.length ? ' — ' + hollow[0].name : ''));
+        ok((j.findings || []).every((f) => /^DNS-\d{3}$/.test(f.ruleId || '')), 'DNS ' + label + ': every finding carries a real rule id');
+        // A run that reports a state without an action is a status line, not an answer. Whatever the
+        // internet said, there is always a next thing for the operator to do — including "nothing".
+        ok(typeof d.next === 'string' && d.next.length > 10, 'DNS ' + label + ': the result names the next action');
+        ok(!d.propagation || (d.propagation.percent >= 0 && d.propagation.percent <= 100 && d.propagation.onNew <= d.propagation.definitive),
+          'DNS ' + label + ': propagation is a real proportion of the resolvers that actually answered');
+      }
+    }
   }
   try { proc.kill(); } catch (_) {}
   const stillUp = (await get(PORT, '/')).status === 200; ok(!stillUp, 'server stops cleanly when the app closes');

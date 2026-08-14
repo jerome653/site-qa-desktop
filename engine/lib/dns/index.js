@@ -16,7 +16,7 @@
 // two identical fingerprints mean success or a stalled cutover) it emits a rule that says so and
 // names what a human has to check. A confident wrong answer about DNS costs more than a gap.
 
-const { resolveAll } = require('./resolve');
+const { resolveAll, humanDuration } = require('./resolve');
 const snapshot = require('./snapshot');
 const live = require('./live');
 const { getById } = require('./rules');
@@ -60,8 +60,12 @@ function preCutoverFindings(snap, opts = {}) {
   const A = snap.records.A;
 
   if (A && A.status === 'ok' && A.ttl != null && A.ttl > ttlMax) {
+    // A TTL is an instruction about WHEN, so it is reported as one. "8382" is a number the operator
+    // has to convert before it means anything, and the deadline it implies — lower it this long
+    // BEFORE the change, because afterwards nothing can shorten what is already cached — is the
+    // whole point of the rule.
     out.push(F('DNS-012',
-      `A record TTL is ${A.ttl}s. Resolvers may keep serving the old address for that long after the change.`,
+      `A record TTL is ${A.ttl}s (${humanDuration(A.ttl)}). Lower it to ${ttlMax}s or less at least ${humanDuration(A.ttl)} BEFORE you repoint — once the address changes, every resolver holding this value keeps serving the old server for that long and there is nothing you can do to shorten it.`,
       snap.host, A.ttl));
   }
   // A "null MX" (RFC 7505) is the single record `0 .` and means the OPPOSITE of having mail: the
@@ -122,11 +126,18 @@ async function verify(host, opts = {}) {
   }
 
   const d = baseline ? snapshot.diff(baseline, current) : null;
+
+  // Measured BEFORE the findings are built, because a split that propagation explains must not also
+  // be reported as a fault by commonFindings — one event, one finding.
+  const propagation = propagationOf(current, baseline, opts);
+  const midFlight = !!(propagation && propagation.onNew && propagation.onOld);
+
   const findings = [
-    ...commonFindings(current, opts),
+    ...commonFindings(current, { ...opts, splitExplained: midFlight ? [propagation.type] : [] }),
     ...(d ? cutoverFindings(d, baseline, current, legacy, opts) : []),
     ...(recovered && recovered.ok ? recoveryFindings(recovered.snapshot, subdomains) : []),
     ...(expected ? targetFindings(current, expected) : []),
+    ...propagationFindings(propagation),
   ];
 
   return {
@@ -140,8 +151,9 @@ async function verify(host, opts = {}) {
     diff: d,
     legacy,
     expected,
+    propagation,
     findings,
-    verdict: verdictOf(current, findings, !!baseline),
+    verdict: verdictOf(current, findings, !!baseline, { propagation }),
   };
 }
 
@@ -176,8 +188,15 @@ function commonFindings(snap, opts = {}) {
 
   // Disagreement is reported PER RECORD TYPE, because which record is split is the whole story: a
   // split A record is a cutover mid-flight, a split NS is a delegation that has not settled.
+  // ...UNLESS the split is the cutover itself. A repoint reaches the public resolvers at different
+  // times, so mid-flight they MUST disagree — reporting that as "resolvers do not agree" told the
+  // operator their zone was broken at the exact moment it was working. When the caller has a
+  // baseline and can show the split is precisely old-address-vs-new-address, DNS-030 states it as a
+  // percentage instead and this rule stays quiet for that record. Every other split still lands here.
+  const explained = new Set(opts.splitExplained || []);
   for (const [type, rec] of Object.entries(records)) {
     if (!rec || rec.agreed !== false) continue;
+    if (explained.has(type)) continue;
     const camps = rec.variants.map((v) => `${v.resolvers.join('+')} → ${v.status === 'ok' ? v.values.join(', ') : v.status}`);
     out.push(F('DNS-003', `${type}: resolvers do not agree. ${camps.join('  |  ')}`, snap.host, type, { variants: rec.variants }));
   }
@@ -378,6 +397,61 @@ function cutoverFindings(d, baseline, current, legacy, opts = {}) {
 // Findings from a RECOVERED baseline (recover.js). Kept separate from cutoverFindings() because
 // they rest on a different evidence base: not "what we recorded before", but "what the replaced
 // nameservers still hold". Every consumer needs to be able to tell those apart.
+// ---------------------------------------------------------------------------------------------
+// propagation — the question the operator is actually asking
+// ---------------------------------------------------------------------------------------------
+// "Is it live yet?" has no yes/no answer during a cutover: it is live for whoever's resolver has
+// already expired its cache, and not for anyone else. The four resolvers are asked individually for
+// exactly this reason, so the disagreement between them is not noise to be reconciled — it is the
+// measurement. Each one is classified against the BASELINE address: still serving it = old, serving
+// anything else = new.
+//
+// A resolver that failed to answer is 'unknown' and is excluded from the percentage rather than
+// assumed to be either. Reporting "75% propagated" when the fourth resolver simply timed out would
+// be inventing a data point, and the whole module's rule is that missing evidence is stated, never
+// voted.
+function propagationOf(current, baseline, opts = {}) {
+  if (!baseline || !current) return null;
+  for (const type of ['A', 'CNAME']) {
+    const cur = current.records[type], was = baseline.records[type];
+    const oldVals = was && was.status === 'ok' ? was.values : [];
+    if (!cur || !oldVals.length) continue;
+    const by = cur.byResolver || {};
+    const names = Object.keys(by);
+    if (!names.length) continue;
+
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    const byResolver = {}; let onNew = 0, onOld = 0, unknown = 0; const stragglerTtls = [];
+    for (const n of names) {
+      const r = by[n];
+      if (!r || r.status === 'error') { byResolver[n] = 'unknown'; unknown++; continue; }
+      const vals = r.status === 'ok' ? r.values : [];
+      if (same(vals, oldVals)) { byResolver[n] = 'old'; onOld++; if (r.ttl != null) stragglerTtls.push(r.ttl); }
+      else { byResolver[n] = 'new'; onNew++; }
+    }
+    const definitive = onNew + onOld;
+    if (!definitive) continue;
+    return {
+      host: current.host, type, total: names.length, definitive, onNew, onOld, unknown,
+      percent: Math.round((onNew / definitive) * 100),
+      complete: onOld === 0,
+      byResolver,
+      // The straggler's TTL, not the fast camp's: the cutover finishes when the LAST cache expires,
+      // so the pessimistic number is the operationally true one.
+      ttl: stragglerTtls.length ? Math.max(...stragglerTtls) : null,
+    };
+  }
+  return null;
+}
+
+function propagationFindings(p) {
+  if (!p || !p.onNew || !p.onOld) return [];   // finished, or not started — neither is this claim
+  const behind = Object.entries(p.byResolver).filter(([, s]) => s === 'old').map(([n]) => n);
+  return [F('DNS-030',
+    `${p.onNew} of ${p.definitive} public resolvers already serve the new address (${p.percent}%). ${behind.join(', ')} still return the old one${p.ttl != null ? `, and will for up to ${humanDuration(p.ttl)}` : ''}. Leave the old server running until they catch up.`,
+    p.host, `${p.percent}%`, { byResolver: p.byResolver })];
+}
+
 function recoveryFindings(recoveredSnap, subRows) {
   const out = [];
   const rf = recoveredSnap.recoveredFrom || {};
@@ -387,8 +461,20 @@ function recoveryFindings(recoveredSnap, subRows) {
 
   const dropped = (subRows || []).filter((r) => r.state === 'dropped');
   for (const r of dropped) {
-    out.push(F('DNS-026', `${r.name} exists in the old zone (${(r.was || []).join(', ')}) but does not resolve on the current nameservers.`, r.name, (r.was || []).join(', ')));
+    // The old values are quoted only when there ARE any — "exists in the old zone ()" is a pair of
+    // empty parens on the operator's screen and reads as a tool that lost its own evidence.
+    const was = (r.was || []).join(', ');
+    out.push(F('DNS-026', `${r.name} exists in the old zone${was ? ` (${was})` : ''} but does not resolve on the current nameservers.`, r.name, was));
   }
+  // A hostname that still resolves but no longer routes mail. Separate from DNS-026 on purpose: the
+  // name did NOT disappear, so every address-based check passes and the report reads clean while
+  // mail to it bounces.
+  for (const r of (subRows || []).filter((x) => x.mx && x.mx.state === 'dropped')) {
+    out.push(F('DNS-031',
+      `${r.name} still resolves, but the MX records the old zone published for it (${(r.mx.was || []).join(' · ')}) are gone. Mail addressed to that hostname bounces.`,
+      r.name, (r.mx.was || []).join(' · ')));
+  }
+
   const unknown = (subRows || []).filter((r) => r.state === 'unknown');
   if (subRows && subRows.length) {
     out.push(F('DNS-028',
@@ -418,15 +504,74 @@ function targetFindings(current, expected) {
 // Deliberately coarse and conservative. `verified` requires a baseline: without prior state the
 // tool cannot know what was lost, so the best it may claim is that the current state looks healthy.
 // That distinction is the difference between "we checked" and "we assumed".
-function verdictOf(current, findings, hasBaseline) {
+// THE NEXT ACTION, not just the state. "BLOCKED — 1 launch-blocking finding" is a status line; an
+// operator standing at a cutover with the client on the phone needs to know what to do with their
+// hands. Written per rule for the findings that can credibly be the worst one; anything else falls
+// back to naming the finding, which is still an instruction and never a guess.
+const NEXT_ACTION = {
+  'DNS-001': 'Publish an A or AAAA record for this name — nothing else can be checked until the domain resolves.',
+  'DNS-002': 'Publish an A, AAAA or CNAME record at the bare domain.',
+  'DNS-004': 'Restore the MX records at the new provider before anything else — inbound mail is bouncing right now, and bounced mail does not come back.',
+  'DNS-005': 'Restore the SPF record at the new provider — outbound mail is being filtered as spam right now.',
+  'DNS-006': 'Restore the DMARC record at _dmarc — the policy protecting this domain from spoofing is gone.',
+  'DNS-009': 'Point the address record at the expected target; it currently resolves somewhere else.',
+  'DNS-008': 'Repoint the A record at the new server — nothing has moved yet.',
+  'DNS-011': 'Publish www — anyone who types it gets nothing.',
+  'DNS-015': 'Nothing answers at the published address: start the new server, or point the record at one that is running.',
+  'DNS-016': 'Issue a certificate that covers this name before sending anyone to it — browsers will refuse the connection.',
+  'DNS-022': 'The CNAME points at a name that does not resolve. Fix the target or remove the record.',
+  'DNS-026': 'Re-create the hostnames the old zone has and the new one does not at the new provider.',
+  'DNS-031': 'Re-create the MX records for that hostname at the new provider — it resolves, so nothing else will catch this.',
+};
+const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+
+function verdictOf(current, findings, hasBaseline, opts = {}) {
   const tier1 = findings.filter((f) => f.readiness === 1);
   const online = current.live && ['apex', 'www'].every((k) => {
     const r = current.live[k];
     return r && (r.verdict === 'online' || r.verdict === 'redirect-off');
   });
-  if (tier1.length) return { state: 'blocked', online: !!online, blockers: tier1.length, note: `${tier1.length} launch-blocking DNS finding(s)` };
-  if (!hasBaseline) return { state: 'no-baseline', online: !!online, blockers: 0, note: 'current state looks healthy; without a baseline, deleted records cannot be detected' };
-  return { state: online ? 'verified' : 'attention', online: !!online, blockers: 0, note: online ? 'records match the baseline except where expected, and both names are serving' : 'no blocking findings, but not every name is serving' };
+  const p = opts.propagation || null;
+
+  if (tier1.length) {
+    const worst = [...tier1].sort((a, b) => (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9))[0];
+    return {
+      state: 'blocked', online: !!online, blockers: tier1.length,
+      note: `${tier1.length} launch-blocking DNS finding(s)`,
+      next: NEXT_ACTION[worst.ruleId] || `Fix "${worst.title}" on ${worst.location} first.`,
+    };
+  }
+  if (!hasBaseline) {
+    return {
+      state: 'no-baseline', online: !!online, blockers: 0,
+      note: 'current state looks healthy; without a baseline, deleted records cannot be detected',
+      next: 'Capture a baseline before the next change — without one, a record this migration deletes cannot be told from one that never existed.',
+    };
+  }
+  // Every resolver still on the baseline address. Without this branch the report congratulated the
+  // operator on a finished cutover that had not started — the one case where a confident sentence is
+  // worse than no sentence.
+  if (p && !p.onNew && p.onOld) {
+    return {
+      state: online ? 'verified' : 'attention', online: !!online, blockers: 0,
+      note: 'no blocking findings; the address is still the one recorded at baseline',
+      next: `Nothing has been repointed yet — all ${p.definitive} resolvers still serve the baseline address. If the cutover was supposed to have happened, the change never reached the zone.`,
+    };
+  }
+  if (p && !p.complete && p.onNew) {
+    return {
+      state: online ? 'verified' : 'attention', online: !!online, blockers: 0,
+      note: `no blocking findings; the repoint has reached ${p.onNew} of ${p.definitive} resolvers`,
+      next: `Nothing to fix — ${p.onNew} of ${p.definitive} resolvers already serve the new address. Leave the old server running and recheck${p.ttl != null ? ` in ${humanDuration(p.ttl)}` : ''}, when the slowest cache expires.`,
+    };
+  }
+  return {
+    state: online ? 'verified' : 'attention', online: !!online, blockers: 0,
+    note: online ? 'records match the baseline except where expected, and both names are serving' : 'no blocking findings, but not every name is serving',
+    next: online
+      ? `The cutover looks done${p && p.complete ? ' on every resolver we asked' : ''}. Keep the old server running until the longest TTL you published has expired, then switch it off.`
+      : 'No blocking findings, but a name is not serving — check the addresses that did not answer before announcing the move.',
+  };
 }
 
-module.exports = { capture, verify, preCutoverFindings, commonFindings, cutoverFindings, recoveryFindings, targetFindings, verdictOf, F };
+module.exports = { capture, verify, preCutoverFindings, commonFindings, cutoverFindings, recoveryFindings, targetFindings, propagationOf, propagationFindings, verdictOf, F };

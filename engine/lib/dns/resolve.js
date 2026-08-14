@@ -101,7 +101,23 @@ function classifyError(e) {
   return 'error';
 }
 
-async function queryOne(resolver, host, type) {
+// Seconds as a person reads a clock. A TTL is an instruction about WHEN to act, and "8382" is not
+// an instruction — a cutover runbook needs "2h 20m before you change the record".
+function humanDuration(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds) || 0));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) { const m = Math.floor(s / 60), r = s % 60; return r ? `${m}m ${r}s` : `${m}m`; }
+  let h = Math.floor(s / 3600); let m = Math.round((s % 3600) / 60);
+  if (m === 60) { h += 1; m = 0; }                       // 7199s is 2h, not "1h 60m"
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+// THE ONLY PLACE a node:dns reply becomes a record. Every reply shape quirk is handled here once —
+// SOA is a bare object, A/AAAA carry TTLs and nothing else does, ENODATA is a fact about the zone
+// and not an error. recover.js used to hand-roll its own copy of this and shipped with the SOA
+// unwrap missing, which reached the operator as "undefined undefined undefined"; a second
+// implementation of a shape is a second chance to get the shape wrong.
+async function readRecord(resolver, host, type) {
   const method = {
     A: 'resolve4', AAAA: 'resolve6', CNAME: 'resolveCname', NS: 'resolveNs',
     MX: 'resolveMx', TXT: 'resolveTxt', CAA: 'resolveCaa', SOA: 'resolveSoa',
@@ -196,7 +212,7 @@ async function resolveAll(host, opts = {}) {
     types.map(async (type) => {
       const byResolver = {};
       await Promise.all(
-        instances.map(async (inst) => { byResolver[inst.name] = await queryOne(inst.r, host, type); }),
+        instances.map(async (inst) => { byResolver[inst.name] = await readRecord(inst.r, host, type); }),
       );
       records[type] = { ...consensus(byResolver), byResolver };
     }),
@@ -214,4 +230,4 @@ async function resolveDmarc(host, opts = {}) {
   return resolveAll(`_dmarc.${host}`, { ...opts, types: ['TXT'] });
 }
 
-module.exports = { RESOLVERS, TYPES, resolveAll, resolveDmarc, normalise, consensus, classifyError };
+module.exports = { RESOLVERS, TYPES, resolveAll, resolveDmarc, normalise, consensus, classifyError, readRecord, humanDuration };

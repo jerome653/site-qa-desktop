@@ -51,6 +51,13 @@ const COMMON = [
   'dashboard', 'my', 'client', 'clients', 'partner', 'video', 'wiki', 'calendar', 'cloud',
 ];
 
+// The labels that carry INBOUND MAIL. They get one extra query (MX) that the other 60-odd do not,
+// because this module exists for the migration that takes a business's email down while every page
+// still scores 100 — and a mail host is the one name where the A record can survive the move while
+// the record that actually routes mail does not. Nine extra queries, not seventy-five: asking every
+// label for MX would triple the load on someone else's nameserver to learn nothing about `cdn`.
+const MAIL_LABELS = ['mail', 'smtp', 'imap', 'pop', 'mx', 'mx1', 'mx2', 'email', 'webmail'];
+
 const CONCURRENCY = 8; // polite: this is someone else's authoritative server, and it is not ours to load-test
 
 // ---------------------------------------------------------------------------------------------
@@ -74,6 +81,10 @@ async function nsAddresses(nameservers, opts = {}) {
 }
 
 function resolverFor(ips, opts = {}) {
+  // Test seam. The zone-read path talks to somebody else's authoritative server, so the only way to
+  // prove its record SHAPES offline (SOA is an object, everything else an array) is to substitute
+  // the resolver. Never set in production — absent, the real Resolver is used exactly as before.
+  if (typeof opts.resolverFactory === 'function') return opts.resolverFactory(ips, opts);
   const r = new Resolver({ timeout: opts.timeout || 5000, tries: opts.tries || 2 });
   r.setServers(ips);
   return r;
@@ -154,18 +165,14 @@ async function recover(domain, nameservers, opts = {}) {
 // number of servers queried.
 async function queryZone(name, ips, types, opts = {}) {
   const r = resolverFor(ips, opts);
-  const method = { A: 'resolve4', AAAA: 'resolve6', CNAME: 'resolveCname', NS: 'resolveNs', MX: 'resolveMx', TXT: 'resolveTxt', CAA: 'resolveCaa', SOA: 'resolveSoa' };
-  const { normalise, classifyError } = require('./resolve');
+  // ONE read path, shared with the public-resolver side. This function used to carry its own copy of
+  // the reply-shape handling and shipped without the SOA unwrap; the operator read
+  // "SOA changed: undefined undefined undefined". A record shape has exactly one implementation now.
+  const { readRecord } = require('./resolve');
   const out = {};
   await Promise.all(types.map(async (t) => {
-    try {
-      const raw = await r[method[t]](name);
-      const arr = Array.isArray(raw) ? raw : [raw];
-      out[t] = { agreed: true, status: arr.length ? 'ok' : 'nodata', values: arr.length ? normalise(t, arr) : [], ttl: null, variants: [], failed: [], sample: ips.length, byResolver: {}, authoritative: true };
-    } catch (e) {
-      const status = classifyError(e);
-      out[t] = { agreed: true, status, values: [], ttl: null, variants: [], failed: [], sample: ips.length, byResolver: {}, authoritative: true, error: (e && e.code) || String(e) };
-    }
+    const rr = await readRecord(r, name, t);
+    out[t] = { agreed: true, ...rr, variants: [], failed: [], sample: ips.length, byResolver: {}, authoritative: true };
   }));
   return out;
 }
@@ -183,10 +190,11 @@ async function sweepSubdomains(apex, ips, opts = {}) {
       const label = list[i++];
       const name = `${label}.${apex}`;
       const rec = {};
-      for (const [t, m] of [['A', 'resolve4'], ['CNAME', 'resolveCname'], ['TXT', 'resolveTxt']]) {
+      for (const [t, m] of [['A', 'resolve4'], ['CNAME', 'resolveCname'], ['TXT', 'resolveTxt'], ['MX', 'resolveMx']]) {
         // TXT only for the names where it carries policy; probing it everywhere triples the query
-        // count for no signal.
+        // count for no signal. MX only for the mail hosts, for the same reason.
         if (t === 'TXT' && !/^_dmarc$|^_domainkey$/.test(label)) continue;
+        if (t === 'MX' && !MAIL_LABELS.includes(label)) continue;
         try {
           const raw = await r[m](name);
           if (raw && raw.length) rec[t] = require('./resolve').normalise(t, raw);
@@ -213,23 +221,57 @@ async function sweepSubdomains(apex, ips, opts = {}) {
 // `opts.resolveFn` exists so this can be driven offline in the tests. The state machine below is
 // the part that decides whether a hostname is reported as lost, and a rule that important must be
 // provable without depending on what the live internet happens to be doing.
+// One record type, old values vs today's. `unknown` when too few resolvers answered — a name we
+// could not read is never reported as lost.
+async function compareOne(lookup, name, type, oldVals, opts) {
+  const cur = await lookup(name, { ...opts, types: [type] });
+  const r = cur.records[type];
+  const now = r && r.status === 'ok' ? r.values : [];
+  const state = (r && r.agreed === 'insufficient') ? 'unknown'
+    : !now.length ? 'dropped'
+    : now.some((v) => oldVals.includes(v)) ? 'intact' : 'moved';
+  return { state, was: oldVals, now };
+}
+
 async function compareSubdomains(recovered, opts = {}) {
   const lookup = opts.resolveFn || resolveAll;
   const rows = [];
   for (const sub of recovered.subdomains || []) {
+    const oldA = sub.records.A || [];
+    const oldC = sub.records.CNAME || [];
+    const oldT = sub.records.TXT || [];
+    const oldM = sub.records.MX || [];
+
+    // Compare the type the old zone ACTUALLY HELD. A name the sweep recovered on one non-address
+    // type alone — _dmarc on TXT, an MX-only mail host — has no address to compare, and asking for
+    // A/CNAME returns nothing for it. That empty-vs-empty read used to score DROPPED: a
+    // launch-blocking finding against a record that had never moved, on every domain with DMARC.
+    const single = (!oldA.length && !oldC.length)
+      ? (oldM.length ? { type: 'MX', old: oldM } : (oldT.length ? { type: 'TXT', old: oldT } : null))
+      : null;
+    if (single) {
+      rows.push({ name: sub.name, ...(await compareOne(lookup, sub.name, single.type, single.old, opts)) });
+      continue;
+    }
+
     const cur = await lookup(sub.name, { ...opts, types: ['A', 'CNAME'] });
     const nowA = cur.records.A && cur.records.A.status === 'ok' ? cur.records.A.values : [];
     const nowC = cur.records.CNAME && cur.records.CNAME.status === 'ok' ? cur.records.CNAME.values : [];
     const unresolved = (cur.records.A && cur.records.A.agreed === 'insufficient');
-    const oldA = sub.records.A || [];
     let state;
     if (unresolved) state = 'unknown';
     else if (!nowA.length && !nowC.length) state = 'dropped';
     else if (oldA.length && nowA.some((ip) => oldA.includes(ip))) state = 'intact';
     else state = 'moved';
-    rows.push({ name: sub.name, state, was: oldA.length ? oldA : (sub.records.CNAME || []), now: nowA.length ? nowA : nowC });
+    const row = { name: sub.name, state, was: oldA.length ? oldA : oldC, now: nowA.length ? nowA : nowC };
+    // THE ADDRESS AND THE MAIL ROUTE ARE SEPARATE CLAIMS. A mail host whose A record survives the
+    // move answers on :443 quite happily while its MX is gone and every inbound message bounces —
+    // and comparing addresses alone calls that "intact". Carried as its own sub-row so a surviving
+    // address can never vouch for a mail route it knows nothing about.
+    if (oldM.length) row.mx = await compareOne(lookup, sub.name, 'MX', oldM, opts);
+    rows.push(row);
   }
   return rows;
 }
 
-module.exports = { recover, compareSubdomains, sweepSubdomains, probeShadowZone, nsAddresses, queryZone, COMMON };
+module.exports = { recover, compareSubdomains, sweepSubdomains, probeShadowZone, nsAddresses, queryZone, COMMON, MAIL_LABELS };

@@ -13,6 +13,7 @@
 // that the underlying data cannot support.
 
 const { STYLE } = require('../site-qa/report.js');
+const { humanDuration } = require('./resolve');
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -118,9 +119,35 @@ function subdomainRows(rows) {
   const tone = { dropped: 'var(--brand)', moved: 'var(--warn, #C79A2E)', intact: 'var(--pass, #2FA968)', unknown: 'var(--ink-faint)' };
   return `<h3>Subdomains recovered from the old zone</h3>
     <p class="muted">Only common hostnames were probed. A name absent here was not necessarily absent from the zone.</p>
-    <table class="tbl"><thead><tr><th>Hostname</th><th>State</th><th>Old zone</th><th>Now</th></tr></thead><tbody>${
-      rows.map((r) => `<tr><td class="mono">${esc(r.name)}</td><td style="color:${tone[r.state]}"><b>${esc(r.state)}</b></td><td class="mono">${(r.was || []).map(esc).join(', ') || '—'}</td><td class="mono">${(r.now || []).map(esc).join(', ') || '—'}</td></tr>`).join('')
+    <table class="tbl"><thead><tr><th>Hostname</th><th>State</th><th>Old zone</th><th>Now</th><th>Mail (MX)</th></tr></thead><tbody>${
+      rows.map((r) => `<tr><td class="mono">${esc(r.name)}</td><td style="color:${tone[r.state]}"><b>${esc(r.state)}</b></td><td class="mono">${(r.was || []).map(esc).join(', ') || '—'}</td><td class="mono">${(r.now || []).map(esc).join(', ') || '—'}</td><td style="color:${r.mx ? tone[r.mx.state] : 'var(--ink-faint)'}">${
+        // The address column cannot answer for the mail route: a host that resolves fine can have
+        // lost every MX record it had, and that is the migration failure people notice last.
+        r.mx ? `<b>${esc(r.mx.state)}</b>${r.mx.state === 'dropped' ? ` <span class="mono" style="color:var(--ink-faint)">(was ${(r.mx.was || []).map(esc).join(', ')})</span>` : ''}` : '—'
+      }</td></tr>`).join('')
     }</tbody></table>`;
+}
+
+// How far the repoint has travelled, drawn rather than described. The bar is the ONLY chart in this
+// report because it is the only quantity here that is a proportion — everything else is a fact that
+// is either true or not, and a graph of those would be decoration.
+function propagationStrip(p) {
+  if (!p) return '';
+  const seg = (n, color) => (n ? `<i style="flex:${n};background:${color}"></i>` : '');
+  const names = (state) => Object.entries(p.byResolver).filter(([, s]) => s === state).map(([n]) => n);
+  const behind = names('old'), unread = names('unknown');
+  return `<div class="prop">
+    <p class="muted" style="margin:0"><b style="color:var(--ink)">${p.percent}% propagated</b> — ${p.onNew} of ${p.definitive} resolvers serve the new ${p.type} record${p.unknown ? ` · ${p.unknown} did not answer (${esc(unread.join(', '))}) and are excluded` : ''}</p>
+    <!-- The old-address segment is AMBER, not the brand red. Red is this report's FAILURE colour,
+         and a resolver that has not expired its cache yet has failed at nothing — painting the
+         unmoved half red made a working cutover look broken at a glance, which is the exact
+         misreading DNS-030 exists to prevent. Caught by looking at the render, not by a test.
+         Grey for the resolvers that never answered: absent evidence gets no colour of its own. -->
+    <div class="propbar">${seg(p.onNew, 'var(--pass, #2FA968)')}${seg(p.onOld, 'var(--warn, #C79A2E)')}${seg(p.unknown, 'var(--line-strong)')}</div>
+    <p class="muted" style="margin:0">${behind.length
+      ? `Still on the old address: <b class="mono">${esc(behind.join(', '))}</b>${p.ttl != null ? ` — for up to ${esc(humanDuration(p.ttl))}` : ''}`
+      : 'Every resolver that answered is on the new address.'}</p>
+  </div>`;
 }
 
 // `res` is either a capture result ({snapshot, findings}) or a verify result.
@@ -153,10 +180,18 @@ h3{font-size:15px;margin:22px 0 6px}h4{font-size:13px;margin:16px 0 4px;font-wei
 .fnd-l{font-size:11px;color:var(--ink-faint);margin-top:5px}
 .vh{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
 .vh b{font-size:26px;letter-spacing:-.01em}
+.next{margin:14px 0 0;padding:12px 14px;border:1px solid var(--line-strong);border-left:3px solid ${v.color};border-radius:8px;background:var(--surface)}
+.next span{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;margin-bottom:4px}
+.next b{font-size:14px;font-weight:600;line-height:1.45}
+.prop{margin:14px 0 0}
+.propbar{display:flex;height:8px;border-radius:99px;overflow:hidden;background:var(--line);margin:6px 0}
+.propbar i{display:block}
 </style></head><body><div class="brand-wm"><b>SGEN</b></div><div class="wrap">
 <div class="sec">
   <div class="vh"><b style="color:${v.color}">${v.text}</b><span class="mono" style="color:var(--ink-soft)">${esc(snap.host)}</span></div>
   <p class="muted" style="margin:8px 0 0">${isVerify ? esc(res.verdict.note) : 'Zone and serving state recorded.'}${blockers ? ` · <b style="color:var(--brand)">${blockers} finding(s) block the cutover</b>` : ''}</p>
+  ${isVerify && res.verdict.next ? `<div class="next"><span>Do this next</span><b>${esc(res.verdict.next)}</b></div>` : ''}
+  ${propagationStrip(res.propagation)}
   <p class="muted" style="margin:6px 0 0">${baselineLine}</p>
   <p class="muted" style="margin:6px 0 0">Read ${esc(snap.capturedAt)} · resolvers: ${esc((snap.resolvers || []).join(', '))}${meta.engine ? ` · engine ${esc(meta.engine)}` : ''}</p>
   ${snap.source === 'recovered' ? '<p class="muted" style="margin:6px 0 0;color:var(--brand)">This zone was RECOVERED from the old nameservers. It reflects what they hold today, which is not provably what they held at cutover.</p>' : ''}

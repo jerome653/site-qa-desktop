@@ -1,14 +1,10 @@
 {
   "name": "sgen-migration-qa",
-  "version": "6.4.1",
+  "version": "6.4.2",
   "description": "SGEN Migration QA — deterministic, evidence-based website migration certification (Site Audit, Visual Comparison, Migration Certification, Reports). No AI at runtime.",
-  "bin": {
-    "sgen": "sgen.js"
-  },
   "scripts": {
-    "selftest": "node sgen-selftest.js",
     "serve": "node sgen-qa-serve.js --open",
-    "postinstall": "node -e \"console.log('\\nRun: npx playwright install chromium   (then: sgen selftest)')\""
+    "postinstall": "node -e \"console.log('\\nRun: npx playwright install chromium')\""
   },
   "engines": {
     "node": ">=18"
@@ -18,14 +14,8 @@
     "sharp": "0.34.5"
   },
   "files": [
-    "sgen.js",
-    "sgen-qa-*.js",
-    "sgen-selftest.js",
-    "sgen-update.js",
-    "sgen-version.js",
-    "sgen-rollback.js",
-    "lib/site-qa/**",
-    "lib/migration-qa/**"
+    "sgen-qa-serve.js",
+    "lib/**"
   ],
   "private": false,
   "license": "UNLICENSED"

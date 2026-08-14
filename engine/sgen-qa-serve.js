@@ -1474,6 +1474,10 @@ function appPage() {
         // A verification with no baseline is NOT a clean bill of health, and the one line the operator
         // reads before forwarding the report has to say so — the report itself says it too.
         if(m.action!=='capture'&&!m.baseline)bits+=' · <b style="color:var(--fail)">NO BASELINE — deleted records cannot be detected</b>';
+        if(m.propagation)bits+=' · <b>'+m.propagation.percent+'% propagated</b> ('+m.propagation.onNew+'/'+m.propagation.definitive+' resolvers)';
+        // The next action, on screen without opening the report. An operator mid-cutover reads this
+        // line and nothing else.
+        if(m.next)bits+='<br><span style="display:inline-block;margin-top:6px"><b>Next:</b> '+m.next+'</span>';
         $('d-status').innerHTML=bits;
         showReport('d','/dns/'+m.id,'DNS report');});}
 
@@ -2810,6 +2814,13 @@ async function apiDns(req, res) {
       // would be a number with nothing behind it — see the note at the top of dns/report.js.
       verdict: action === 'capture' ? 'BASELINE CAPTURED' : (VERDICT_TEXT[result.verdict.state] || 'NEEDS ATTENTION'),
       blockers, findings: findings.length,
+      // The instruction travels with the result. A status line that says only "BLOCKED" makes the
+      // operator open the report to learn what to do; this way the next action is on screen the
+      // moment the run ends.
+      next: (result.verdict && result.verdict.next) || null,
+      propagation: result.propagation
+        ? { percent: result.propagation.percent, onNew: result.propagation.onNew, definitive: result.propagation.definitive, complete: result.propagation.complete }
+        : null,
       baseline: result.baseline || null,
       subdomains: (result.subdomains || []).length,
       dropped: (result.subdomains || []).filter((s) => s.state === 'dropped').length,
@@ -2898,6 +2909,6 @@ const ensureEngines = () => {
 ensureEngines();
 
 server.listen(PORT, '127.0.0.1', () => {
-  process.stderr.write(`\nSite Audit → http://127.0.0.1:${PORT}\n(5 tools: Site Audit · Content & SEO · Visual Comparison · Post-Deployment Check · Reports. Ctrl+C to stop.)\n`);
+  process.stderr.write(`\nSite Audit → http://127.0.0.1:${PORT}\n(6 tools: Site Audit · Content & SEO · Visual Comparison · Post-Deployment Check · DNS & Cutover · Reports. Ctrl+C to stop.)\n`);
   if (arg('open', false)) { try { spawn(process.platform === 'win32' ? 'cmd' : 'sh', process.platform === 'win32' ? ['/c', 'start', '', `http://127.0.0.1:${PORT}`] : ['-c', `xdg-open http://127.0.0.1:${PORT}`], { detached: true, stdio: 'ignore' }).unref(); } catch (e) {} }
 });
