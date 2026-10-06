@@ -18,7 +18,7 @@ const STAGING = [
 ];
 
 const LAUNCH = [
-  { section: '8 SEO', item: 'Redirect map executed: every OLD url 301s (or 410s if removed) to the correct new url — spot-check a sample on the live domain. (Automate with --redirects <file>.)' },
+  { section: '8 SEO', item: 'Redirect map executed: every OLD url 301s (or 410s if removed) to the correct new url — spot-check a sample on the live domain. (Not automated: the engine has no redirect-map check.)' },
   { section: '8 SEO', item: 'Existing rankings / indexed URLs preserved; noindex removed on production; canonical points to the prod domain.' },
   { section: '9 Analytics', item: 'GA4 / GTM / Search Console / Meta Pixel actually FIRING on the live domain (real-time report), not just present in markup.' },
   { section: '10 Technical', item: 'SSL certificate valid for the production domain; HTTPS enforced; no mixed content; error logs clean after cut-over.' },

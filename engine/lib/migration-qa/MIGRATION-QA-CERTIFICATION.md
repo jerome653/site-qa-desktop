@@ -25,7 +25,7 @@ correctly used only as context for *which lifecycle phase* each gate belongs to.
 
 ## Phase 1 · Inventory of what already exists (DISCOVERY)
 
-The Migration QA engine is `sgen qa-migration <url> [--env staging|live] [--redirects <file>]`. It is
+The Migration QA engine is `sgen qa-migration <url> [--env staging|live]`. It is
 **deterministic, env-aware** (staging expects `noindex`; live is post-cutover), and produces a
 `NOT-READY` / `AUTOMATED-PASS — awaiting manual sign-off` verdict. Identity is the native registry
 `ruleId` (single source of truth: `lib/site-qa/rules/registry.js`, 95 rules).
@@ -43,7 +43,7 @@ The Migration QA engine is `sgen qa-migration <url> [--env staging|live] [--redi
 | Console-error + failed-request capture (CON-001/002) | `checks-render.js` | ✅ production |
 | Core Web Vitals LCP + CLS (PERF-001/002), page-weight (PERF-006) | `checks-render.js` | ✅ (LCP/CLS lab, not field) |
 | Full-page screenshot per page×viewport (manual-review evidence) | `checks-render.js` | ✅ production |
-| **Redirect preservation** — old-URL list → 301/410 check on live (`--redirects`) | `sgen-qa-migration.js` | ✅ production |
+| **Redirect preservation** — old-URL list → 301/410 check on live | — | ❌ **not implemented** — there is no `--redirects` option and no code in this engine that checks an old-URL list. `report.js` can render a `redirects` block, but nothing produces one. Corrected 2026-10-05; until built, this is a manual-checklist item. |
 | Production gate — NOT-READY iff any critical/high survives | `verdict.js` | ✅ production |
 | Manual sign-off checklist (env-split: staging QA vs launch/post-launch) | `manual-checklist.js` | ✅ production |
 | HTML + JSON report, section + check grouping, drill-down items | `report.js` | ✅ production |
@@ -121,7 +121,7 @@ Blocking = critical/high (fails the gate). All are deterministic + production-re
 | SEO-027 | mobile-web | low | mobile web-app metadata | — |
 | SEO-028 | privacy-links | low | privacy/terms/cookie signals | — |
 | SEO-029 | robots-txt | medium | no robots.txt | — |
-| _redirects_ | redirect preservation | — | old URLs 301/410 on live (`--redirects`) — **the core SEO-preservation migration check** | reported |
+| _redirects_ | redirect preservation | — | old URLs 301/410 on live — **the core SEO-preservation migration check** | ❌ not implemented (manual checklist only) |
 
 **Performance (§6) — render + static**
 | Rule | Check | Sev | Purpose | Blocking |
@@ -167,7 +167,7 @@ Legend: ✔ implemented · 🟡 partial · ❌ missing · ⚠ better existing al
 | 3 | **Functional Validation** (forms, buttons, interactive) | 🟡 **PARTIAL / by design** | Availability (FUNC-001/002/003), soft-404 (LINK-004), dead anchors (LINK-005) automated; forms/tabs/accordions/search/filters are **manual checklist** (correct — code can't certify real delivery). |
 | 4 | **Responsive Verification** | ✔ **IMPLEMENTED** | RESP-002..006 overflow/tap/font sweep @ 3 viewports + screenshots; multi-device eyeball is manual. |
 | 5 | **Content Integrity** (missing/dup/encoding/broken assets/placeholder) | 🟡 **PARTIAL** | placeholder (FUNC-004), artifacts/encoding (FUNC-008), broken images (A11Y-007), broken assets (CON-002) ✔; **missing/duplicate *text* vs source ❌** (needs the source inventory from Gate 1). |
-| 6 | **SEO Preservation** | ✔ **IMPLEMENTED (strong)** | title/desc/canonical/OG/robots/sitemap/headings/alt/schema + **noindex-on-live, staging-leak, canonical-off-domain, Disallow:/** + **redirect preservation (`--redirects`)**. This is the most complete gate. |
+| 6 | **SEO Preservation** | ✔ **IMPLEMENTED (strong)** | title/desc/canonical/OG/robots/sitemap/headings/alt/schema + **noindex-on-live, staging-leak, canonical-to-staging-host, Disallow:/**; relative and cross-site canonicals warn (SEO-050/051). **Redirect preservation is NOT implemented** (no `--redirects` in the engine) — it is a manual-checklist item. |
 | 7 | **Accessibility Baseline** | ✔ **IMPLEMENTED** | axe-core WCAG A/AA + contrast + headings + labels(via axe) + html-lang. (Keyboard-nav is manual.) |
 | 8 | **Production Readiness** | ✔ **IMPLEMENTED** | console errors, failed assets, HTTPS-enforce, mixed-content, security headers, compression, 404-config. SSL-cert expiry is in `qa-site` (SEC-001..006), not migration-qa. |
 | 9 | **Final Certification** (single verdict) | 🟡 **PARTIAL** | `verdict.js` emits NOT-READY / AUTOMATED-PASS-awaiting-sign-off — a **two-value** gate, not the required **PASS / PASS-WITH-MINOR-ISSUES / FAIL** three-value output. |
@@ -184,7 +184,7 @@ Legend: ✔ implemented · 🟡 partial · ❌ missing · ⚠ better existing al
 | **G4 · Content-integrity vs source** (missing/duplicate visible text blocks vs the source inventory) | Gate 5's missing/duplicate-text half needs the source; depends on G1. | Dropped or duplicated copy | **Yes** | Advisory unless a whole block is gone | Medium (depends on G1) | **P1** |
 | **G5 · Broken-document / media check** (PDF/DOC/video/audio links resolve 200; `<video>/<source>` load) | Migrations frequently drop linked documents + media. | Broken downloads, dead videos | **Yes** | Advisory→blocking if a linked doc 404s | Low (extend crawl to HEAD asset links) | **P1** |
 | **G6 · SSL-certificate expiry in the migration gate** (reuse `qa-site` SEC-001..006) | Live cut-over with an expired/mismatched cert = hard outage. | Expired/untrusted/hostname-mismatch cert | **Yes** | **Yes (live)** | Low (module exists) | **P1** |
-| **G7 · Redirect-chain / loop on the redirect list** (extend `--redirects` to flag multi-hop + loops, not just final status) | 301-chains bleed link equity + slow first paint. | SEO equity loss, redirect loops | Indirect | Advisory | Low | **P2** |
+| **G7 · Redirect-chain / loop on the redirect list** (needs the redirect-map check first — `--redirects` does not exist yet; then flag multi-hop + loops, not just final status) | 301-chains bleed link equity + slow first paint. | SEO equity loss, redirect loops | Indirect | Advisory | Low | **P2** |
 
 Explicitly **rejected as feature creep** (belong to a general Website Audit, not Migration QA):
 full performance-budget optimization, exhaustive a11y remediation, keyword/ranking analysis, uptime
@@ -204,7 +204,7 @@ advisory = reported, never blocks.
 | **G-3 Functional** | Mandatory (availability), manual (flows) | Zero 5xx/4xx on crawled pages; no soft-404; forms + interactive verified on the manual checklist. | FUNC-001/002, LINK-004/005 + manual |
 | **G-4 Responsive** | Mandatory | No horizontal overflow / element-wider-than-viewport at 390/768/1440; multi-device eyeball signed off. | RESP-002..004 + manual |
 | **G-5 Content Integrity** | Mandatory (assets), advisory (text) | No broken images/assets/documents; no placeholder/lorem; encoding clean. Missing/dup text advisory (G4). | A11Y-007, CON-002, FUNC-004/008, G5 |
-| **G-6 SEO Preservation** | **Mandatory (live)** | No noindex-on-live, no staging leak, no off-domain canonical, no `Disallow:/`; redirect map 301/410-clean; title/canonical present. | SEO-006/007/020/030 + redirects |
+| **G-6 SEO Preservation** | **Mandatory (live)** | No noindex-on-live, no staging leak, no off-domain canonical, no `Disallow:/`; redirect map 301/410-clean (manual — not automated); title/canonical present. | SEO-006/007/020/030 + manual redirect check |
 | **G-7 Accessibility Baseline** | Mandatory (no high axe), advisory (rest) | No high-impact axe WCAG A/AA violations; contrast/headings advisory. | A11Y-001 (+002/003) |
 | **G-8 Production Readiness** | **Mandatory** | No console errors, no failed asset requests, HTTPS enforced, no mixed content, SSL valid (live). | CON-001/002, SEC-007/008/009 + G6 |
 | **G-9 Final Certification** | — | Emit exactly one: **PASS** (no mandatory finding) · **PASS WITH MINOR ISSUES** (only advisory findings) · **FAIL** (≥1 mandatory finding). | G3 (to build) |
@@ -240,7 +240,7 @@ three-value verdict**. Everything else is reuse.
 | **MIG-G4** | Missing/duplicate visible-text diff vs source (`MIG-004`) | Content | MIG-G1 | Medium | **P1** | MIG-G1 inventory | unit: block-level diff, dup detection | rule doc | additive |
 | **MIG-G5** | Broken-document/media resolver (HEAD linked PDF/DOC/video/audio; `<video>/<source>` load) — `LINK-002`/new `MIG-005` | Assets | crawl.js/http.js | Low | **P1** | http.pool | unit: 200/404/redirect classification | rule doc | additive |
 | **MIG-G6** | SSL-cert expiry/trust in the migration gate on live (reuse SEC-001..006 from `qa-site`) | Security | tls-check.js | Low | **P1** | 100% reuse | integration | standard update | additive (live only) |
-| **MIG-G7** | Redirect-chain/loop flag on the `--redirects` list (advisory) | SEO | redirect check | Low | **P2** | existing redirect loop | unit: chain/loop detection | CLI doc | additive |
+| **MIG-G7** | Redirect-chain/loop flag on a redirect list (advisory; the `--redirects` check it extends is not built) | SEO | redirect check | Low | **P2** | existing redirect loop | unit: chain/loop detection | CLI doc | additive |
 
 **Sequencing:** MIG-G3 (verdict shape) + MIG-G2 (wire existing visual) first — both are near-zero-risk
 reuse. Then MIG-G1 (the real gap) → MIG-G4 depends on it. MIG-G5/G6/G7 are independent quick wins.

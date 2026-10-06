@@ -190,7 +190,7 @@ const CHECK_RULES = {
   'global-components': ['FUNC-005'], 'broken-rich-content': ['FUNC-006', 'FUNC-007'],
   'viewport-meta': ['RESP-001'],
   'title': ['SEO-001', 'SEO-002'], 'meta-description': ['SEO-003', 'SEO-004'],
-  'canonical': ['SEO-005', 'SEO-006'], 'indexability': ['SEO-007', 'SEO-008'],
+  'canonical': ['SEO-005', 'SEO-006', 'SEO-050', 'SEO-051'], 'indexability': ['SEO-007', 'SEO-008'],
   'social-meta': ['SEO-011', 'SEO-012'], 'favicon': ['SEO-014'],
   'schema': ['SEO-016', 'SEO-017', 'SEO-018', 'SEO-019'],
   'duplicate-title': ['SEO-009'], 'duplicate-description': ['SEO-010'],
@@ -676,7 +676,9 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
       assetLoad = { ogUrl: ogAbs, ogStatus: ogAbs ? await http.head(ogAbs) : null, favUrl: favAbs, favStatus: favAbs ? await http.head(favAbs) : null };
     } }
 
-  // 9) sitemap ↔ crawl coverage (#4) — dead sitemap URLs + orphan pages
+  // 9) sitemap ↔ crawl coverage (#4) — dead sitemap URLs + crawled pages missing from the sitemap.
+  //    `orphans` is the historical field name; it holds crawled-not-in-sitemap URLs (reached BY links),
+  //    not link-orphans (pages nothing links to), which this pass cannot see.
   let coverage = null;
   if (crawl.hadSitemap && crawl.sitemapUrls && crawl.sitemapUrls.length) {
     const smSet = new Set(crawl.sitemapUrls.map(u => u.split('#')[0]));
@@ -897,10 +899,10 @@ async function runAudit(url, { maxPages = 150, concurrency = 8, renderSample = 1
 
   // sitemap ↔ crawl coverage (#4) -> seo
   if (coverage) {
-    if (!coverage.dead.length && !coverage.orphans.length) suiteRows.seo.push(row('pass', 'Sitemap matches the crawl', null, 'no dead sitemap URLs or orphan pages', 'ok'));
+    if (!coverage.dead.length && !coverage.orphans.length) suiteRows.seo.push(row('pass', 'Sitemap matches the crawl', null, 'no dead sitemap URLs and no crawled pages missing from it', 'ok'));
     else {
       if (coverage.dead.length) suiteRows.seo.push(row('warn', 'Dead URL(s) in sitemap', `${coverage.dead.length} dead`, 'listed in the XML sitemap but return an error', String(coverage.dead.length), coverage.dead.map(u => ({ page: u, section: 'sitemap.xml', id: u, value: 'dead' })), 'SEO-023'));
-      if (coverage.orphans.length) suiteRows.seo.push(row('warn', 'Orphan page(s) (not in sitemap)', `${coverage.orphans.length} orphan`, 'reachable via links but missing from the XML sitemap', String(coverage.orphans.length), coverage.orphans.map(u => ({ page: u, section: 'crawl', id: u, value: 'orphan' })), 'SEO-024'));
+      if (coverage.orphans.length) suiteRows.seo.push(row('warn', 'Crawled page(s) missing from the XML sitemap', `${coverage.orphans.length} not in sitemap`, 'reachable via links but missing from the XML sitemap', String(coverage.orphans.length), coverage.orphans.map(u => ({ page: u, section: 'crawl', id: u, value: 'not in sitemap' })), 'SEO-024'));
     }
   }
 

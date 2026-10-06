@@ -62,10 +62,10 @@ knowable, and the most damaging false positive the tool could ship.
 > directives are individually correct; together they do the opposite of what either intends. It is
 > only visible when the signals are joined, which is what §3c exists to do.
 
-**Canonical** — SEO-005 missing (8) · 006 **points off the production domain (critical, 18)**
+**Canonical** — SEO-005 missing (8) · 006 **points to a staging/preview host (critical, 18)** · 050 relative canonical, Google recommends absolute (2, warn) · 051 points to another site, correct only for syndication (2, warn)
 
 **Crawlability** — SEO-020 **robots.txt blocks the whole site on live (critical, 20)** · 029 no robots.txt (4) ·
-021 no `Sitemap:` line (2) · 022 no XML sitemap (6) · 023 dead URL in sitemap (4) · 024 orphan page (4) ·
+021 no `Sitemap:` line (2) · 022 no XML sitemap (6) · 023 dead URL in sitemap (4) · 024 crawled page missing from the sitemap (4) ·
 **048 robots.txt blocks a NAMED search engine (critical, 18)** · 039 sitemap lists a robots-blocked URL (8) ·
 040 sitemap lists a noindex URL (6) · 041 sitemap URL canonicals elsewhere (4) · 042 sitemap URL redirects (3) ·
 043 sitemap declared but unreadable (6) · 044 sitemap over the 50,000-URL / 50 MB limit (6) ·
