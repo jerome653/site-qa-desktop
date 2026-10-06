@@ -209,7 +209,7 @@ console.log('Evidence Ledger (ADR-0007) — test suite\n');
   ok(/require\(.*evidence-name/.test(fs.readFileSync(require.resolve('./index.js'), 'utf8')), 'reuse: naming is IMPORTED from evidence-name, not reimplemented');
   const reg = require('../rules/registry'); const version = require('../version');
   eq(reg.RULES.length, 163, 'D9: registry rule count unchanged — ADR-0007 adds NO rule');
-  eq(reg.REGISTRY_VERSION, '1.16.0', 'D9: registry version unmoved');
+  eq(reg.REGISTRY_VERSION, '1.17.0', 'D9: registry version unmoved');
   // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
   // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
   // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the

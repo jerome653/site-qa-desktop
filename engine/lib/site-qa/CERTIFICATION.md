@@ -12,7 +12,7 @@
 |---|---|
 | Product | Site Audit (was: SGEN Site Auditor / SGEN Site QA — renamed 6.2.0) |
 | Engine version | 4.1.0 |
-| Registry version | 1.16.0 (163 rules · 14 suites = 10 scored + 4 advisory/weight-0) |
+| Registry version | 1.17.0 (163 rules · 14 suites = 10 scored + 4 advisory/weight-0) |
 | Report version | 1.9.1 |
 | Package version | 6.4.2 (engine/package.json — agrees with release-metadata.json packageVersion; enforced by the release gate) |
 | Schema version | 1.0 (rule · finding · report-summary, frozen) |

@@ -165,8 +165,8 @@ const STATIC_CHECKS = [
   { id: 'title', section: '8 SEO', fn(c) {
     if (!c.isHtml) return null;
     if (!c.title) return F('SEO-001', 'title', '8 SEO', 'Every page needs a unique title tag.', c.url);
-    const n = c.title.length;
-    if (n < 10 || n > 70) return F('SEO-002', 'title', '8 SEO', `${n} chars: "${c.title.slice(0, 70)}"`, c.url, n);
+    // No length gate: Google documents no title length limit and shortens for display only
+    // (Search Central, "Influencing your title links"). SEO-002 is retired (deprecatedIn 1.17.0).
     return null;
   } },
 
@@ -175,8 +175,8 @@ const STATIC_CHECKS = [
     if (!c.isHtml) return null;
     const d = metaContent(c.head, 'description');
     if (!d) return F('SEO-003', 'meta-description', '8 SEO', 'No <meta name="description">.', c.url);
-    const n = d.length;
-    if (n < 50 || n > 170) return F('SEO-004', 'meta-description', '8 SEO', `${n} chars`, c.url, n);
+    // No length gate: Google documents no meta-description length limit (Search Central,
+    // "Control your snippets"). SEO-004 is retired (deprecatedIn 1.17.0).
     return null;
   } },
 
