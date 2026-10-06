@@ -67,6 +67,17 @@ function xRobots(headers) { return (headers['x-robots-tag'] || '').toLowerCase()
 
 const STAGING_HOST_RE = /\b(?:[\w-]+\.)*(?:staging|qa\d?|dev|preview|test)\.[a-z0-9-]+\.[a-z]{2,}\b/i;
 
+// Same site, WITHOUT a public-suffix list (no psl dependency): strip a leading "www.", then two hosts
+// are one site when equal or when one is a subdomain of the other (blog.example.com ~ example.com).
+// Simplification, stated: sibling subdomains (a.example.com vs b.example.com) count as DIFFERENT
+// sites, so they get the SEO-051 warning — erring loud is the safe direction, since guessing the
+// registrable domain from the last two labels would merge every *.co.uk into one site and go silent.
+function sameSite(a, b) {
+  const n = (h) => String(h || '').toLowerCase().replace(/\.$/, '').replace(/^www\./, '');
+  const x = n(a), y = n(b);
+  return x === y || x.endsWith('.' + y) || y.endsWith('.' + x);
+}
+
 function buildCtx(page, host) {
   const html = page.body || '';
   const head = headSlice(html);
@@ -169,16 +180,22 @@ const STATIC_CHECKS = [
     return null;
   } },
 
-  // §8 — canonical (host-match enforced on live only)
+  // §8 — canonical, per Google's rel=canonical guidance (Search Central, "Consolidate duplicate URLs").
+  // Staging host on live = real leak (SEO-006, critical). Another site on live = Google indexes THAT
+  // page instead; legitimate only for syndication, so it warns (SEO-051). Relative = accepted by Google,
+  // which recommends absolute; warns in every env because the markup ships as-is (SEO-050).
+  // `rel` may be unquoted — the same tag indexability/index.js canonicalFrom() reads, so the two agree.
   { id: 'canonical', section: '8 SEO', fn(c, o) {
     if (!c.isHtml) return null;
-    const m = c.head.match(/<link\b[^>]*rel\s*=\s*["']canonical["'][^>]*>/i);
+    const m = c.head.match(/<link\b[^>]*rel\s*=\s*["']?canonical["']?[^>]*>/i);
     if (!m) return F('SEO-005', 'canonical', '8 SEO', 'No <link rel="canonical">.', c.url);
-    const href = attr(m[0], 'href');
-    if (o.env === 'live' && href) {
-      let ch = ''; try { ch = new URL(href, c.url).host; } catch (e) {}
-      if (ch && STAGING_HOST_RE.test(ch)) return F('SEO-006', 'canonical', '8 SEO', `canonical host "${ch}" looks like a staging/preview host — leaks staging into the live index`, c.url, ch);
-    }
+    const href = (attr(m[0], 'href') || '').trim();
+    if (!href) return null;
+    let ch = ''; try { ch = new URL(href, c.url).hostname; } catch (e) {}
+    if (o.env === 'live' && ch && STAGING_HOST_RE.test(ch)) return F('SEO-006', 'canonical', '8 SEO', `canonical host "${ch}" looks like a staging/preview host — leaks staging into the live index`, c.url, ch);
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(href)) return F('SEO-050', 'canonical', '8 SEO', `canonical "${href.slice(0, 80)}" is relative — Google accepts it but recommends an absolute URL (https://host/path), so a mirror or misconfigured host cannot resolve it to the wrong page`, c.url, href.slice(0, 80));
+    let ph = ''; try { ph = new URL(c.url).hostname; } catch (e) {}
+    if (o.env === 'live' && ch && ph && !sameSite(ch, ph)) return F('SEO-051', 'canonical', '8 SEO', `canonical points to another site (${ch}) — this tells Google to index that site's page instead of this one; correct only for syndicated content`, c.url, ch);
     return null;
   } },
 

@@ -122,7 +122,7 @@ console.log('Production wiring — Collection Store producer (D2) — test suite
 
     // ── 4 · nothing else moved ───────────────────────────────────────────────────────────────────
     ok(!/replay/.test(fs.readFileSync(SERVE, 'utf8').split('COLLECTION_ROOT')[0]), 'scope: the app does not invoke replay');
-    eq(require('../rules/registry').RULES.length, 161, 'scope: registry unchanged');
+    eq(require('../rules/registry').RULES.length, 163, 'scope: registry unchanged');
   // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
   // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
   // legitimately moved to 2.4.0. A test may assert the SHAPE of a stream and that it comes from the

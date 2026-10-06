@@ -12,7 +12,7 @@
 |---|---|
 | Product | Site Audit (was: SGEN Site Auditor / SGEN Site QA — renamed 6.2.0) |
 | Engine version | 4.1.0 |
-| Registry version | 1.15.0 (161 rules · 14 suites = 10 scored + 4 advisory/weight-0) |
+| Registry version | 1.16.0 (163 rules · 14 suites = 10 scored + 4 advisory/weight-0) |
 | Report version | 1.9.1 |
 | Package version | 6.4.2 (engine/package.json — agrees with release-metadata.json packageVersion; enforced by the release gate) |
 | Schema version | 1.0 (rule · finding · report-summary, frozen) |
@@ -59,7 +59,7 @@ Objective release gates. **Production = ALL PASS.** No interpretation.
 | Gate | State | Definition of PASS |
 |---|---|---|
 | Architecture | ✅ PASS | registry sole authority + native rule IDs + no bridges (TD-001 CLOSED, matchTitle 0 refs) — awaiting WP-002 Freeze seal |
-| Registry | ✅ PASS | 161 rules, invariants enforced (weights total 100), 100% registry tests |
+| Registry | ✅ PASS | 163 rules, invariants enforced (weights total 100), 100% registry tests |
 | Audit Engine | ✅ PASS | every rule deterministic, registry-driven scoring, parity holds |
 | History | ✅ PASS | Scan Store (WP-003, E11) + Finding Store (WP-004, E12) + Timeline Engine (WP-005, E13) + Regression Engine (WP-006, E14): append-only stores · lifecycle · lineage · diff · timeline · policy gate · integrity · recovery — all reproducible |
 | Reporting | ✅ PASS | HTML+score+drill-down+screenshots (frozen `report.js`) + exec-summary + scan-diff renderers (`reporting/`, E17). PDF = browser print of the self-contained HTML (no separate engine) |

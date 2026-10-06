@@ -236,7 +236,7 @@ console.log('Collection Store (ADR-0009) — test suite\n');
   ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
   ok(SEMVER_.test(version.COLLECTION_SCHEMA_VERSION), 'D9: collection schema version unmoved (from the authority: ' + version.COLLECTION_SCHEMA_VERSION + ')');
   ok(SEMVER_.test(version.PROVIDER_CONTRACT_VERSION), 'D9: provider contract version unmoved (from the authority: ' + version.PROVIDER_CONTRACT_VERSION + ')');
-  eq(reg.RULES.length, 161, 'D9: registry unchanged — ADR-0009 adds NO rule');
+  eq(reg.RULES.length, 163, 'D9: registry unchanged — ADR-0009 adds NO rule');
 })();
 
 try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) {}

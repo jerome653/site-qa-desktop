@@ -203,7 +203,7 @@ console.log('Provider contract parity (ADR-0004 A1) — test suite\n');
 // ── 7 · nothing frozen by ADR-0004 §D9 moved ──────────────────────────────────────────────────────
 (function frozenScope() {
   const reg = require('../rules/registry');
-  eq(reg.RULES.length, 161, 'D9: registry rule count unchanged');
+  eq(reg.RULES.length, 163, 'D9: registry rule count unchanged');
   eq(reg.SUITES.reduce((a, s) => a + (reg.WEIGHTS[s] || 0), 0), 100, 'D9: suite weights still total 100');
   // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
   // exactly the defect D6 eliminated, reintroduced here and exposed the moment ENGINE_VERSION
