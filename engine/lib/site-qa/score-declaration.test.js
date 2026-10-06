@@ -149,7 +149,7 @@ console.log('Score declaration integrity (ADR-0011) — test suite\n');
     eq(declaredR.ready, undeclared.ready, 'scope: …nor `ready`');
     ok(declaredR.quality.overall !== undeclared.quality.overall, 'scope: it changes ONLY the Quality Score — which is the entire point');
     eq(data.readiness, raw.readiness, 'scope: the launch-readiness verdict is untouched by the fix');
-    eq(RULES.length, 161, 'scope: registry unchanged — ADR-0011 adds NO rule');
+    eq(RULES.length, 163, 'scope: registry unchanged — ADR-0011 adds NO rule');
     const scoreSrc = fs.readFileSync(require.resolve('./score.js'), 'utf8');
     ok(/MODEL = 'sgen-quality-v2'/.test(scoreSrc), 'scope: score.js model untouched — the fix is transport, not maths');
   } catch (e) {

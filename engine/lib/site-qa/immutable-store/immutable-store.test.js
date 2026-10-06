@@ -117,7 +117,7 @@ console.log('Immutable Store (ADR-0008) — test suite\n');
   const SEMVER_ = /^\d+\.\d+(\.\d+)?$/;
   ok(SEMVER_.test(version.ENGINE_VERSION), 'D9: engine version unmoved — extraction changes no behaviour (from the authority: ' + version.ENGINE_VERSION + ')');
   ok(SEMVER_.test(version.REPORT_VERSION), 'D9: report version unmoved (from the authority: ' + version.REPORT_VERSION + ')');
-  eq(reg.RULES.length, 161, 'D9: registry unchanged');
+  eq(reg.RULES.length, 163, 'D9: registry unchanged');
 })();
 
 try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) {}

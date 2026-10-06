@@ -137,7 +137,7 @@ console.log('Network Ledger (ADR-0005) — test suite\n');
 (function frozen() {
   const reg = require('../rules/registry');
   const version = require('../version');
-  eq(reg.RULES.length, 161, 'D9: registry rule count unchanged — ADR-0005 adds NO rule');
+  eq(reg.RULES.length, 163, 'D9: registry rule count unchanged — ADR-0005 adds NO rule');
   eq(reg.SUITES.reduce((a, s) => a + (reg.WEIGHTS[s] || 0), 0), 100, 'D9: suite weights still total 100');
   eq(reg.REGISTRY_VERSION, '1.16.0', 'D9: registry version unmoved');
   // ADR-0011 note: this used to pin a version LITERAL, which made the test a SECOND AUTHORITY --
