@@ -20,11 +20,16 @@
 // the naive computation scores 91 against a correct 92 because FUNC-008/009 are missing from its
 // declaration. Restated, not relaxed: deleting it would have thrown away the oracle.
 //
-// The suite fails if any future change reproduces 90. That is its entire purpose.
+// RE-BASELINED at registry 1.17.0 (SEO-002/004 length gates retired — Google sets no length limit).
+// The fixture's one-character <title>t</title> used to emit SEO-002; it no longer does, so the naive
+// undeclared computation moved 90 -> 91. HONEST and CORRECT are UNMOVED at 80, so the defect signature
+// (naive inflated above the declared score) still reproduces on demand, by 11 points instead of 10.
+//
+// The suite fails if any future change reproduces the inflated number. That is its entire purpose.
 //
 // RE-BASELINING: these numbers are a function of this page + this registry. A registry change moves
 // them legitimately. Re-baseline DELIBERATELY (run with SGEN_P0_PRINT=1, paste the new trio, say why in
-// the commit) — never by loosening an assertion, and never by deleting the 90.
+// the commit) — never by loosening an assertion, and never by deleting the inflated number.
 const http = require('http');
 const fs = require('fs');
 const os = require('os');
@@ -39,7 +44,7 @@ function ok(c, n) { if (c) pass++; else { fail++; failures.push(n); console.log(
 function eq(a, b, n) { ok(JSON.stringify(a) === JSON.stringify(b), n + (JSON.stringify(a) === JSON.stringify(b) ? '' : ` (got ${JSON.stringify(a)})`)); }
 
 // The golden trio. Do not edit without re-measuring.
-const HONEST = 80, INFLATED = 90, CORRECT = 80;
+const HONEST = 80, INFLATED = 91, CORRECT = 80;
 // The category the over-penalty actually lands in, and by how much. FUNC-008/009 run but are absent
 // from audit.js's pre-advisory declaration, so the naive computation subtracts them from the top of
 // `functional`'s fraction only. Pinned as its own pair because the overall score can round the gap away.
@@ -95,7 +100,7 @@ console.log('Score declaration integrity (ADR-0011) — test suite\n');
     ok(data.quality.overall !== INFLATED, `FIX: the shipped score is NOT the inflated ${INFLATED}`);
     eq(cat(data.quality, 'crossbrowser'), null, 'FIX: crossbrowser is null — it measured nothing, so it has no opinion');
     eq(cat(data.quality, 'console'), null, 'FIX: console is null');
-    ok(INFLATED - CORRECT === 10, `FIX: the correction is worth ${INFLATED - CORRECT} points on this page`);
+    ok(INFLATED - CORRECT === 11, `FIX: the correction is worth ${INFLATED - CORRECT} points on this page`);
 
     // ── 4 · THE NAIVE FIX IS WRONG — pinned so nobody "simplifies" to it ──────────────────────────
     const naive = compute(data.suites, { evaluatedRules: raw.coverage.evaluatedRules });

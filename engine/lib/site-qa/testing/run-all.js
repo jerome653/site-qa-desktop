@@ -67,6 +67,7 @@ const SUITES = [
   'lib/seo.test.js',
   // canonical per Google: relative → SEO-050, another site → SEO-051 (both warn), staging host → SEO-006.
   '../migration-qa/canonical.test.js',
+  '../migration-qa/length.test.js',
   'lib/stability.test.js',
   'lib/lenses.test.js',
   // D6 (ADR-0004 §D6). Scans the WHOLE tree -- test files included -- for any file that re-declares a
